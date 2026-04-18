@@ -39,9 +39,17 @@ DEFAULT_USER_AGENT = (
 )
 DEFAULT_HEADERS = {
     "User-Agent": DEFAULT_USER_AGENT,
-    "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
+    "Accept": "*/*",
     "Accept-Language": "en-US,en;q=0.9",
     "Referer": "https://www.instagram.com/",
+    "Origin": "https://www.instagram.com",
+    "X-IG-App-ID": "936619743392459",
+    "X-ASBD-ID": "198387",
+    "X-IG-WWW-Claim": "0",
+    "X-Requested-With": "XMLHttpRequest",
+    "Sec-Fetch-Site": "same-site",
+    "Sec-Fetch-Mode": "cors",
+    "Sec-Fetch-Dest": "empty",
 }
 
 
@@ -272,40 +280,7 @@ class InstagramCollector:
 
     def _collect_account_anonymous(self, username: str) -> list[MediaCandidate]:
         self._bootstrap_anonymous_session()
-        session = self._http_session
-        url = (
-            "https://i.instagram.com/api/v1/users/web_profile_info/"
-            f"?username={username}"
-        )
-        try:
-            response = session.get(url, timeout=20)
-        except requests.RequestException as error:
-            raise InstagramCollectorError(
-                f"No pude contactar con Instagram: {error}"
-            ) from error
-
-        if response.status_code == 404:
-            raise InstagramCollectorError(f"La cuenta @{username} no existe.")
-        if response.status_code == 429:
-            raise InstagramCollectorError(
-                f"Rate limit anónimo para @{username}. Espera unos minutos."
-            )
-        if response.status_code == 401:
-            raise InstagramCollectorError(
-                f"Instagram exige login para @{username} (HTTP 401). "
-                "Prueba otra cuenta o configura INSTAGRAM_USERNAME."
-            )
-        if response.status_code != 200:
-            raise InstagramCollectorError(
-                f"Instagram devolvió HTTP {response.status_code} para @{username}."
-            )
-
-        try:
-            user = response.json()["data"]["user"]
-        except (ValueError, KeyError, TypeError) as error:
-            raise InstagramCollectorError(
-                f"Respuesta inesperada de Instagram para @{username}: {error}"
-            ) from error
+        user = self._fetch_user_json(username)
         if user is None:
             raise InstagramCollectorError(f"La cuenta @{username} no existe.")
         if user.get("is_private"):
@@ -357,13 +332,84 @@ class InstagramCollector:
             )
         return items
 
+    def _fetch_user_json(self, username: str) -> dict:
+        # Try a list of public endpoints until one returns valid user data.
+        # IG has closed / hardened them progressively, so we keep fallbacks.
+        endpoints = [
+            (
+                "https://i.instagram.com/api/v1/users/web_profile_info/"
+                f"?username={username}",
+                "json_api",
+            ),
+            (
+                "https://www.instagram.com/api/v1/users/web_profile_info/"
+                f"?username={username}",
+                "json_api",
+            ),
+            (f"https://www.instagram.com/{username}/", "html_embed"),
+        ]
+        last_status: int | None = None
+        last_body: str = ""
+        for url, kind in endpoints:
+            try:
+                response = self._http_session.get(url, timeout=20)
+            except requests.RequestException as error:
+                LOGGER.warning("HTTP error on %s: %s", url, error)
+                continue
+            last_status = response.status_code
+            last_body = (response.text or "")[:200]
+            LOGGER.info(
+                "IG fetch @%s via %s -> HTTP %s", username, kind, response.status_code
+            )
+            if response.status_code == 404:
+                raise InstagramCollectorError(f"La cuenta @{username} no existe.")
+            if response.status_code != 200:
+                continue
+            if kind == "json_api":
+                try:
+                    user = response.json()["data"]["user"]
+                except (ValueError, KeyError, TypeError):
+                    continue
+                if user:
+                    return user
+            elif kind == "html_embed":
+                user = _extract_user_from_html(response.text)
+                if user:
+                    return user
+        if last_status == 429:
+            raise InstagramCollectorError(
+                f"Rate limit para @{username} (HTTP 429). Usa cookies de "
+                "una cuenta IG nueva o cambia de IP."
+            )
+        if last_status == 401:
+            raise InstagramCollectorError(
+                f"IG exige login para @{username} (HTTP 401). Añade cookies "
+                "válidas en IG_SESSIONID/IG_DS_USER_ID/IG_CSRFTOKEN."
+            )
+        raise InstagramCollectorError(
+            f"Ningún endpoint público devolvió datos para @{username} "
+            f"(último HTTP {last_status}). Cuerpo: {last_body!r}"
+        )
+
     def _bootstrap_anonymous_session(self) -> None:
         session = self._http_session
-        if session.cookies.get("csrftoken") and session.cookies.get("mid"):
-            return
-        if self._load_env_cookies():
-            return
-        self._load_browser_cookies()
+        env_loaded = self._load_env_cookies()
+        if not env_loaded and not session.cookies.get("sessionid"):
+            self._load_browser_cookies()
+        if not session.cookies.get("mid") or not session.cookies.get("csrftoken"):
+            self._warmup_session()
+        csrftoken = session.cookies.get("csrftoken")
+        if csrftoken:
+            session.headers["X-CSRFToken"] = csrftoken
+
+    def _warmup_session(self) -> None:
+        # Fetch the IG homepage so the server sets the `mid`, `ig_did` and
+        # fresh `csrftoken` cookies that real browsers carry. Without these
+        # the subsequent API call looks like a scraper and gets 429/401.
+        try:
+            self._http_session.get("https://www.instagram.com/", timeout=15)
+        except requests.RequestException as error:
+            LOGGER.warning("Session warmup failed: %s", error)
 
     def _load_env_cookies(self) -> bool:
         sessionid = self.settings.ig_sessionid
@@ -378,19 +424,6 @@ class InstagramCollector:
                 self._http_session.cookies.set(name, value, domain=".instagram.com")
         LOGGER.info("Loaded Instagram cookies from .env")
         return True
-        session.headers.update({
-            "X-IG-App-ID": "936619743392459",
-            "X-ASBD-ID": "198387",
-            "X-Requested-With": "XMLHttpRequest",
-            "Referer": "https://www.instagram.com/",
-            "Origin": "https://www.instagram.com",
-            "Accept": "*/*",
-            "Accept-Language": "en-US,en;q=0.9",
-        })
-        try:
-            session.get("https://www.instagram.com/", timeout=15)
-        except requests.RequestException as error:
-            LOGGER.warning("Anonymous bootstrap failed: %s", error)
 
     def _collect_account(self, username: str) -> list[MediaCandidate]:
         cached = self._load_cached_account(username)
@@ -555,6 +588,36 @@ class InstagramCollector:
                     time.sleep(sleep_for)
         LOGGER.warning("Failed to download %s after %d attempts: %s", url, attempts, last_error)
         return False
+
+
+def _extract_user_from_html(html: str) -> dict | None:
+    # Instagram's profile page embeds a big JSON blob with the current user's
+    # data in one of several shapes. We try the modern GraphQL pattern first.
+    patterns = [
+        re.compile(r'"user":\s*(\{"biography".*?"edge_owner_to_timeline_media".*?\}\})'),
+        re.compile(r'window\._sharedData\s*=\s*(\{.*?\});</script>'),
+    ]
+    for pattern in patterns:
+        match = pattern.search(html)
+        if not match:
+            continue
+        raw = match.group(1)
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict):
+            if "biography" in data and "edge_owner_to_timeline_media" in data:
+                return data
+            entry = (
+                data.get("entry_data", {})
+                .get("ProfilePage", [{}])[0]
+                .get("graphql", {})
+                .get("user")
+            )
+            if entry:
+                return entry
+    return None
 
 
 def _iso_from_ts(ts: object) -> str:
