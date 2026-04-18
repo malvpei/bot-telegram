@@ -616,11 +616,15 @@ def _is_avatar_url(url: str) -> bool:
 
 
 def _cdn_media_id(url: str) -> str | None:
-    # IG CDN URLs embed the post's numeric media id in the filename:
-    # `.../t51.29350-15/512345678_9876543210_n.jpg?...`. We dedup by that
-    # id so multiple thumbnail variants of the same post count once.
-    match = re.search(r"/(\d{10,})_\d+_[a-z0-9]+\.(?:jpg|jpeg|webp|heic)", url)
-    return match.group(1) if match else None
+    # Standard post thumbnails embed the post id in the filename as
+    # `<post_id>_<user_id>_<suffix>.<ext>`.
+    match = re.search(r"/(\d{6,})_\d+_[a-z0-9]+\.(?:jpg|jpeg|webp|heic)", url)
+    if match:
+        return match.group(1)
+    # Fallback: dedup by the base filename so that different size variants
+    # of the same image (different query-string params) collapse together.
+    fname = re.search(r"/([^/?#]+)\.(?:jpg|jpeg|webp|heic)", url)
+    return fname.group(1) if fname else None
 
 
 def _size_score(url: str) -> int:
@@ -694,6 +698,12 @@ def _extract_user_from_html_with_stats(html: str) -> tuple[dict | None, dict]:
     stats["unique"] = len(best_for)
 
     if not best_for:
+        sample = next(candidate_pattern.finditer(normalised), None)
+        if sample is not None:
+            LOGGER.info(
+                "HTML extract sample URL (first match): %s",
+                sample.group(0)[:250],
+            )
         return None, stats
 
     edges = []
