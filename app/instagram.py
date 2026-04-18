@@ -31,6 +31,8 @@ LOGGER = logging.getLogger(__name__)
 
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
 RESERVED_PATHS = {"p", "reel", "reels", "stories", "explore", "tv", "accounts", "about"}
+# Bump when cache payload format/source changes so old caches are ignored.
+CACHE_VERSION = 2
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -333,89 +335,16 @@ class InstagramCollector:
         return items
 
     def _fetch_user_json(self, username: str) -> dict:
-        # Preferred path: the private-but-public `/api/v1/feed/user/<user>/username/`
-        # endpoint with a minimal per-account session + warmup. Survives on
-        # residential *and* datacenter IPs where web_profile_info gets 429.
+        # Only the private-but-public feed endpoint produces trustworthy
+        # data. The HTML embed / web_profile_info fallbacks either get
+        # blocked from datacenter IPs or mix in non-post images (IG logos,
+        # suggested-profile avatars, ads), so they are disabled on purpose.
         user = self._fetch_via_feed_endpoint(username)
         if user is not None:
             return user
-
-        # Try a list of public endpoints until one returns valid user data.
-        # IG has closed / hardened them progressively, so we keep fallbacks.
-        endpoints = [
-            (
-                "https://i.instagram.com/api/v1/users/web_profile_info/"
-                f"?username={username}",
-                "json_api",
-            ),
-            (
-                "https://www.instagram.com/api/v1/users/web_profile_info/"
-                f"?username={username}",
-                "json_api",
-            ),
-            (f"https://www.instagram.com/{username}/", "html_embed"),
-        ]
-        last_status: int | None = None
-        last_body: str = ""
-        for url, kind in endpoints:
-            try:
-                response = self._http_session.get(url, timeout=20, allow_redirects=True)
-            except requests.RequestException as error:
-                LOGGER.warning("HTTP error on %s: %s", url, error)
-                continue
-            last_status = response.status_code
-            body_text = response.text or ""
-            last_body = body_text[:500]
-            LOGGER.info(
-                "IG fetch @%s via %s -> HTTP %s (len=%d, final=%s)",
-                username,
-                kind,
-                response.status_code,
-                len(body_text),
-                response.url,
-            )
-            if response.status_code == 404:
-                raise InstagramCollectorError(f"La cuenta @{username} no existe.")
-            if response.status_code != 200:
-                continue
-            if "/accounts/login" in str(response.url) or "loginForm" in body_text:
-                LOGGER.info("IG redirected @%s to login page; need valid cookies", username)
-                continue
-            if kind == "json_api":
-                try:
-                    user = response.json()["data"]["user"]
-                except (ValueError, KeyError, TypeError):
-                    continue
-                if user:
-                    return user
-            elif kind == "html_embed":
-                user, stats = _extract_user_from_html_with_stats(body_text)
-                LOGGER.info(
-                    "HTML extract @%s: raw_urls=%d, unique_posts=%d",
-                    username,
-                    stats["raw"],
-                    stats["unique"],
-                )
-                if user:
-                    return user
-                LOGGER.info(
-                    "HTML parse failed for @%s (first 400 chars): %r",
-                    username,
-                    body_text[:400],
-                )
-        if last_status == 429:
-            raise InstagramCollectorError(
-                f"Rate limit para @{username} (HTTP 429). Usa cookies de "
-                "una cuenta IG nueva o cambia de IP."
-            )
-        if last_status == 401:
-            raise InstagramCollectorError(
-                f"IG exige login para @{username} (HTTP 401). Añade cookies "
-                "válidas en IG_SESSIONID/IG_DS_USER_ID/IG_CSRFTOKEN."
-            )
         raise InstagramCollectorError(
-            f"Ningún endpoint público devolvió datos para @{username} "
-            f"(último HTTP {last_status}). Cuerpo: {last_body!r}"
+            f"El feed de @{username} no respondió con datos utilizables "
+            "(probablemente 401/429 o cuenta privada/nueva)."
         )
 
     def _bootstrap_anonymous_session(self) -> None:
@@ -626,6 +555,10 @@ class InstagramCollector:
             payload = json.loads(cache_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
+        # Ignore caches saved by the old HTML-embed path; they contain
+        # IG logos / suggested-profile avatars mixed with real posts.
+        if payload.get("cache_version") != CACHE_VERSION:
+            return None
         items: list[MediaCandidate] = []
         for raw in payload.get("items", []):
             local = Path(raw["local_path"])
@@ -649,6 +582,7 @@ class InstagramCollector:
         cache_path = self._cache_path(username)
         payload = {
             "cached_at": time.time(),
+            "cache_version": CACHE_VERSION,
             "items": [
                 {
                     "source_id": item.source_id,
