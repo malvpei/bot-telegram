@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
 from telegram.error import TelegramError
 from telegram.ext import (
     Application,
@@ -286,6 +286,7 @@ async def _execute_job(
                 filename=result.script_path.name,
                 caption="Guion completo",
             )
+        await _send_slide_images(context, chat.id, result.slides)
     except TelegramError as error:
         LOGGER.exception("Telegram refused the video upload")
         await context.bot.send_message(
@@ -296,6 +297,38 @@ async def _execute_job(
                 f"Tienes el archivo en {result.video_path}."
             ),
         )
+
+
+async def _send_slide_images(context, chat_id: int, slides) -> None:
+    # Send the per-slide source images so the user can download each one
+    # together with its text (caption). Telegram allows up to 10 items per
+    # media group, which is enough for TYPE_1 (7) and TYPE_2 (5).
+    if not slides:
+        return
+    media: list[InputMediaPhoto] = []
+    open_files = []
+    try:
+        for slide in slides:
+            path = slide.media.local_path
+            if not path.exists():
+                continue
+            handle = path.open("rb")
+            open_files.append(handle)
+            raw_caption = f"{slide.index + 1}. {slide.role.value}\n{slide.text}"
+            caption = raw_caption[:1024]
+            media.append(InputMediaPhoto(media=handle, caption=caption))
+        if not media:
+            return
+        await context.bot.send_message(
+            chat_id=chat_id, text="Imágenes individuales con su texto:"
+        )
+        await context.bot.send_media_group(chat_id=chat_id, media=media)
+    finally:
+        for handle in open_files:
+            try:
+                handle.close()
+            except Exception:
+                pass
 
 
 async def _ensure_allowed(update: Update) -> bool:

@@ -127,3 +127,4 @@ class GenerationResult:
     video_type: VideoType
     language: Language
     fallback_accounts: list[str]
+    slides: list[SlidePlan] = field(default_factory=list)

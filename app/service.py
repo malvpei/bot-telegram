@@ -129,6 +129,7 @@ class VideoCreationService:
             video_type=request.video_type,
             language=request.language,
             fallback_accounts=plan.fallback_accounts,
+            slides=list(plan.slides),
         )
 
     def _pick_account_with_plan(
