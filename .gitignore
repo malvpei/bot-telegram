@@ -10,5 +10,4 @@ data/outputs/*
 data/state/*.json
 data/state/instagram_session/
 data/state/.state.lock
-accounts.txt
 
