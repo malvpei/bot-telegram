@@ -609,24 +609,24 @@ class InstagramCollector:
         return False
 
 
-def _clean_cdn_url(raw: str) -> str:
-    return (
-        raw
-        .replace("\\u0026", "&")
-        .replace("\\/", "/")
-        .replace("&amp;", "&")
-    )
+def _is_avatar_url(url: str) -> bool:
+    # IG CDN path `/t51.2885-19/` is reserved for profile pics / avatars.
+    return "/t51.2885-19/" in url
 
 
-def _is_profile_pic_url(url: str) -> bool:
-    # IG CDN path `/t51.2885-19/` is used for profile pics / avatars — we
-    # don't want those in the post grid. `/150x150/` and `/44x44/` size
-    # suffixes are also used for small avatars.
-    if "/t51.2885-19/" in url:
-        return True
-    if re.search(r"/s\d{2,3}x\d{2,3}/", url) and "/t51.29350-15/" not in url:
-        return True
-    return False
+def _cdn_media_id(url: str) -> str | None:
+    # IG CDN URLs embed the post's numeric media id in the filename:
+    # `.../t51.29350-15/512345678_9876543210_n.jpg?...`. We dedup by that
+    # id so multiple thumbnail variants of the same post count once.
+    match = re.search(r"/(\d{10,})_\d+_[a-z0-9]+\.(?:jpg|jpeg|webp|heic)", url)
+    return match.group(1) if match else None
+
+
+def _size_score(url: str) -> int:
+    # Prefer higher-resolution variants. `sNxN` and `pNxN` suffixes in the
+    # CDN query encode the rendered size.
+    match = re.search(r"[sp](\d{3,4})x\d{3,4}", url)
+    return int(match.group(1)) if match else 0
 
 
 def _extract_user_from_html(html: str) -> dict | None:
@@ -666,25 +666,29 @@ def _extract_user_from_html(html: str) -> dict | None:
         r"https://[a-z0-9\-\.]+\.(?:cdninstagram\.com|fbcdn\.net)"
         r"/[^\s\"'<>\\]+?\.(?:jpg|jpeg|webp|heic)[^\s\"'<>\\]*"
     )
-    collected: list[str] = []
-    seen: set[str] = set()
+    # Group every CDN URL by its post media id; pick the highest-res variant
+    # per group so we end up with one URL per unique post.
+    best_for: dict[str, tuple[int, str]] = {}
     for match in candidate_pattern.finditer(normalised):
         url = match.group(0)
-        if url in seen:
+        if _is_avatar_url(url):
             continue
-        if _is_profile_pic_url(url):
+        media_id = _cdn_media_id(url)
+        if not media_id:
             continue
-        seen.add(url)
-        collected.append(url)
+        score = _size_score(url)
+        current = best_for.get(media_id)
+        if current is None or score > current[0]:
+            best_for[media_id] = (score, url)
 
-    if not collected:
+    if not best_for:
         return None
 
     edges = []
-    for index, url in enumerate(collected):
+    for media_id, (_, url) in best_for.items():
         edges.append({
             "node": {
-                "shortcode": f"html-{index}",
+                "shortcode": media_id,
                 "display_url": url,
                 "is_video": False,
                 "taken_at_timestamp": 0,
