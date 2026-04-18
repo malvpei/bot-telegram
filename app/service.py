@@ -63,8 +63,7 @@ class VideoCreationService:
         if not usernames:
             raise ValueError("No se detectaron cuentas de Instagram válidas.")
 
-        catalog, tried = self._collect_random_account(usernames)
-        plan = self.selector.create_plan(catalog, request.video_type, request.language)
+        plan, tried = self._pick_account_with_plan(usernames, request)
         LOGGER.info(
             "Picked @%s after trying %d account(s) of %d available",
             plan.chosen_account,
@@ -132,11 +131,12 @@ class VideoCreationService:
             fallback_accounts=plan.fallback_accounts,
         )
 
-    def _collect_random_account(
-        self, usernames: list[str]
-    ) -> tuple[dict[str, list], list[str]]:
-        # Pick one account at random. On rate limit / missing / private,
-        # try the next one. Stop at the first success — we only need one.
+    def _pick_account_with_plan(
+        self, usernames: list[str], request: VideoRequest
+    ):
+        # Pick one account at random. On collector failure OR not-enough-images
+        # after selector filtering, try the next account. Stop at the first
+        # success — we only need one viable plan.
         shuffled = list(usernames)
         random.shuffle(shuffled)
         max_attempts = min(self.settings.account_pick_attempts, len(shuffled))
@@ -146,10 +146,19 @@ class VideoCreationService:
             tried.append(username)
             try:
                 candidates = self.collector.collect_one(username)
-                return {username: candidates}, tried
             except InstagramCollectorError as error:
-                LOGGER.warning("@%s descartada: %s", username, error)
+                LOGGER.warning("@%s descartada (fetch): %s", username, error)
                 errors.append(f"@{username}: {error}")
+                continue
+            try:
+                plan = self.selector.create_plan(
+                    {username: candidates}, request.video_type, request.language
+                )
+            except ValueError as error:
+                LOGGER.warning("@%s descartada (plan): %s", username, error)
+                errors.append(f"@{username}: {error}")
+                continue
+            return plan, tried
         raise InstagramCollectorError(
             "Ninguna de las cuentas probadas dio imágenes utilizables.\n"
             + "\n".join(errors)
