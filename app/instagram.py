@@ -33,6 +33,7 @@ USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
 RESERVED_PATHS = {"p", "reel", "reels", "stories", "explore", "tv", "accounts", "about"}
 # Bump when cache payload format/source changes so old caches are ignored.
 CACHE_VERSION = 2
+FEED_RETRY_ATTEMPTS = 3
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -281,7 +282,8 @@ class InstagramCollector:
         )
 
     def _collect_account_anonymous(self, username: str) -> list[MediaCandidate]:
-        self._bootstrap_anonymous_session()
+        # No cookie bootstrap: the collaborator's working flow is fully
+        # anonymous (build_session -> prepare_instagram_session -> feed).
         user = self._fetch_user_json(username)
         if user is None:
             raise InstagramCollectorError(f"La cuenta @{username} no existe.")
@@ -434,67 +436,64 @@ class InstagramCollector:
         return payload, response.status_code
 
     def _fetch_via_feed_endpoint(self, username: str) -> dict | None:
-        # Try in order:
-        #   1. The shared http_session if we already have real IG cookies
-        #      (env or browser). Authenticated calls bypass IP-level 429s
-        #      that Hetzner / other datacenter IPs routinely hit.
-        #   2. A clean anonymous session with profile warmup (the friend's
-        #      flow). Works from residential IPs.
+        # Faithful port of the collaborator's script: purely anonymous,
+        # no env/browser cookies. build_session -> prepare_instagram_session
+        # -> /api/v1/feed/user/<user>/username/ paginated by max_id, up to
+        # 3 attempts with a fresh session+warmup per retry.
         max_posts = max(self.settings.max_posts_per_account, 12)
-
-        if self._http_session.cookies.get("sessionid"):
-            LOGGER.info("Feed @%s: trying authenticated shared session", username)
-            items = self._paginate_feed(self._http_session, username, max_posts)
-            if items:
-                return _feed_items_to_user(items[:max_posts])
-
-        LOGGER.info("Feed @%s: falling back to anonymous warmup flow", username)
         session = self._build_feed_session()
-        if not self._prepare_feed_session(session, username):
-            return None
-        items = self._paginate_feed(session, username, max_posts)
-        if items:
-            return _feed_items_to_user(items[:max_posts])
-        return None
+        self._prepare_feed_session(session, username)
 
-    def _paginate_feed(
-        self,
-        session: requests.Session,
-        username: str,
-        max_posts: int,
-    ) -> list[dict]:
         items: list[dict] = []
         max_id: str | None = None
-        attempts_left = 1  # one retry with a fresh warmup session on 401/429
         while len(items) < max_posts:
-            payload, status = self._fetch_feed_page(
+            page, session = self._fetch_feed_page_with_retry(
                 session, username, count=12, max_id=max_id
             )
-            if payload is None:
-                if status in (401, 429) and attempts_left > 0:
-                    attempts_left -= 1
-                    fresh = self._build_feed_session()
-                    if not self._prepare_feed_session(fresh, username):
-                        break
-                    session = fresh
-                    continue
+            if page is None:
                 break
-            page_items = payload.get("items") or []
+            page_items = page.get("items") or []
             if not page_items:
                 break
             items.extend(page_items)
-            if not payload.get("more_available"):
+            if not page.get("more_available"):
                 break
-            max_id = payload.get("next_max_id")
+            max_id = page.get("next_max_id")
             if not max_id:
                 break
-        if items:
-            LOGGER.info(
-                "IG feed @%s collected %d items across pagination",
-                username,
-                len(items),
+
+        if not items:
+            return None
+        LOGGER.info(
+            "IG feed @%s collected %d items across pagination",
+            username,
+            len(items),
+        )
+        return _feed_items_to_user(items[:max_posts])
+
+    def _fetch_feed_page_with_retry(
+        self,
+        session: requests.Session,
+        username: str,
+        *,
+        count: int,
+        max_id: str | None,
+    ) -> tuple[dict | None, requests.Session]:
+        # Mirrors fetch_feed_page_with_retry from amigo_observar.py: on
+        # HTTP 401/429 it discards the session and starts over (fresh
+        # warmup cookies). Anything else is a terminal failure.
+        active = session
+        for attempt in range(1, FEED_RETRY_ATTEMPTS + 1):
+            payload, status = self._fetch_feed_page(
+                active, username, count=count, max_id=max_id
             )
-        return items
+            if payload is not None:
+                return payload, active
+            if status not in (401, 429) or attempt == FEED_RETRY_ATTEMPTS:
+                return None, active
+            active = self._build_feed_session()
+            self._prepare_feed_session(active, username)
+        return None, active
 
     def _warmup_session(self) -> None:
         # Fetch the IG homepage so the server sets the `mid`, `ig_did` and
