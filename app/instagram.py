@@ -352,18 +352,27 @@ class InstagramCollector:
         last_body: str = ""
         for url, kind in endpoints:
             try:
-                response = self._http_session.get(url, timeout=20)
+                response = self._http_session.get(url, timeout=20, allow_redirects=True)
             except requests.RequestException as error:
                 LOGGER.warning("HTTP error on %s: %s", url, error)
                 continue
             last_status = response.status_code
-            last_body = (response.text or "")[:200]
+            body_text = response.text or ""
+            last_body = body_text[:500]
             LOGGER.info(
-                "IG fetch @%s via %s -> HTTP %s", username, kind, response.status_code
+                "IG fetch @%s via %s -> HTTP %s (len=%d, final=%s)",
+                username,
+                kind,
+                response.status_code,
+                len(body_text),
+                response.url,
             )
             if response.status_code == 404:
                 raise InstagramCollectorError(f"La cuenta @{username} no existe.")
             if response.status_code != 200:
+                continue
+            if "/accounts/login" in str(response.url) or "loginForm" in body_text:
+                LOGGER.info("IG redirected @%s to login page; need valid cookies", username)
                 continue
             if kind == "json_api":
                 try:
@@ -373,9 +382,19 @@ class InstagramCollector:
                 if user:
                     return user
             elif kind == "html_embed":
-                user = _extract_user_from_html(response.text)
+                user = _extract_user_from_html(body_text)
                 if user:
+                    LOGGER.info(
+                        "Extracted %d posts from HTML for @%s",
+                        len(user.get("edge_owner_to_timeline_media", {}).get("edges", [])),
+                        username,
+                    )
                     return user
+                LOGGER.info(
+                    "HTML parse failed for @%s (first 400 chars): %r",
+                    username,
+                    body_text[:400],
+                )
         if last_status == 429:
             raise InstagramCollectorError(
                 f"Rate limit para @{username} (HTTP 429). Usa cookies de "
@@ -591,24 +610,20 @@ class InstagramCollector:
 
 
 def _extract_user_from_html(html: str) -> dict | None:
-    # Instagram's profile page embeds a big JSON blob with the current user's
-    # data in one of several shapes. We try the modern GraphQL pattern first.
-    patterns = [
-        re.compile(r'"user":\s*(\{"biography".*?"edge_owner_to_timeline_media".*?\}\})'),
-        re.compile(r'window\._sharedData\s*=\s*(\{.*?\});</script>'),
-    ]
-    for pattern in patterns:
-        match = pattern.search(html)
-        if not match:
-            continue
-        raw = match.group(1)
+    # Modern IG profile HTML embeds timeline data as JSON-strings inside many
+    # `<script type="application/json" data-sjs>` tags. We can't parse the
+    # whole shell, but we can regex the post nodes we care about: each post
+    # is represented with `shortcode`, `display_url`, caption, etc.
+    if not html or "instagram" not in html.lower():
+        return None
+
+    # Legacy shape first, some pages still ship window._sharedData.
+    shared = re.search(
+        r'window\._sharedData\s*=\s*(\{.*?\});</script>', html, re.DOTALL
+    )
+    if shared:
         try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict):
-            if "biography" in data and "edge_owner_to_timeline_media" in data:
-                return data
+            data = json.loads(shared.group(1))
             entry = (
                 data.get("entry_data", {})
                 .get("ProfilePage", [{}])[0]
@@ -617,7 +632,74 @@ def _extract_user_from_html(html: str) -> dict | None:
             )
             if entry:
                 return entry
-    return None
+        except json.JSONDecodeError:
+            pass
+
+    # Modern shape: walk every post dict embedded inline. Each post dict has
+    # `"code":"<shortcode>"` (or "shortcode") and a `"display_url"` nearby
+    # within the same JSON object.
+    edges: list[dict] = []
+    seen: set[str] = set()
+    post_pattern = re.compile(
+        r'\{"[^{}]*?"(?:shortcode|code)"\s*:\s*"([A-Za-z0-9_\-]{5,20})"[^{}]*?\}',
+        re.DOTALL,
+    )
+    for match in post_pattern.finditer(html):
+        shortcode = match.group(1)
+        if shortcode in seen:
+            continue
+        block = match.group(0)
+        display_match = re.search(r'"display_url"\s*:\s*"([^"]+)"', block)
+        if not display_match:
+            continue
+        display_url = display_match.group(1).encode("utf-8").decode("unicode_escape")
+        caption_match = re.search(r'"caption"\s*:\s*"((?:[^"\\]|\\.)*)"', block)
+        caption = ""
+        if caption_match:
+            try:
+                caption = json.loads('"' + caption_match.group(1) + '"')
+            except json.JSONDecodeError:
+                caption = caption_match.group(1)
+        is_video = '"is_video":true' in block or '"media_type":2' in block
+        taken_at = re.search(r'"taken_at(?:_timestamp)?"\s*:\s*(\d+)', block)
+        seen.add(shortcode)
+        edges.append({
+            "node": {
+                "shortcode": shortcode,
+                "display_url": display_url,
+                "is_video": is_video,
+                "taken_at_timestamp": int(taken_at.group(1)) if taken_at else 0,
+                "edge_media_to_caption": {
+                    "edges": [{"node": {"text": caption}}] if caption else [],
+                },
+            }
+        })
+
+    # Also scrape standalone "display_url" in case posts use a different shape.
+    if not edges:
+        for match in re.finditer(r'"display_url"\s*:\s*"([^"]+)"', html):
+            raw_url = match.group(1).encode("utf-8").decode("unicode_escape")
+            if "/p/" in raw_url or "/stories/" in raw_url:
+                continue
+            pseudo_id = f"html-{len(edges)}"
+            edges.append({
+                "node": {
+                    "shortcode": pseudo_id,
+                    "display_url": raw_url,
+                    "is_video": False,
+                    "taken_at_timestamp": 0,
+                    "edge_media_to_caption": {"edges": []},
+                }
+            })
+
+    if not edges:
+        return None
+
+    is_private = '"is_private":true' in html
+    return {
+        "is_private": is_private,
+        "edge_owner_to_timeline_media": {"edges": edges},
+    }
 
 
 def _iso_from_ts(ts: object) -> str:
