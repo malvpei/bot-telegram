@@ -609,91 +609,82 @@ class InstagramCollector:
         return False
 
 
+def _clean_cdn_url(raw: str) -> str:
+    return (
+        raw
+        .replace("\\u0026", "&")
+        .replace("\\/", "/")
+        .replace("&amp;", "&")
+    )
+
+
+def _is_profile_pic_url(url: str) -> bool:
+    # IG CDN path `/t51.2885-19/` is used for profile pics / avatars — we
+    # don't want those in the post grid. `/150x150/` and `/44x44/` size
+    # suffixes are also used for small avatars.
+    if "/t51.2885-19/" in url:
+        return True
+    if re.search(r"/s\d{2,3}x\d{2,3}/", url) and "/t51.29350-15/" not in url:
+        return True
+    return False
+
+
 def _extract_user_from_html(html: str) -> dict | None:
-    # Modern IG profile HTML embeds timeline data as JSON-strings inside many
-    # `<script type="application/json" data-sjs>` tags. We can't parse the
-    # whole shell, but we can regex the post nodes we care about: each post
-    # is represented with `shortcode`, `display_url`, caption, etc.
-    if not html or "instagram" not in html.lower():
+    if not html:
         return None
 
-    # Legacy shape first, some pages still ship window._sharedData.
+    # Legacy shape: still emitted for a tiny % of regions / app builds.
     shared = re.search(
-        r'window\._sharedData\s*=\s*(\{.*?\});</script>', html, re.DOTALL
+        r"window\._sharedData\s*=\s*(\{.*?\});</script>", html, re.DOTALL
     )
     if shared:
         try:
             data = json.loads(shared.group(1))
-            entry = (
+            legacy = (
                 data.get("entry_data", {})
                 .get("ProfilePage", [{}])[0]
                 .get("graphql", {})
                 .get("user")
             )
-            if entry:
-                return entry
+            if legacy:
+                return legacy
         except json.JSONDecodeError:
             pass
 
-    # Modern shape: walk every post dict embedded inline. Each post dict has
-    # `"code":"<shortcode>"` (or "shortcode") and a `"display_url"` nearby
-    # within the same JSON object.
-    edges: list[dict] = []
-    seen: set[str] = set()
-    post_pattern = re.compile(
-        r'\{"[^{}]*?"(?:shortcode|code)"\s*:\s*"([A-Za-z0-9_\-]{5,20})"[^{}]*?\}',
-        re.DOTALL,
+    # Modern shape: inline JSON payloads inside <script data-sjs> tags.
+    # Keys and URLs are string-escaped (\" and \/ variants). Rather than
+    # untangle the Relay shell, we collect post-image CDN URLs directly.
+    candidate_pattern = re.compile(
+        r"https:(?:\\?/){2}[a-z0-9\-\.]+\.(?:cdninstagram\.com|fbcdn\.net)"
+        r"(?:\\?/|/)[^\s\"'<>\\]+?\.(?:jpg|jpeg|webp|heic)(?:[^\s\"'<>\\]*)"
     )
-    for match in post_pattern.finditer(html):
-        shortcode = match.group(1)
-        if shortcode in seen:
+    collected: list[str] = []
+    seen: set[str] = set()
+    for match in candidate_pattern.finditer(html):
+        url = _clean_cdn_url(match.group(0))
+        # Strip lingering backslashes that survive unicode escapes.
+        url = url.replace("\\", "")
+        if url in seen:
             continue
-        block = match.group(0)
-        display_match = re.search(r'"display_url"\s*:\s*"([^"]+)"', block)
-        if not display_match:
+        if _is_profile_pic_url(url):
             continue
-        display_url = display_match.group(1).encode("utf-8").decode("unicode_escape")
-        caption_match = re.search(r'"caption"\s*:\s*"((?:[^"\\]|\\.)*)"', block)
-        caption = ""
-        if caption_match:
-            try:
-                caption = json.loads('"' + caption_match.group(1) + '"')
-            except json.JSONDecodeError:
-                caption = caption_match.group(1)
-        is_video = '"is_video":true' in block or '"media_type":2' in block
-        taken_at = re.search(r'"taken_at(?:_timestamp)?"\s*:\s*(\d+)', block)
-        seen.add(shortcode)
+        seen.add(url)
+        collected.append(url)
+
+    if not collected:
+        return None
+
+    edges = []
+    for index, url in enumerate(collected):
         edges.append({
             "node": {
-                "shortcode": shortcode,
-                "display_url": display_url,
-                "is_video": is_video,
-                "taken_at_timestamp": int(taken_at.group(1)) if taken_at else 0,
-                "edge_media_to_caption": {
-                    "edges": [{"node": {"text": caption}}] if caption else [],
-                },
+                "shortcode": f"html-{index}",
+                "display_url": url,
+                "is_video": False,
+                "taken_at_timestamp": 0,
+                "edge_media_to_caption": {"edges": []},
             }
         })
-
-    # Also scrape standalone "display_url" in case posts use a different shape.
-    if not edges:
-        for match in re.finditer(r'"display_url"\s*:\s*"([^"]+)"', html):
-            raw_url = match.group(1).encode("utf-8").decode("unicode_escape")
-            if "/p/" in raw_url or "/stories/" in raw_url:
-                continue
-            pseudo_id = f"html-{len(edges)}"
-            edges.append({
-                "node": {
-                    "shortcode": pseudo_id,
-                    "display_url": raw_url,
-                    "is_video": False,
-                    "taken_at_timestamp": 0,
-                    "edge_media_to_caption": {"edges": []},
-                }
-            })
-
-    if not edges:
-        return None
 
     is_private = '"is_private":true' in html
     return {
