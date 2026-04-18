@@ -333,6 +333,13 @@ class InstagramCollector:
         return items
 
     def _fetch_user_json(self, username: str) -> dict:
+        # Preferred path: the private-but-public `/api/v1/feed/user/<user>/username/`
+        # endpoint with a minimal per-account session + warmup. Survives on
+        # residential *and* datacenter IPs where web_profile_info gets 429.
+        user = self._fetch_via_feed_endpoint(username)
+        if user is not None:
+            return user
+
         # Try a list of public endpoints until one returns valid user data.
         # IG has closed / hardened them progressively, so we keep fallbacks.
         endpoints = [
@@ -421,6 +428,119 @@ class InstagramCollector:
         csrftoken = session.cookies.get("csrftoken")
         if csrftoken:
             session.headers["X-CSRFToken"] = csrftoken
+
+    # ------------------------------------------------------------------
+    # Feed endpoint path (mirrors the collaborator's working script)
+    # ------------------------------------------------------------------
+
+    def _build_feed_session(self) -> requests.Session:
+        # Minimal header set: IG's feed endpoint is pickier about *extra*
+        # headers than about missing ones. Matches the collaborator's
+        # working script verbatim.
+        session = requests.Session()
+        session.headers.update({
+            "User-Agent": DEFAULT_USER_AGENT,
+            "X-IG-App-ID": "936619743392459",
+            "Referer": "https://www.instagram.com/",
+        })
+        return session
+
+    def _prepare_feed_session(
+        self, session: requests.Session, username: str
+    ) -> bool:
+        # Warmup GET on the profile page to pick up `csrftoken` / `mid` /
+        # `ig_did` cookies, then promote csrftoken to a request header.
+        try:
+            response = session.get(
+                f"https://www.instagram.com/{username}/", timeout=20
+            )
+        except requests.RequestException as error:
+            LOGGER.warning("Feed warmup @%s failed: %s", username, error)
+            return False
+        if response.status_code in (401, 429):
+            LOGGER.info(
+                "Feed warmup @%s -> HTTP %s (blocked)",
+                username,
+                response.status_code,
+            )
+            return False
+        csrf = session.cookies.get("csrftoken")
+        if csrf:
+            session.headers["X-CSRFToken"] = csrf
+        return True
+
+    def _fetch_feed_page(
+        self,
+        session: requests.Session,
+        username: str,
+        *,
+        count: int,
+        max_id: str | None,
+    ) -> tuple[dict | None, int]:
+        url = f"https://www.instagram.com/api/v1/feed/user/{username}/username/"
+        params: dict[str, object] = {"count": count}
+        if max_id:
+            params["max_id"] = max_id
+        try:
+            response = session.get(url, params=params, timeout=20)
+        except requests.RequestException as error:
+            LOGGER.warning("Feed fetch @%s failed: %s", username, error)
+            return None, 0
+        LOGGER.info(
+            "IG feed @%s count=%d max_id=%s -> HTTP %s (len=%d)",
+            username,
+            count,
+            max_id or "-",
+            response.status_code,
+            len(response.content),
+        )
+        if response.status_code != 200:
+            return None, response.status_code
+        try:
+            payload = response.json()
+        except ValueError:
+            return None, response.status_code
+        if payload.get("status") != "ok":
+            return None, response.status_code
+        return payload, response.status_code
+
+    def _fetch_via_feed_endpoint(self, username: str) -> dict | None:
+        max_posts = max(self.settings.max_posts_per_account, 12)
+        session = self._build_feed_session()
+        if not self._prepare_feed_session(session, username):
+            return None
+
+        items: list[dict] = []
+        max_id: str | None = None
+        attempts_left = 2  # one retry with a fresh session on 401/429
+        while len(items) < max_posts:
+            payload, status = self._fetch_feed_page(
+                session, username, count=12, max_id=max_id
+            )
+            if payload is None:
+                if status in (401, 429) and attempts_left > 0:
+                    attempts_left -= 1
+                    session = self._build_feed_session()
+                    if not self._prepare_feed_session(session, username):
+                        break
+                    continue
+                break
+            page_items = payload.get("items") or []
+            if not page_items:
+                break
+            items.extend(page_items)
+            if not payload.get("more_available"):
+                break
+            max_id = payload.get("next_max_id")
+            if not max_id:
+                break
+
+        if not items:
+            return None
+        LOGGER.info(
+            "IG feed @%s collected %d items across pagination", username, len(items)
+        )
+        return _feed_items_to_user(items[:max_posts])
 
     def _warmup_session(self) -> None:
         # Fetch the IG homepage so the server sets the `mid`, `ig_did` and
@@ -733,6 +853,59 @@ def _iso_from_ts(ts: object) -> str:
         return datetime.fromtimestamp(float(ts), tz=timezone.utc).isoformat()
     except (OSError, OverflowError, ValueError):
         return ""
+
+
+def _best_feed_image_url(media: dict) -> str | None:
+    candidates = (media.get("image_versions2") or {}).get("candidates") or []
+    if not candidates:
+        return None
+    return candidates[0].get("url")
+
+
+def _feed_items_to_user(items: list[dict]) -> dict:
+    # Shape the feed-endpoint response into the same structure the rest of
+    # the collector expects (mirrors `edge_owner_to_timeline_media`).
+    edges: list[dict] = []
+    for item in items:
+        media_type = item.get("media_type")
+        taken_at = item.get("taken_at") or 0
+        code = item.get("code") or ""
+        caption_obj = item.get("caption") or {}
+        caption_text = caption_obj.get("text") if isinstance(caption_obj, dict) else ""
+        caption_edges = (
+            [{"node": {"text": caption_text}}] if caption_text else []
+        )
+        node: dict = {
+            "shortcode": code,
+            "is_video": False,
+            "taken_at_timestamp": taken_at,
+            "edge_media_to_caption": {"edges": caption_edges},
+        }
+        if media_type == 8:
+            children: list[dict] = []
+            for media in item.get("carousel_media") or []:
+                if media.get("media_type") != 1:
+                    continue
+                url = _best_feed_image_url(media)
+                if url:
+                    children.append(
+                        {"node": {"display_url": url, "is_video": False}}
+                    )
+            if not children:
+                continue
+            node["edge_sidecar_to_children"] = {"edges": children}
+        elif media_type == 1:
+            url = _best_feed_image_url(item)
+            if not url:
+                continue
+            node["display_url"] = url
+        else:
+            continue
+        edges.append({"node": node})
+    return {
+        "is_private": False,
+        "edge_owner_to_timeline_media": {"edges": edges},
+    }
 
 
 def _iter_image_urls(node: dict) -> Iterable[str]:
