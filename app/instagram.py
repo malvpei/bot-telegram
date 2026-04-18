@@ -382,13 +382,14 @@ class InstagramCollector:
                 if user:
                     return user
             elif kind == "html_embed":
-                user = _extract_user_from_html(body_text)
+                user, stats = _extract_user_from_html_with_stats(body_text)
+                LOGGER.info(
+                    "HTML extract @%s: raw_urls=%d, unique_posts=%d",
+                    username,
+                    stats["raw"],
+                    stats["unique"],
+                )
                 if user:
-                    LOGGER.info(
-                        "Extracted %d posts from HTML for @%s",
-                        len(user.get("edge_owner_to_timeline_media", {}).get("edges", [])),
-                        username,
-                    )
                     return user
                 LOGGER.info(
                     "HTML parse failed for @%s (first 400 chars): %r",
@@ -630,8 +631,14 @@ def _size_score(url: str) -> int:
 
 
 def _extract_user_from_html(html: str) -> dict | None:
+    user, _ = _extract_user_from_html_with_stats(html)
+    return user
+
+
+def _extract_user_from_html_with_stats(html: str) -> tuple[dict | None, dict]:
+    stats = {"raw": 0, "unique": 0}
     if not html:
-        return None
+        return None, stats
 
     # Legacy shape: still emitted for a tiny % of regions / app builds.
     shared = re.search(
@@ -647,7 +654,7 @@ def _extract_user_from_html(html: str) -> dict | None:
                 .get("user")
             )
             if legacy:
-                return legacy
+                return legacy, stats
         except json.JSONDecodeError:
             pass
 
@@ -669,8 +676,10 @@ def _extract_user_from_html(html: str) -> dict | None:
     # Group every CDN URL by its post media id; pick the highest-res variant
     # per group so we end up with one URL per unique post.
     best_for: dict[str, tuple[int, str]] = {}
+    raw_count = 0
     for match in candidate_pattern.finditer(normalised):
         url = match.group(0)
+        raw_count += 1
         if _is_avatar_url(url):
             continue
         media_id = _cdn_media_id(url)
@@ -681,8 +690,11 @@ def _extract_user_from_html(html: str) -> dict | None:
         if current is None or score > current[0]:
             best_for[media_id] = (score, url)
 
+    stats["raw"] = raw_count
+    stats["unique"] = len(best_for)
+
     if not best_for:
-        return None
+        return None, stats
 
     edges = []
     for media_id, (_, url) in best_for.items():
@@ -700,7 +712,7 @@ def _extract_user_from_html(html: str) -> dict | None:
     return {
         "is_private": is_private,
         "edge_owner_to_timeline_media": {"edges": edges},
-    }
+    }, stats
 
 
 def _iso_from_ts(ts: object) -> str:
