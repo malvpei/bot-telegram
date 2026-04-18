@@ -1,0 +1,12 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.pyc
+data/downloads/*
+data/outputs/*
+data/state/*.json
+data/state/instagram_session/
+data/state/.state.lock
+.git/
+tests/
