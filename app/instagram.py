@@ -434,14 +434,38 @@ class InstagramCollector:
         return payload, response.status_code
 
     def _fetch_via_feed_endpoint(self, username: str) -> dict | None:
+        # Try in order:
+        #   1. The shared http_session if we already have real IG cookies
+        #      (env or browser). Authenticated calls bypass IP-level 429s
+        #      that Hetzner / other datacenter IPs routinely hit.
+        #   2. A clean anonymous session with profile warmup (the friend's
+        #      flow). Works from residential IPs.
         max_posts = max(self.settings.max_posts_per_account, 12)
+
+        if self._http_session.cookies.get("sessionid"):
+            LOGGER.info("Feed @%s: trying authenticated shared session", username)
+            items = self._paginate_feed(self._http_session, username, max_posts)
+            if items:
+                return _feed_items_to_user(items[:max_posts])
+
+        LOGGER.info("Feed @%s: falling back to anonymous warmup flow", username)
         session = self._build_feed_session()
         if not self._prepare_feed_session(session, username):
             return None
+        items = self._paginate_feed(session, username, max_posts)
+        if items:
+            return _feed_items_to_user(items[:max_posts])
+        return None
 
+    def _paginate_feed(
+        self,
+        session: requests.Session,
+        username: str,
+        max_posts: int,
+    ) -> list[dict]:
         items: list[dict] = []
         max_id: str | None = None
-        attempts_left = 2  # one retry with a fresh session on 401/429
+        attempts_left = 1  # one retry with a fresh warmup session on 401/429
         while len(items) < max_posts:
             payload, status = self._fetch_feed_page(
                 session, username, count=12, max_id=max_id
@@ -449,9 +473,10 @@ class InstagramCollector:
             if payload is None:
                 if status in (401, 429) and attempts_left > 0:
                     attempts_left -= 1
-                    session = self._build_feed_session()
-                    if not self._prepare_feed_session(session, username):
+                    fresh = self._build_feed_session()
+                    if not self._prepare_feed_session(fresh, username):
                         break
+                    session = fresh
                     continue
                 break
             page_items = payload.get("items") or []
@@ -463,13 +488,13 @@ class InstagramCollector:
             max_id = payload.get("next_max_id")
             if not max_id:
                 break
-
-        if not items:
-            return None
-        LOGGER.info(
-            "IG feed @%s collected %d items across pagination", username, len(items)
-        )
-        return _feed_items_to_user(items[:max_posts])
+        if items:
+            LOGGER.info(
+                "IG feed @%s collected %d items across pagination",
+                username,
+                len(items),
+            )
+        return items
 
     def _warmup_session(self) -> None:
         # Fetch the IG homepage so the server sets the `mid`, `ig_did` and
