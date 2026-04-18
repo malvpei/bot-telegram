@@ -4,7 +4,7 @@ import asyncio
 import logging
 from typing import Any
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import TelegramError
 from telegram.ext import (
     Application,
@@ -24,9 +24,6 @@ from app.service import VideoCreationService
 TYPE_STATE, LANGUAGE_STATE = range(2)
 
 LOGGER = logging.getLogger(__name__)
-
-TELEGRAM_VIDEO_LIMIT_BYTES = 50 * 1024 * 1024
-
 
 def run_bot() -> None:
     settings = get_settings()
@@ -249,86 +246,40 @@ async def _execute_job(
         await status_message.edit_text(f"No pude generar el video.\n\n{error}")
         return
 
-    caption = (
+    header = (
         f"Cuenta elegida: @{result.chosen_account}\n"
         f"Tipo: {result.video_type.value}\n"
         f"Idioma: {result.language.value}"
     )
     if result.fallback_accounts:
         fallback_text = ", ".join(f"@{account}" for account in result.fallback_accounts)
-        caption += f"\nPaisaje fallback: {fallback_text}"
+        header += f"\nPaisaje fallback: {fallback_text}"
 
+    await status_message.edit_text("Enviando imágenes con su texto.")
     try:
-        video_size = result.video_path.stat().st_size
-    except OSError:
-        video_size = 0
-
-    if video_size and video_size > TELEGRAM_VIDEO_LIMIT_BYTES:
-        await status_message.edit_text(
-            "El video supera el límite de 50MB de Telegram para bots y no se "
-            f"puede enviar. Tamaño: {video_size // (1024 * 1024)}MB.\n"
-            f"Lo tienes guardado en {result.video_path}.\n"
-            "Sube SLIDE_SECONDS / baja VIDEO_HEIGHT o VIDEO_FPS y vuelve a intentarlo."
-        )
-        return
-
-    await status_message.edit_text("Video listo. Te lo envío ahora.")
-    try:
-        with result.video_path.open("rb") as video_file:
-            await context.bot.send_video(
-                chat_id=chat.id, video=video_file, caption=caption
-            )
-        await context.bot.send_message(chat_id=chat.id, text=result.preview_text)
-        with result.script_path.open("rb") as script_file:
-            await context.bot.send_document(
-                chat_id=chat.id,
-                document=script_file,
-                filename=result.script_path.name,
-                caption="Guion completo",
-            )
-        await _send_slide_images(context, chat.id, result.slides)
+        await context.bot.send_message(chat_id=chat.id, text=header)
+        await _send_slides_text_then_image(context, chat.id, result.slides)
     except TelegramError as error:
-        LOGGER.exception("Telegram refused the video upload")
+        LOGGER.exception("Telegram refused the send")
         await context.bot.send_message(
             chat_id=chat.id,
-            text=(
-                "Telegram rechazó el envío del video.\n"
-                f"Causa: {error}\n"
-                f"Tienes el archivo en {result.video_path}."
-            ),
+            text=f"Telegram rechazó el envío.\nCausa: {error}",
         )
 
 
-async def _send_slide_images(context, chat_id: int, slides) -> None:
-    # Send the per-slide source images so the user can download each one
-    # together with its text (caption). Telegram allows up to 10 items per
-    # media group, which is enough for TYPE_1 (7) and TYPE_2 (5).
-    if not slides:
-        return
-    media: list[InputMediaPhoto] = []
-    open_files = []
-    try:
-        for slide in slides:
-            path = slide.media.local_path
-            if not path.exists():
-                continue
-            handle = path.open("rb")
-            open_files.append(handle)
-            raw_caption = f"{slide.index + 1}. {slide.role.value}\n{slide.text}"
-            caption = raw_caption[:1024]
-            media.append(InputMediaPhoto(media=handle, caption=caption))
-        if not media:
-            return
-        await context.bot.send_message(
-            chat_id=chat_id, text="Imágenes individuales con su texto:"
-        )
-        await context.bot.send_media_group(chat_id=chat_id, media=media)
-    finally:
-        for handle in open_files:
-            try:
-                handle.close()
-            except Exception:
-                pass
+async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
+    # For each slide (hook included) send the text message first, then the
+    # image right below it. This is what the user asked for: every image
+    # appears underneath its matching text.
+    for slide in slides:
+        text = slide.text.strip() if slide.text else ""
+        if text:
+            await context.bot.send_message(chat_id=chat_id, text=text)
+        path = slide.media.local_path
+        if not path.exists():
+            continue
+        with path.open("rb") as handle:
+            await context.bot.send_photo(chat_id=chat_id, photo=handle)
 
 
 async def _ensure_allowed(update: Update) -> bool:
