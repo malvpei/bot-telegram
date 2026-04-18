@@ -652,18 +652,24 @@ def _extract_user_from_html(html: str) -> dict | None:
             pass
 
     # Modern shape: inline JSON payloads inside <script data-sjs> tags.
-    # Keys and URLs are string-escaped (\" and \/ variants). Rather than
-    # untangle the Relay shell, we collect post-image CDN URLs directly.
+    # Keys and URLs are nested-JSON-escaped up to two levels deep. Instead
+    # of walking the Relay shell we normalise the HTML and extract every
+    # IG CDN URL in one pass.
+    normalised = (
+        html.replace("\\\\/", "/")
+        .replace("\\/", "/")
+        .replace("\\u0026", "&")
+        .replace("\\u002F", "/")
+        .replace("&amp;", "&")
+    )
     candidate_pattern = re.compile(
-        r"https:(?:\\?/){2}[a-z0-9\-\.]+\.(?:cdninstagram\.com|fbcdn\.net)"
-        r"(?:\\?/|/)[^\s\"'<>\\]+?\.(?:jpg|jpeg|webp|heic)(?:[^\s\"'<>\\]*)"
+        r"https://[a-z0-9\-\.]+\.(?:cdninstagram\.com|fbcdn\.net)"
+        r"/[^\s\"'<>\\]+?\.(?:jpg|jpeg|webp|heic)[^\s\"'<>\\]*"
     )
     collected: list[str] = []
     seen: set[str] = set()
-    for match in candidate_pattern.finditer(html):
-        url = _clean_cdn_url(match.group(0))
-        # Strip lingering backslashes that survive unicode escapes.
-        url = url.replace("\\", "")
+    for match in candidate_pattern.finditer(normalised):
+        url = match.group(0)
         if url in seen:
             continue
         if _is_profile_pic_url(url):
