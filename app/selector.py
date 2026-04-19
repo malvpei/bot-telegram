@@ -118,7 +118,14 @@ class ImageSelector:
                 if not self.state.is_media_used(candidate.source_id)
                 and not self._is_extreme_luxury(candidate)
             ]
+            LOGGER.info(
+                "tipo1 @%s: %d/%d candidatos disponibles",
+                account,
+                len(available),
+                len(raw_candidates),
+            )
             if len(available) < 6:
+                LOGGER.info("tipo1 @%s: descartada, < 6 disponibles", account)
                 continue
 
             non_fixed_roles = [role for role in TYPE_1_ROLES if role != SlideRole.FEBRUARY]
@@ -140,9 +147,17 @@ class ImageSelector:
                 role_scores[role] = best.score
 
             if len(picked) != len(non_fixed_roles):
+                LOGGER.info(
+                    "tipo1 @%s: solo pude elegir %d/%d slides (pool=%d)",
+                    account,
+                    len(picked),
+                    len(non_fixed_roles),
+                    len(available),
+                )
                 continue
 
             if not self._first_image_is_valid(picked[SlideRole.HOOK]):
+                LOGGER.info("tipo1 @%s: hook no pasa el umbral de calidad", account)
                 continue
 
             fallback_accounts: list[str] = []
@@ -155,10 +170,13 @@ class ImageSelector:
                     replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
                     allow_luxury=False,
                 )
-                if not replaced:
-                    continue
-                if replaced.source_account != account:
+                if replaced and replaced.source_account != account:
                     fallback_accounts.append(replaced.source_account)
+                elif not replaced:
+                    LOGGER.info(
+                        "tipo1 @%s: sin paisaje disponible, sigo con las picks actuales",
+                        account,
+                    )
 
             slides = self._build_slide_plans(
                 TYPE_1_ROLES,
@@ -201,7 +219,14 @@ class ImageSelector:
                 for candidate in raw_candidates
                 if not self.state.is_media_used(candidate.source_id)
             ]
+            LOGGER.info(
+                "tipo2 @%s: %d/%d candidatos disponibles",
+                account,
+                len(available),
+                len(raw_candidates),
+            )
             if len(available) < 4:
+                LOGGER.info("tipo2 @%s: descartada, < 4 disponibles", account)
                 continue
 
             non_fixed_roles = [role for role in TYPE_2_ROLES if role != SlideRole.TIP3]
@@ -223,10 +248,18 @@ class ImageSelector:
                 role_scores[role] = best.score
 
             if len(picked) != len(non_fixed_roles):
+                LOGGER.info(
+                    "tipo2 @%s: solo pude elegir %d/%d slides (pool=%d)",
+                    account,
+                    len(picked),
+                    len(non_fixed_roles),
+                    len(available),
+                )
                 continue
 
             hook_media = picked[SlideRole.HOOK]
             if not hook_media.metrics or hook_media.metrics.faces < 1:
+                LOGGER.info("tipo2 @%s: hook sin cara detectada", account)
                 continue
 
             fallback_accounts: list[str] = []
@@ -239,10 +272,13 @@ class ImageSelector:
                     replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
                     allow_luxury=True,
                 )
-                if not replaced:
-                    continue
-                if replaced.source_account != account:
+                if replaced and replaced.source_account != account:
                     fallback_accounts.append(replaced.source_account)
+                elif not replaced:
+                    LOGGER.info(
+                        "tipo2 @%s: sin paisaje disponible, sigo con las picks actuales",
+                        account,
+                    )
 
             slides = self._build_slide_plans(
                 TYPE_2_ROLES,
