@@ -1,6 +1,5 @@
 import re
 import shutil
-import tempfile
 from pathlib import Path
 from uuid import uuid4
 
@@ -13,7 +12,10 @@ from app.texts import FORBIDDEN_TYPE_2_TOKENS, ScriptGenerator
 
 @pytest.fixture()
 def state_dir():
-    path = Path(tempfile.mkdtemp(prefix="state-test-"))
+    workspace_tmp = Path(__file__).resolve().parents[1] / "data" / "_test_tmp"
+    workspace_tmp.mkdir(parents=True, exist_ok=True)
+    path = workspace_tmp / f"state-test-{uuid4().hex}"
+    path.mkdir()
     try:
         yield path
     finally:

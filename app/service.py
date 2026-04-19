@@ -150,31 +150,31 @@ class VideoCreationService:
     def _pick_account_with_plan(
         self, usernames: list[str], request: VideoRequest
     ):
-        # Pick one account at random. On collector failure OR not-enough-images
-        # after selector filtering, try the next account. Stop at the first
-        # success — we only need one viable plan.
+        # Probamos varias cuentas y dejamos que el selector compare las viables
+        # entre sí; así evitamos quedarnos con la primera que solo cumple.
         shuffled = list(usernames)
         random.shuffle(shuffled)
         max_attempts = min(self.settings.account_pick_attempts, len(shuffled))
         tried: list[str] = []
         errors: list[str] = []
+        catalog: dict[str, list] = {}
         for username in shuffled[:max_attempts]:
             tried.append(username)
             try:
-                candidates = self.collector.collect_one(username)
+                catalog[username] = self.collector.collect_one(username)
             except InstagramCollectorError as error:
                 LOGGER.warning("@%s descartada (fetch): %s", username, error)
                 errors.append(f"@{username}: {error}")
                 continue
+        if catalog:
             try:
                 plan = self.selector.create_plan(
-                    {username: candidates}, request.video_type, request.language
+                    catalog, request.video_type, request.language
                 )
+                return plan, tried
             except ValueError as error:
-                LOGGER.warning("@%s descartada (plan): %s", username, error)
-                errors.append(f"@{username}: {error}")
-                continue
-            return plan, tried
+                LOGGER.warning("Todas las cuentas candidatas fallaron en plan: %s", error)
+                errors.append(str(error))
         raise InstagramCollectorError(
             "Ninguna de las cuentas probadas dio imágenes utilizables.\n"
             + "\n".join(errors)

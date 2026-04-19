@@ -7,8 +7,16 @@ from dataclasses import dataclass
 from typing import Callable
 
 import cv2
+import imageio.v3 as iio
 import numpy as np
 from PIL import Image, UnidentifiedImageError
+
+try:
+    import pillow_heif
+except ImportError:  # pragma: no cover - optional dependency in prod only
+    pillow_heif = None
+else:  # pragma: no cover - exercised indirectly when dependency exists
+    pillow_heif.register_heif_opener()
 
 from app.config import Settings
 from app.models import (
@@ -54,10 +62,20 @@ LUXURY_KEYWORDS = {
     "bvlgari", "aston martin", "bentley", "porsche", "audemars piguet",
     "vacheron", "fine dining", "michelin",
 }
+AFFLUENT_LIFESTYLE_KEYWORDS = {
+    "old money", "quiet luxury", "private club", "country club", "estate",
+    "villa", "penthouse", "mayfair", "monaco", "st tropez", "saint tropez",
+    "hamptons", "aspen", "amalfi", "capri", "fine dining", "michelin",
+    "boardroom", "founder", "entrepreneur", "ceo", "ecommerce", "dropshipping",
+    "success", "wealth", "wealthy", "freedom", "scaling", "remote lifestyle",
+    "luxury hotel", "five star", "business class", "first class", "tailored",
+    "linen", "cashmere", "blazer", "loafers",
+}
 EXTREME_LUXURY_KEYWORDS = {
     "private jet", "bugatti", "lamborghini", "ferrari", "mclaren", "maybach",
     "rolls royce", "yacht", "richard mille",
 }
+HEIC_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1")
 
 # Slots whose image can be swapped for a landscape without breaking the
 # month-by-month narrative or the fixed slots. Hook stays put, fixed slot is
@@ -204,7 +222,7 @@ class ImageSelector:
                 used_media_ids=[media.source_id for media in picked.values()],
                 fallback_accounts=fallback_accounts,
             )
-            ranked.append((sum(role_scores.values()), plan))
+            ranked.append((self._plan_score(role_scores, VideoType.TYPE_1), plan))
 
         if not ranked:
             raise ValueError(
@@ -274,28 +292,10 @@ class ImageSelector:
                 LOGGER.info("tipo2 @%s: hook sin cara detectada", account)
                 continue
 
-            self._cap_non_portrait_to_one(
+            self._cap_landscapes_to_one(
                 picked, role_scores, available,
                 replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
             )
-
-            fallback_accounts: list[str] = []
-            if not any(self._is_landscape_media(media) for media in picked.values()):
-                replaced = self._inject_landscape(
-                    picked,
-                    role_scores,
-                    catalog,
-                    selected_account=account,
-                    replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
-                    allow_luxury=True,
-                )
-                if replaced and replaced.source_account != account:
-                    fallback_accounts.append(replaced.source_account)
-                elif not replaced:
-                    LOGGER.info(
-                        "tipo2 @%s: sin paisaje disponible, sigo con las picks actuales",
-                        account,
-                    )
 
             slides = self._build_slide_plans(
                 TYPE_2_ROLES,
@@ -309,9 +309,9 @@ class ImageSelector:
                 language=language,
                 slides=slides,
                 used_media_ids=[media.source_id for media in picked.values()],
-                fallback_accounts=fallback_accounts,
+                fallback_accounts=[],
             )
-            ranked.append((sum(role_scores.values()), plan))
+            ranked.append((self._plan_score(role_scores, VideoType.TYPE_2), plan))
 
         if not ranked:
             raise ValueError(
@@ -350,7 +350,7 @@ class ImageSelector:
                 )
         return slides
 
-    def _cap_non_portrait_to_one(
+    def _cap_landscapes_to_one(
         self,
         picked: dict[SlideRole, MediaCandidate],
         role_scores: dict[SlideRole, float],
@@ -362,21 +362,21 @@ class ImageSelector:
         # principal — sea paisaje puro o el usuario como actor secundario
         # (sin cara detectada con tamaño suficiente). El resto de los slots
         # reemplazables debe ser retrato del creador. HOOK no se toca.
-        non_portrait_roles = [
+        landscape_roles = [
             role for role, media in picked.items()
-            if self._is_non_portrait_media(media) and role in replaceable_roles
+            if self._is_landscape_dominant_media(media) and role in replaceable_roles
         ]
-        if len(non_portrait_roles) <= 1:
+        if len(landscape_roles) <= 1:
             return
-        non_portrait_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
-        for role in non_portrait_roles[1:]:
+        landscape_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
+        for role in landscape_roles[1:]:
             original = picked[role]
             exclude = self._exclude_ids_by_post(picked, available)
             replacement = self._pick_best(
                 available,
                 exclude_ids=exclude,
                 score_fn=lambda media, current_role=role: (
-                    0.0 if self._is_non_portrait_media(media)
+                    0.0 if self._is_landscape_dominant_media(media)
                     else self._score_type_2(media, current_role)
                 ),
             )
@@ -385,19 +385,23 @@ class ImageSelector:
             picked[role] = replacement.media
             role_scores[role] = replacement.score
             LOGGER.info(
-                "tipo2 non-portrait cap: %s -> reemplazo %s por %s",
+                "tipo2 landscape cap: %s -> reemplazo %s por %s",
                 role.value,
                 original.source_id,
                 replacement.media.source_id,
             )
 
-    def _is_non_portrait_media(self, media: MediaCandidate) -> bool:
+    def _is_landscape_dominant_media(self, media: MediaCandidate) -> bool:
         # No-sujeto-principal = paisaje puro o foto donde el creador es
         # actor secundario (sin cara detectada por el clasificador Haar, que
         # exige mínimo 80x80 px — caras pequeñas o de espaldas no cuentan).
         if not media.metrics:
             return False
-        return media.metrics.is_landscape or media.metrics.faces < 1
+        return (
+            media.metrics.is_landscape
+            and media.metrics.faces < 1
+            and media.metrics.portrait_focus_score < 0.18
+        )
 
     def _inject_landscape(
         self,
@@ -461,16 +465,19 @@ class ImageSelector:
                 media.metrics = None
 
     def _analyze_image(self, media: MediaCandidate) -> ImageMetrics:
-        with Image.open(media.local_path) as raw:
-            image = raw.convert("RGB")
-            rgb = np.asarray(image)
+        rgb = self._open_image_rgb_array(media)
 
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         brightness = float(np.mean(gray))
         daylight = self._normalize(brightness, low=85.0, high=190.0)
         sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
         sharpness_score = self._normalize(sharpness, low=60.0, high=900.0)
-        faces = self._detect_faces(gray)
+        face_boxes = self._detect_faces(gray)
+        faces = int(len(face_boxes))
+        face_area_ratio, face_center_score, portrait_focus_score = self._face_presence_features(
+            face_boxes,
+            gray.shape,
+        )
         aspect_ratio = media.width / max(media.height, 1)
 
         sky_ratio = self._sky_ratio(rgb)
@@ -500,6 +507,7 @@ class ImageSelector:
             ),
         )
         keyword_luxury = self._keyword_score(media.caption, LUXURY_KEYWORDS)
+        affluent_keywords = self._keyword_score(media.caption, AFFLUENT_LIFESTYLE_KEYWORDS)
         visual_luxury = self._visual_luxury_score(rgb)
         luxury_score = max(
             0.0,
@@ -516,6 +524,18 @@ class ImageSelector:
                 0.55 * daylight + 0.45 * sharpness_score,
             ),
         )
+        affluent_lifestyle_score = max(
+            0.0,
+            min(
+                1.0,
+                0.35 * luxury_score
+                + 0.20 * affluent_keywords
+                + 0.15 * visual_luxury
+                + 0.15 * quality_score
+                + 0.15 * daylight
+                - 0.12 * casual_score,
+            ),
+        )
         return ImageMetrics(
             brightness=brightness,
             daylight=daylight,
@@ -529,18 +549,94 @@ class ImageSelector:
             quality_score=quality_score,
             has_visual_luxury=visual_luxury > 0.45,
             sky_ratio=sky_ratio,
+            face_area_ratio=face_area_ratio,
+            face_center_score=face_center_score,
+            portrait_focus_score=portrait_focus_score,
+            affluent_lifestyle_score=affluent_lifestyle_score,
         )
 
-    def _detect_faces(self, gray: np.ndarray) -> int:
+    def _open_image_rgb_array(self, media: MediaCandidate) -> np.ndarray:
+        try:
+            with Image.open(media.local_path) as raw:
+                image = raw.convert("RGB")
+                media.width, media.height = image.size
+                return np.asarray(image)
+        except UnidentifiedImageError:
+            if self._looks_like_heic(media.local_path):
+                LOGGER.info("Intentando decodificar HEIC en %s", media.local_path)
+            if pillow_heif is not None:
+                with Image.open(media.local_path) as raw:
+                    image = raw.convert("RGB")
+                    media.width, media.height = image.size
+                    return np.asarray(image)
+            try:
+                rgb = iio.imread(media.local_path)
+            except Exception as error:  # noqa: BLE001
+                raise UnidentifiedImageError(
+                    f"No pude abrir {media.local_path.name}. Si es HEIC, instala pillow-heif."
+                ) from error
+            if rgb.ndim == 2:
+                rgb = np.stack([rgb, rgb, rgb], axis=-1)
+            if rgb.ndim == 3 and rgb.shape[2] == 4:
+                rgb = rgb[..., :3]
+            media.height, media.width = rgb.shape[:2]
+            return rgb.astype(np.uint8)
+
+    def _looks_like_heic(self, path) -> bool:
+        try:
+            header = path.read_bytes()[:32]
+        except OSError:
+            return False
+        return any(brand in header for brand in HEIC_BRANDS)
+
+    def _detect_faces(self, gray: np.ndarray) -> np.ndarray:
         if self._face_detector.empty():
-            return 0
+            return np.empty((0, 4), dtype=np.int32)
         detected = self._face_detector.detectMultiScale(
             gray,
             scaleFactor=1.2,
             minNeighbors=5,
             minSize=(80, 80),
         )
-        return int(len(detected))
+        if len(detected) == 0:
+            return np.empty((0, 4), dtype=np.int32)
+        return np.asarray(detected)
+
+    def _face_presence_features(
+        self,
+        face_boxes: np.ndarray,
+        image_shape: tuple[int, int],
+    ) -> tuple[float, float, float]:
+        if len(face_boxes) == 0:
+            return 0.0, 0.0, 0.0
+
+        height, width = image_shape
+        image_area = max(float(height * width), 1.0)
+        cx = width / 2.0
+        cy = height / 2.0
+
+        best_area_ratio = 0.0
+        best_center_score = 0.0
+        best_portrait_focus = 0.0
+        max_distance = max(math.hypot(cx, cy), 1.0)
+
+        for x, y, w, h in face_boxes:
+            area_ratio = (w * h) / image_area
+            face_center_x = x + (w / 2.0)
+            face_center_y = y + (h / 2.0)
+            distance = math.hypot(face_center_x - cx, face_center_y - cy)
+            center_score = max(0.0, 1.0 - (distance / max_distance))
+            size_score = self._normalize(area_ratio, low=0.015, high=0.18)
+            portrait_focus = max(
+                0.0,
+                min(1.0, 0.70 * size_score + 0.30 * center_score),
+            )
+            if portrait_focus > best_portrait_focus:
+                best_area_ratio = area_ratio
+                best_center_score = center_score
+                best_portrait_focus = portrait_focus
+
+        return best_area_ratio, best_center_score, best_portrait_focus
 
     def _sky_ratio(self, rgb: np.ndarray) -> float:
         # Approximate "sky / open horizon" by counting blue-cyan pixels in the
@@ -618,6 +714,15 @@ class ImageSelector:
                     best = CandidateScore(media=media, score=base)
         return best
 
+    def _plan_score(
+        self,
+        role_scores: dict[SlideRole, float],
+        video_type: VideoType,
+    ) -> float:
+        total = sum(role_scores.values())
+        hook_weight = 0.45 if video_type == VideoType.TYPE_1 else 0.35
+        return total + hook_weight * role_scores.get(SlideRole.HOOK, 0.0)
+
     def _score_type_1(self, media: MediaCandidate, role: SlideRole) -> float:
         metrics = media.metrics
         if metrics is None:
@@ -628,21 +733,27 @@ class ImageSelector:
         # TYPE_1 es historia personal, la cara del creador es lo que engancha.
         # Cuantas más caras visibles, mejor; hook sin cara se penaliza duro.
         face_score = min(metrics.faces, 3) / 3.0
+        portrait_score = metrics.portrait_focus_score
         score = (
-            0.28 * metrics.quality_score
-            + 0.12 * metrics.casual_score
-            + 0.10 * metrics.outdoor_score
-            + 0.35 * face_score
+            0.24 * metrics.quality_score
+            + 0.10 * metrics.casual_score
+            + 0.08 * metrics.outdoor_score
+            + 0.24 * face_score
+            + 0.22 * portrait_score
             - 0.18 * metrics.luxury_score
         )
         if metrics.has_visual_luxury:
             score -= 0.15
         if role == SlideRole.HOOK:
             if metrics.faces < 1:
-                score -= 0.40
-            score += 0.10 * metrics.daylight + 0.25 * face_score
+                score -= 0.55
+            score += (
+                0.10 * metrics.daylight
+                + 0.18 * face_score
+                + 0.30 * portrait_score
+            )
             if metrics.is_landscape:
-                score -= 0.20
+                score -= 0.28
         elif role == SlideRole.MARCH:
             # March is the closing slide, slight bump for upbeat outdoor shots.
             score += 0.05 * metrics.outdoor_score
@@ -654,27 +765,40 @@ class ImageSelector:
         metrics = media.metrics
         if metrics is None:
             return 0.0
-        # TYPE_2 vende el estilo de vida: riqueza / old money / lujo silencioso.
-        # Subimos fuerte el peso de luxury y del visual_luxury bonus.
+        # TYPE_2 tiene que vender "me ha ido bien": lifestyle alto, old money
+        # y una sensación de éxito del usuario, no solo objetos bonitos.
+        face_score = min(metrics.faces, 2) / 2.0
+        landscape_penalty = 0.22 if self._is_landscape_dominant_media(media) else 0.0
         score = (
-            0.20 * metrics.quality_score
-            + 0.48 * metrics.luxury_score
+            0.22 * metrics.quality_score
+            + 0.32 * metrics.affluent_lifestyle_score
+            + 0.16 * metrics.luxury_score
+            + 0.08 * metrics.daylight
             + 0.10 * metrics.outdoor_score
-            + 0.08 * min(metrics.faces, 2) / 2.0
+            + 0.12 * metrics.portrait_focus_score
+            + 0.06 * face_score
+            - 0.18 * metrics.casual_score
+            - landscape_penalty
         )
         if metrics.has_visual_luxury:
-            score += 0.18
+            score += 0.10
         if role == SlideRole.HOOK:
             if metrics.faces < 1:
                 return -1.0
-            score += 0.22 * min(metrics.faces, 2) / 2.0 + 0.08 * metrics.daylight
-            if metrics.is_landscape:
+            score += (
+                0.20 * face_score
+                + 0.26 * metrics.portrait_focus_score
+                + 0.08 * metrics.daylight
+            )
+            if self._is_landscape_dominant_media(media):
                 # Hook debe ser retrato con cara, el paisaje va en un tip.
-                score -= 0.20
+                score -= 0.35
         elif role == SlideRole.TIP4:
-            score += 0.08 * metrics.outdoor_score
-        elif metrics.is_landscape:
-            score += 0.08
+            score += 0.10 * metrics.outdoor_score
+            if self._is_landscape_dominant_media(media):
+                score += 0.08
+        elif self._is_landscape_dominant_media(media):
+            score -= 0.08
         return score
 
     def _post_key(self, media: MediaCandidate) -> str:
@@ -712,9 +836,14 @@ class ImageSelector:
     def _first_image_is_valid(self, media: MediaCandidate) -> bool:
         if media.metrics is None:
             return False
-        # Slightly relaxed thresholds so studio-lit but well-exposed shots pass,
-        # while still ruling out under-exposed night shots.
-        return media.metrics.quality_score >= 0.38 and media.metrics.daylight >= 0.40
+        return (
+            media.metrics.quality_score >= 0.38
+            and media.metrics.daylight >= 0.35
+            and (
+                media.metrics.faces >= 1
+                or media.metrics.portrait_focus_score >= 0.18
+            )
+        )
 
     def _build_fixed_media(self) -> MediaCandidate:
         if not self.settings.fixed_image_path.exists():

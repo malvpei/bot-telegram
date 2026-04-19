@@ -76,6 +76,10 @@ class ImageMetrics:
     quality_score: float
     has_visual_luxury: bool = False
     sky_ratio: float = 0.0
+    face_area_ratio: float = 0.0
+    face_center_score: float = 0.0
+    portrait_focus_score: float = 0.0
+    affluent_lifestyle_score: float = 0.0
 
 
 @dataclass

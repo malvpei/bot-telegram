@@ -1,7 +1,7 @@
 import shutil
-import tempfile
 from dataclasses import replace
 from pathlib import Path
+from uuid import uuid4
 
 import numpy as np
 import pytest
@@ -23,7 +23,10 @@ from app.state import StateStore
 
 @pytest.fixture()
 def temp_workspace():
-    root = Path(tempfile.mkdtemp(prefix="selector-test-"))
+    workspace_tmp = Path(__file__).resolve().parents[1] / "data" / "_test_tmp"
+    workspace_tmp.mkdir(parents=True, exist_ok=True)
+    root = workspace_tmp / f"selector-test-{uuid4().hex}"
+    root.mkdir()
     fixed_dir = root / "fixed"
     fixed_dir.mkdir()
     fixed_image_path = fixed_dir / "imagen6.png"
@@ -129,7 +132,6 @@ def test_type_2_plan_fixed_tip3_and_hook_requires_face(temp_workspace):
         candidate.metrics = _metrics_stub(
             quality=0.8, daylight=0.7, faces=1, is_landscape=False, luxury=0.8
         )
-    # One landscape is enough to pass the "at least one landscape" rule.
     candidates[-1].metrics = _metrics_stub(
         quality=0.8, daylight=0.7, faces=1, is_landscape=True, luxury=0.8, outdoor=0.6
     )
@@ -201,6 +203,194 @@ def test_type_1_landscape_fallback_does_not_touch_february(temp_workspace):
     assert plan.fallback_accounts == ["backup"]
 
 
+def test_type_2_allows_zero_landscapes_even_if_another_account_has_them(temp_workspace):
+    settings, state = temp_workspace
+    main_dir = settings.downloads_dir / "lifestyle"
+    main_dir.mkdir()
+    backup_dir = settings.downloads_dir / "backup_landscapes"
+    backup_dir.mkdir()
+
+    main_candidates = [
+        _make_candidate(main_dir, username="lifestyle", idx=i, caption="old money")
+        for i in range(5)
+    ]
+    for candidate in main_candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.86,
+            daylight=0.78,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.35,
+            casual=0.08,
+            luxury=0.72,
+            portrait_focus=0.72,
+            affluent=0.84,
+        )
+
+    backup_candidates = [
+        _make_candidate(backup_dir, username="backup_landscapes", idx=i, landscape=True)
+        for i in range(3)
+    ]
+    for candidate in backup_candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.82,
+            daylight=0.75,
+            faces=0,
+            is_landscape=True,
+            outdoor=0.85,
+            casual=0.05,
+            luxury=0.45,
+            portrait_focus=0.0,
+            affluent=0.48,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"lifestyle": main_candidates, "backup_landscapes": backup_candidates},
+        VideoType.TYPE_2,
+        Language.ES,
+    )
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    assert plan.chosen_account == "lifestyle"
+    assert not any(media.metrics.is_landscape for media in non_fixed)
+    assert plan.fallback_accounts == []
+
+
+def test_type_2_caps_landscape_dominant_images_to_one(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "delta"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="delta", idx=i, caption="quiet luxury")
+        for i in range(6)
+    ]
+    candidates[0].metrics = _metrics_stub(
+        quality=0.78,
+        daylight=0.72,
+        faces=1,
+        is_landscape=False,
+        casual=0.08,
+        luxury=0.7,
+        portrait_focus=0.8,
+        affluent=0.82,
+    )
+    candidates[1].metrics = _metrics_stub(
+        quality=0.92,
+        daylight=0.82,
+        faces=0,
+        is_landscape=True,
+        outdoor=0.86,
+        casual=0.04,
+        luxury=0.76,
+        portrait_focus=0.05,
+        affluent=0.86,
+    )
+    candidates[2].metrics = _metrics_stub(
+        quality=0.9,
+        daylight=0.8,
+        faces=0,
+        is_landscape=True,
+        outdoor=0.82,
+        casual=0.05,
+        luxury=0.73,
+        portrait_focus=0.04,
+        affluent=0.82,
+    )
+    candidates[3].metrics = _metrics_stub(
+        quality=0.84,
+        daylight=0.74,
+        faces=1,
+        is_landscape=False,
+        casual=0.06,
+        luxury=0.68,
+        portrait_focus=0.7,
+        affluent=0.8,
+    )
+    candidates[4].metrics = _metrics_stub(
+        quality=0.8,
+        daylight=0.7,
+        faces=1,
+        is_landscape=False,
+        casual=0.1,
+        luxury=0.66,
+        portrait_focus=0.64,
+        affluent=0.76,
+    )
+    candidates[5].metrics = _metrics_stub(
+        quality=0.76,
+        daylight=0.68,
+        faces=1,
+        is_landscape=False,
+        casual=0.12,
+        luxury=0.62,
+        portrait_focus=0.58,
+        affluent=0.72,
+    )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"delta": candidates}, VideoType.TYPE_2, Language.ES)
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    landscape_count = sum(
+        1 for media in non_fixed if selector._is_landscape_dominant_media(media)
+    )
+    assert landscape_count <= 1
+
+
+def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "hookface"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="hookface", idx=i) for i in range(7)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.78,
+            daylight=0.7,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.2,
+            casual=0.2,
+            luxury=0.1,
+            portrait_focus=0.35,
+        )
+
+    candidates[0].metrics = _metrics_stub(
+        quality=0.8,
+        daylight=0.72,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.15,
+        casual=0.18,
+        luxury=0.08,
+        face_area=0.16,
+        face_center=0.92,
+        portrait_focus=0.94,
+    )
+    candidates[1].metrics = _metrics_stub(
+        quality=0.85,
+        daylight=0.75,
+        faces=2,
+        is_landscape=False,
+        outdoor=0.2,
+        casual=0.18,
+        luxury=0.08,
+        face_area=0.05,
+        face_center=0.55,
+        portrait_focus=0.28,
+    )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"hookface": candidates}, VideoType.TYPE_1, Language.ES)
+
+    hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
+    assert hook_slide.media.source_id == candidates[0].source_id
+
+
 def _metrics_stub(
     *,
     quality: float,
@@ -210,6 +400,10 @@ def _metrics_stub(
     outdoor: float = 0.5,
     casual: float = 0.5,
     luxury: float = 0.2,
+    face_area: float = 0.04,
+    face_center: float = 0.6,
+    portrait_focus: float = 0.45,
+    affluent: float | None = None,
 ) -> ImageMetrics:
     return ImageMetrics(
         brightness=150.0,
@@ -224,4 +418,8 @@ def _metrics_stub(
         quality_score=quality,
         has_visual_luxury=luxury > 0.6,
         sky_ratio=0.25 if is_landscape else 0.05,
+        face_area_ratio=face_area if faces else 0.0,
+        face_center_score=face_center if faces else 0.0,
+        portrait_focus_score=portrait_focus,
+        affluent_lifestyle_score=luxury if affluent is None else affluent,
     )

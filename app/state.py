@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +22,8 @@ from app.models import Language, VideoType
 
 
 _LOCK_TIMEOUT_SECONDS = 30.0
+_ATOMIC_REPLACE_RETRIES = 5
+_ATOMIC_REPLACE_BACKOFF_SECONDS = 0.05
 
 
 class StateStore:
@@ -68,7 +71,14 @@ class StateStore:
         try:
             with os.fdopen(fd, "w", encoding="utf-8") as handle:
                 json.dump(data, handle, ensure_ascii=False, indent=2)
-            os.replace(tmp_name, path)
+            for attempt in range(1, _ATOMIC_REPLACE_RETRIES + 1):
+                try:
+                    os.replace(tmp_name, path)
+                    break
+                except PermissionError:
+                    if attempt == _ATOMIC_REPLACE_RETRIES:
+                        raise
+                    time.sleep(_ATOMIC_REPLACE_BACKOFF_SECONDS * attempt)
         except Exception:
             try:
                 os.unlink(tmp_name)
