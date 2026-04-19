@@ -11,7 +11,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import Settings
-from app.models import SlidePlan, SlideRole, VideoPlan
+from app.models import SlidePlan, SlideRole, VideoPlan, VideoType
 
 
 LOGGER = logging.getLogger(__name__)
@@ -28,6 +28,14 @@ SYSTEM_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
+TYPE_3_TOOL_BADGES: dict[SlideRole, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
+    SlideRole.TOOL_STORE: ("Shopify", (255, 255, 255), (92, 156, 55)),
+    SlideRole.TOOL_PRODUCT_SEARCH: ("Dropradar", (163, 245, 48), (20, 20, 20)),
+    SlideRole.TOOL_SCRIPTS: ("ChatGPT", (104, 176, 154), (255, 255, 255)),
+    SlideRole.TOOL_PAYMENTS: ("PayPal", (255, 255, 255), (0, 94, 166)),
+    SlideRole.TOOL_EDITING: ("CapCut", (255, 255, 255), (0, 0, 0)),
+    SlideRole.TOOL_MARKETING: ("TikTok", (0, 0, 0), (255, 255, 255)),
+}
 
 
 class VideoRenderer:
@@ -74,6 +82,7 @@ class VideoRenderer:
                         slide,
                         source_images[slide.index],
                         progress,
+                        plan.video_type,
                     )
                     writer.append_data(frame)
 
@@ -82,12 +91,14 @@ class VideoRenderer:
                         slide,
                         source_images[slide.index],
                         1.0,
+                        plan.video_type,
                     )
                     next_slide = plan.slides[index + 1]
                     next_initial = self._render_slide_frame(
                         next_slide,
                         source_images[next_slide.index],
                         0.0,
+                        plan.video_type,
                     )
                     for transition_index in range(transition_frames):
                         alpha = (transition_index + 1) / transition_frames
@@ -101,6 +112,11 @@ class VideoRenderer:
         self._enforce_size_limit(video_path)
         return video_path, script_path
 
+    def render_slide_still(self, slide: SlidePlan, video_type: VideoType) -> Image.Image:
+        source_image = self._load_source_image(slide.media.local_path)
+        frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
+        return Image.fromarray(frame)
+
     # ------------------------------------------------------------------
     # Frame composition
     # ------------------------------------------------------------------
@@ -110,7 +126,10 @@ class VideoRenderer:
         slide: SlidePlan,
         source_image: Image.Image,
         progress: float,
+        video_type: VideoType,
     ) -> np.ndarray:
+        if video_type == VideoType.TYPE_3:
+            return self._render_type_3_slide_frame(slide, source_image, progress)
         canvas = self._cover_image(source_image, progress)
         composed = Image.alpha_composite(canvas.convert("RGBA"), self._gradient_overlay)
         self._draw_text(composed, slide)
@@ -134,6 +153,168 @@ class VideoRenderer:
         offset_x = int(extra_x * (0.3 + 0.4 * progress))
         offset_y = int(extra_y * 0.5)
         return resized.crop((offset_x, offset_y, offset_x + width, offset_y + height))
+
+    def _render_type_3_slide_frame(
+        self,
+        slide: SlidePlan,
+        source_image: Image.Image,
+        progress: float,
+    ) -> np.ndarray:
+        canvas = self._cover_image(source_image, progress).convert("RGBA")
+        if slide.role == SlideRole.HOOK:
+            overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 45))
+            canvas = Image.alpha_composite(canvas, overlay)
+            self._draw_type_3_hook_text(canvas, slide.text)
+        else:
+            self._draw_type_3_tool_slide(canvas, slide)
+        return np.asarray(canvas.convert("RGB"))
+
+    def _draw_type_3_hook_text(self, image: Image.Image, text: str) -> None:
+        if not text:
+            return
+        draw = ImageDraw.Draw(image)
+        width, height = image.size
+        font, lines = self._fit_text(
+            text,
+            draw,
+            max_width=width - 110,
+            max_height=int(height * 0.34),
+            base_size=78,
+            min_size=42,
+            bold=True,
+            stroke_width=4,
+        )
+        text_height = self._block_height(lines, font, draw, stroke_width=4)
+        self._draw_lines(
+            draw,
+            lines,
+            font,
+            start_y=max(72, int(height * 0.16) - text_height // 2),
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=4,
+        )
+
+    def _draw_type_3_tool_slide(self, image: Image.Image, slide: SlidePlan) -> None:
+        draw = ImageDraw.Draw(image)
+        width, height = image.size
+        title, subtitle, cta = self._split_type_3_tool_text(slide.text)
+
+        title_font, title_lines = self._fit_text(
+            title,
+            draw,
+            max_width=width - 90,
+            max_height=int(height * 0.14),
+            base_size=60,
+            min_size=38,
+            bold=True,
+            stroke_width=3,
+        )
+        subtitle_font, subtitle_lines = self._fit_text(
+            subtitle,
+            draw,
+            max_width=width - 90,
+            max_height=int(height * 0.16),
+            base_size=38,
+            min_size=26,
+            bold=False,
+            stroke_width=2,
+        )
+        cta_font, cta_lines = self._fit_text(
+            cta,
+            draw,
+            max_width=width - 100,
+            max_height=int(height * 0.12),
+            base_size=38,
+            min_size=26,
+            bold=True,
+            stroke_width=2,
+        )
+
+        top_y = int(height * 0.075)
+        self._draw_lines(
+            draw,
+            title_lines,
+            title_font,
+            start_y=top_y,
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=3,
+        )
+        title_height = self._block_height(title_lines, title_font, draw, stroke_width=3)
+        self._draw_lines(
+            draw,
+            subtitle_lines,
+            subtitle_font,
+            start_y=top_y + title_height + 22,
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=2,
+        )
+        subtitle_height = self._block_height(subtitle_lines, subtitle_font, draw, stroke_width=2)
+        self._draw_lines(
+            draw,
+            cta_lines,
+            cta_font,
+            start_y=top_y + title_height + subtitle_height + 48,
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=2,
+        )
+        self._draw_type_3_badge(draw, slide.role, width, height)
+
+    def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
+        lines = [line.strip() for line in text.splitlines() if line.strip()]
+        title = lines[0] if lines else ""
+        subtitle = lines[1] if len(lines) > 1 else ""
+        cta = lines[2] if len(lines) > 2 else ""
+        return title, subtitle, cta
+
+    def _draw_type_3_badge(
+        self,
+        draw: ImageDraw.ImageDraw,
+        role: SlideRole,
+        width: int,
+        height: int,
+    ) -> None:
+        label, fill, text_fill = TYPE_3_TOOL_BADGES.get(
+            role,
+            ("Tool", (255, 255, 255), (0, 0, 0)),
+        )
+        badge_size = int(width * 0.34)
+        x0 = (width - badge_size) // 2
+        y0 = int(height * 0.47)
+        x1 = x0 + badge_size
+        y1 = y0 + badge_size
+        draw.rounded_rectangle(
+            (x0, y0, x1, y1),
+            radius=40,
+            fill=fill,
+            outline=(255, 255, 255),
+            width=4,
+        )
+        font, lines = self._fit_text(
+            label,
+            draw,
+            max_width=badge_size - 28,
+            max_height=badge_size - 28,
+            base_size=54,
+            min_size=28,
+            bold=True,
+            stroke_width=0,
+        )
+        block_height = self._block_height(lines, font, draw, stroke_width=0)
+        y = y0 + (badge_size - block_height) // 2
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line, font=font)
+            line_width = bbox[2] - bbox[0]
+            draw.text(
+                (x0 + (badge_size - line_width) // 2, y),
+                line,
+                font=font,
+                fill=text_fill,
+            )
+            y += (bbox[3] - bbox[1]) + 16
 
     def _build_gradient_overlay(self) -> Image.Image:
         width = self.settings.width

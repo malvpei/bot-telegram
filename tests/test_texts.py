@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from app.models import Language, SlideRole, VideoType
+from app.models import Language, SlideRole, TYPE_3_ROLES, VideoType
 from app.state import StateStore
 from app.texts import FORBIDDEN_TYPE_2_TOKENS, ScriptGenerator
 
@@ -80,6 +80,19 @@ def test_consecutive_generations_differ(state_dir):
     )
     second = generator.generate(VideoType.TYPE_1, Language.ES)
     assert second.signature != first.signature
+
+
+def test_type_3_has_tool_stack_without_hosting(state_dir):
+    generator = _make_generator(state_dir)
+    package = generator.generate(VideoType.TYPE_3, Language.ES)
+
+    assert len(package.ordered_slides) == len(TYPE_3_ROLES)
+    full_text = package.plain_text.lower()
+    assert "dropshipping" in package.slides_by_role[SlideRole.HOOK].lower()
+    assert "hosting" not in full_text
+    assert "hostinger" not in full_text
+    assert "marketing" in full_text
+    assert "tiktok" in full_text
 
 
 def _extract_amount(text: str) -> int | None:

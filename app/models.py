@@ -8,6 +8,7 @@ from pathlib import Path
 class VideoType(str, Enum):
     TYPE_1 = "1"
     TYPE_2 = "2"
+    TYPE_3 = "3"
 
 
 class Language(str, Enum):
@@ -27,6 +28,12 @@ class SlideRole(str, Enum):
     TIP2 = "tip2"
     TIP3 = "tip3"
     TIP4 = "tip4"
+    TOOL_STORE = "tool_store"
+    TOOL_PRODUCT_SEARCH = "tool_product_search"
+    TOOL_SCRIPTS = "tool_scripts"
+    TOOL_PAYMENTS = "tool_payments"
+    TOOL_EDITING = "tool_editing"
+    TOOL_MARKETING = "tool_marketing"
 
 
 TYPE_1_ROLES: tuple[SlideRole, ...] = (
@@ -45,6 +52,16 @@ TYPE_2_ROLES: tuple[SlideRole, ...] = (
     SlideRole.TIP2,
     SlideRole.TIP3,
     SlideRole.TIP4,
+)
+
+TYPE_3_ROLES: tuple[SlideRole, ...] = (
+    SlideRole.HOOK,
+    SlideRole.TOOL_STORE,
+    SlideRole.TOOL_PRODUCT_SEARCH,
+    SlideRole.TOOL_SCRIPTS,
+    SlideRole.TOOL_PAYMENTS,
+    SlideRole.TOOL_EDITING,
+    SlideRole.TOOL_MARKETING,
 )
 
 FIXED_ROLE_BY_TYPE: dict[VideoType, SlideRole] = {
@@ -80,6 +97,8 @@ class ImageMetrics:
     face_center_score: float = 0.0
     portrait_focus_score: float = 0.0
     affluent_lifestyle_score: float = 0.0
+    laptop_score: float = 0.0
+    hands_score: float = 0.0
 
 
 @dataclass

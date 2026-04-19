@@ -27,6 +27,7 @@ from app.models import (
     SlideRole,
     TYPE_1_ROLES,
     TYPE_2_ROLES,
+    TYPE_3_ROLES,
     VideoPlan,
     VideoType,
 )
@@ -39,6 +40,17 @@ LOGGER = logging.getLogger(__name__)
 CASUAL_KEYWORDS = {
     "selfie", "gym", "beach", "travel", "sunset", "holiday", "vacation", "trip",
     "playa", "viaje", "verano", "mirror", "friends", "friend", "weekend",
+}
+LAPTOP_KEYWORDS = {
+    "laptop", "macbook", "notebook", "computer", "pc", "desk", "keyboard",
+    "screen", "monitor", "setup", "workstation", "office", "coworking",
+    "portatil", "portátil", "ordenador", "teclado", "pantalla", "escritorio",
+    "oficina", "trabajo", "workspace",
+}
+HANDS_KEYWORDS = {
+    "hands", "hand", "typing", "writing", "desk", "keyboard", "coffee",
+    "watch", "bracelet", "manos", "mano", "teclado", "escribiendo", "reloj",
+    "pulsera", "mesa",
 }
 LANDSCAPE_KEYWORDS = {
     "view", "landscape", "sunset", "beach", "ocean", "sea", "mountain",
@@ -76,6 +88,7 @@ EXTREME_LUXURY_KEYWORDS = {
     "rolls royce", "yacht", "richard mille",
 }
 HEIC_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1")
+TYPE_3_BACKGROUND_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 
 # Slots whose image can be swapped for a landscape without breaking the
 # month-by-month narrative or the fixed slots. Hook stays put, fixed slot is
@@ -127,7 +140,9 @@ class ImageSelector:
 
         if video_type == VideoType.TYPE_1:
             return self._create_type_1_plan(catalog, language)
-        return self._create_type_2_plan(catalog, language)
+        if video_type == VideoType.TYPE_2:
+            return self._create_type_2_plan(catalog, language)
+        return self._create_type_3_plan(catalog, language)
 
     # ------------------------------------------------------------------
     # Type 1
@@ -324,6 +339,67 @@ class ImageSelector:
     # Helpers — composition
     # ------------------------------------------------------------------
 
+    def _create_type_3_plan(
+        self,
+        catalog: dict[str, list[MediaCandidate]],
+        language: Language,
+    ) -> VideoPlan:
+        backgrounds = self._type_3_backgrounds()
+        ranked: list[tuple[float, VideoPlan]] = []
+
+        for account, raw_candidates in catalog.items():
+            available = [
+                candidate
+                for candidate in raw_candidates
+                if not self.state.is_media_used(candidate.source_id)
+            ]
+            LOGGER.info(
+                "tipo3 @%s: %d/%d candidatos disponibles",
+                account,
+                len(available),
+                len(raw_candidates),
+            )
+            hook = self._pick_best(
+                available,
+                exclude_ids=set(),
+                score_fn=self._score_type_3_hook,
+            )
+            if hook is None:
+                LOGGER.info("tipo3 @%s: sin hook válido", account)
+                continue
+
+            slides: list[SlidePlan] = [
+                SlidePlan(index=1, role=SlideRole.HOOK, text="", media=hook.media)
+            ]
+            for index, role in enumerate(TYPE_3_ROLES[1:], start=2):
+                background = backgrounds[(index - 2) % len(backgrounds)]
+                slides.append(
+                    SlidePlan(
+                        index=index,
+                        role=role,
+                        text="",
+                        media=background,
+                        fixed_asset=True,
+                    )
+                )
+
+            plan = VideoPlan(
+                chosen_account=account,
+                video_type=VideoType.TYPE_3,
+                language=language,
+                slides=slides,
+                used_media_ids=[hook.media.source_id],
+                fallback_accounts=[],
+            )
+            ranked.append((hook.score, plan))
+
+        if not ranked:
+            raise ValueError(
+                "No encontré una foto válida para un video tipo 3 sin reutilizar imágenes."
+            )
+        ranked.sort(key=lambda entry: entry[0], reverse=True)
+        return ranked[0][1]
+
     def _build_slide_plans(
         self,
         roles: tuple[SlideRole, ...],
@@ -508,6 +584,8 @@ class ImageSelector:
         )
         keyword_luxury = self._keyword_score(media.caption, LUXURY_KEYWORDS)
         affluent_keywords = self._keyword_score(media.caption, AFFLUENT_LIFESTYLE_KEYWORDS)
+        laptop_score = self._keyword_score(media.caption, LAPTOP_KEYWORDS)
+        hands_score = self._keyword_score(media.caption, HANDS_KEYWORDS)
         visual_luxury = self._visual_luxury_score(rgb)
         luxury_score = max(
             0.0,
@@ -553,6 +631,8 @@ class ImageSelector:
             face_center_score=face_center_score,
             portrait_focus_score=portrait_focus_score,
             affluent_lifestyle_score=affluent_lifestyle_score,
+            laptop_score=laptop_score,
+            hands_score=hands_score,
         )
 
     def _open_image_rgb_array(self, media: MediaCandidate) -> np.ndarray:
@@ -801,6 +881,37 @@ class ImageSelector:
             score -= 0.08
         return score
 
+    def _score_type_3_hook(self, media: MediaCandidate) -> float:
+        metrics = media.metrics
+        if metrics is None:
+            return 0.0
+        if metrics.quality_score < 0.28:
+            return 0.0
+
+        person_or_hands = max(
+            min(metrics.faces, 2) / 2.0,
+            metrics.portrait_focus_score,
+            metrics.hands_score,
+        )
+        if person_or_hands <= 0 and metrics.laptop_score <= 0:
+            person_or_hands = 0.12 if not metrics.is_landscape else 0.0
+
+        score = (
+            0.28 * metrics.quality_score
+            + 0.24 * metrics.affluent_lifestyle_score
+            + 0.18 * metrics.luxury_score
+            + 0.14 * metrics.laptop_score
+            + 0.12 * person_or_hands
+            + 0.04 * metrics.daylight
+        )
+        if metrics.laptop_score > 0 and person_or_hands > 0:
+            score += 0.18
+        if metrics.has_visual_luxury:
+            score += 0.08
+        if metrics.is_landscape and metrics.faces < 1 and metrics.laptop_score <= 0:
+            score -= 0.18
+        return score
+
     def _post_key(self, media: MediaCandidate) -> str:
         # source_id is built as "<user>:<shortcode>:<node_index>". Two
         # images that share the first two segments come from the same post
@@ -866,6 +977,51 @@ class ImageSelector:
         )
         candidate.metrics = self._analyze_image(candidate)
         return candidate
+
+    def _type_3_backgrounds(self) -> list[MediaCandidate]:
+        backgrounds_dir = self.settings.root_dir / "tipo3" / "fondocolores"
+        if not backgrounds_dir.exists():
+            backgrounds_dir = self.settings.root_dir / "tipo3" / "colores"
+        if not backgrounds_dir.exists():
+            raise FileNotFoundError(
+                "No encuentro la carpeta de fondos para tipo 3. "
+                "Crea tipo3/fondocolores o tipo3/colores."
+            )
+
+        paths = [
+            path
+            for path in sorted(backgrounds_dir.iterdir(), key=lambda item: item.name.lower())
+            if path.is_file() and path.suffix.lower() in TYPE_3_BACKGROUND_EXTENSIONS
+        ]
+        if not paths:
+            raise FileNotFoundError(
+                f"No encontré fondos válidos en {backgrounds_dir}."
+            )
+
+        backgrounds: list[MediaCandidate] = []
+        for index, path in enumerate(paths):
+            candidate = MediaCandidate(
+                source_account="tipo3_fondo",
+                source_id=f"tipo3_fondo:{index}",
+                local_path=path,
+                permalink=f"asset://{path.name}",
+                caption=path.stem,
+                width=self.settings.width,
+                height=self.settings.height,
+                created_at="fixed",
+            )
+            try:
+                candidate.metrics = self._analyze_image(candidate)
+            except (UnidentifiedImageError, OSError, ValueError):
+                LOGGER.warning("Fondo tipo3 no legible, lo salto: %s", path)
+                continue
+            backgrounds.append(candidate)
+
+        if not backgrounds:
+            raise FileNotFoundError(
+                f"No pude abrir ningún fondo válido en {backgrounds_dir}."
+            )
+        return backgrounds
 
     def _keyword_score(self, text: str, keywords: set[str]) -> float:
         lowered = (text or "").lower()

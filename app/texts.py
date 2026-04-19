@@ -10,6 +10,7 @@ from app.models import (
     SlideRole,
     TYPE_1_ROLES,
     TYPE_2_ROLES,
+    TYPE_3_ROLES,
     VideoType,
 )
 from app.state import StateStore
@@ -67,7 +68,9 @@ class ScriptGenerator:
     def _builder_for(self, video_type: VideoType, language: Language):
         if video_type == VideoType.TYPE_1:
             return self._build_type_1_es if language == Language.ES else self._build_type_1_en
-        return self._build_type_2_es if language == Language.ES else self._build_type_2_en
+        if video_type == VideoType.TYPE_2:
+            return self._build_type_2_es if language == Language.ES else self._build_type_2_en
+        return self._build_type_3_es if language == Language.ES else self._build_type_3_en
 
     # ------------------------------------------------------------------
     # Type 1 — narrative October → March
@@ -365,3 +368,71 @@ class ScriptGenerator:
             raise ValueError("Tipo 2: el consejo 3 debe mencionar Dropradar.")
         if "Dropshipping" not in slides_by_role.get(SlideRole.HOOK, ""):
             raise ValueError("Tipo 2: el hook debe mencionar Dropshipping.")
+
+    # ------------------------------------------------------------------
+    # Type 3 — one hook photo + fixed tool stack
+    # ------------------------------------------------------------------
+
+    def _build_type_3_es(self) -> ScriptPackage:
+        hooks = {
+            "h1": "Como empezar en Dropshipping en 2026",
+            "h2": "Como hacer Dropshipping en 2026",
+            "h3": "Empieza a hacer Dropshipping en 2026\nnunca habia sido tan facil",
+            "h4": "Como montar tu primera tienda de Dropshipping en 2026",
+            "h5": "Guia rapida para empezar Dropshipping en 2026",
+        }
+        tools = {
+            SlideRole.TOOL_STORE: "1. Tienda\nConstruye tu tienda por solo 1€\nUsa Shopify",
+            SlideRole.TOOL_PRODUCT_SEARCH: "2. Busqueda de productos\nEncuentra productos ganadores\nUsa Dropradar",
+            SlideRole.TOOL_SCRIPTS: "3. Guiones\nSigue guiones para tus videos\nUsa ChatGPT",
+            SlideRole.TOOL_PAYMENTS: "4. Pagos\nGestiona tus pagos de forma segura\nUsa PayPal o Stripe",
+            SlideRole.TOOL_EDITING: "5. Edicion\nEdita tus videos para mas calidad\nUsa CapCut",
+            SlideRole.TOOL_MARKETING: "6. Marketing\nPromociona organicamente\nUsa TikTok",
+        }
+        return self._compose_type_3(hooks, tools)
+
+    def _build_type_3_en(self) -> ScriptPackage:
+        hooks = {
+            "h1": "How to start Dropshipping in 2026",
+            "h2": "How to do Dropshipping in 2026",
+            "h3": "Start Dropshipping in 2026\nit has never been this easy",
+            "h4": "How to build your first Dropshipping store in 2026",
+            "h5": "Quick guide to start Dropshipping in 2026",
+        }
+        tools = {
+            SlideRole.TOOL_STORE: "1. Store\nBuild your store for only $1\nUse Shopify",
+            SlideRole.TOOL_PRODUCT_SEARCH: "2. Product Search\nFind winning products\nUse Dropradar",
+            SlideRole.TOOL_SCRIPTS: "3. Scripts\nFollow scripts for your videos\nUse ChatGPT",
+            SlideRole.TOOL_PAYMENTS: "4. Payments\nManage your payments securely\nUse PayPal or Stripe",
+            SlideRole.TOOL_EDITING: "5. Editing\nEdit your videos for better quality\nUse CapCut",
+            SlideRole.TOOL_MARKETING: "6. Marketing\nPromote your product organically\nUse TikTok",
+        }
+        return self._compose_type_3(hooks, tools)
+
+    def _compose_type_3(
+        self,
+        hook_options: dict[str, str],
+        tools: dict[SlideRole, str],
+    ) -> ScriptPackage:
+        hook_key = random.choice(list(hook_options))
+        slides_by_role = {SlideRole.HOOK: hook_options[hook_key], **tools}
+        ordered = [slides_by_role[role] for role in TYPE_3_ROLES]
+        signature = _hash_signature([hook_key, *ordered[1:]])
+        self._assert_type_3_rules(slides_by_role)
+        return ScriptPackage(
+            slides_by_role=slides_by_role,
+            ordered_slides=ordered,
+            signature=signature,
+            plain_text="\n\n".join(ordered),
+        )
+
+    @staticmethod
+    def _assert_type_3_rules(slides_by_role: dict[SlideRole, str]) -> None:
+        full_text = "\n".join(slides_by_role.values()).lower()
+        if "hosting" in full_text or "hostinger" in full_text:
+            raise ValueError("Tipo 3: hosting no debe aparecer.")
+        if "dropshipping" not in slides_by_role.get(SlideRole.HOOK, "").lower():
+            raise ValueError("Tipo 3: el hook debe mencionar Dropshipping.")
+        expected_roles = set(TYPE_3_ROLES)
+        if set(slides_by_role) != expected_roles:
+            raise ValueError("Tipo 3: faltan slides de herramientas.")

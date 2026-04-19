@@ -12,7 +12,7 @@ from PIL import Image
 
 from app.config import get_settings
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
-from app.models import GenerationResult, VideoPlan, VideoRequest
+from app.models import GenerationResult, VideoPlan, VideoRequest, VideoType
 from app.render import VideoRenderer
 from app.selector import ImageSelector
 from app.state import StateStore
@@ -207,11 +207,16 @@ class VideoCreationService:
                 continue
             out_path = slides_dir / f"slide_{slide.index:02d}.jpg"
             try:
-                with Image.open(source_path) as image:
-                    normalized = _cover_resize(
-                        image.convert("RGB"), target_width, target_height
-                    )
-                    normalized.save(out_path, format="JPEG", quality=92)
+                if plan.video_type == VideoType.TYPE_3:
+                    normalized = self.renderer.render_slide_still(
+                        slide, plan.video_type
+                    ).convert("RGB")
+                else:
+                    with Image.open(source_path) as image:
+                        normalized = _cover_resize(
+                            image.convert("RGB"), target_width, target_height
+                        )
+                normalized.save(out_path, format="JPEG", quality=92)
             except OSError as error:
                 LOGGER.warning(
                     "No pude normalizar %s: %s", source_path, error

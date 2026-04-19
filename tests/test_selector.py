@@ -15,6 +15,7 @@ from app.models import (
     SlideRole,
     TYPE_1_ROLES,
     TYPE_2_ROLES,
+    TYPE_3_ROLES,
     VideoType,
 )
 from app.selector import ImageSelector
@@ -31,6 +32,14 @@ def temp_workspace():
     fixed_dir.mkdir()
     fixed_image_path = fixed_dir / "imagen6.png"
     _write_sample_image(fixed_image_path, color=(120, 120, 120), landscape=False)
+    type3_backgrounds = root / "tipo3" / "fondocolores"
+    type3_backgrounds.mkdir(parents=True)
+    for index, color in enumerate(((50, 80, 120), (120, 60, 80), (80, 120, 70))):
+        _write_sample_image(
+            type3_backgrounds / f"bg_{index}.jpg",
+            color=color,
+            landscape=False,
+        )
 
     state_dir = root / "state"
     state_dir.mkdir()
@@ -391,6 +400,49 @@ def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):
     assert hook_slide.media.source_id == candidates[0].source_id
 
 
+def test_type_3_uses_one_real_hook_and_rotating_backgrounds(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "type3"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="type3", idx=i, caption="old money laptop")
+        for i in range(3)
+    ]
+    candidates[0].metrics = _metrics_stub(
+        quality=0.86,
+        daylight=0.78,
+        faces=1,
+        is_landscape=False,
+        casual=0.05,
+        luxury=0.75,
+        portrait_focus=0.72,
+        affluent=0.84,
+        laptop=1.0,
+        hands=0.5,
+    )
+    for candidate in candidates[1:]:
+        candidate.metrics = _metrics_stub(
+            quality=0.6,
+            daylight=0.65,
+            faces=0,
+            is_landscape=True,
+            casual=0.3,
+            luxury=0.2,
+            portrait_focus=0.0,
+            affluent=0.25,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"type3": candidates}, VideoType.TYPE_3, Language.ES)
+
+    assert [slide.role for slide in plan.slides] == list(TYPE_3_ROLES)
+    assert plan.slides[0].media.source_id == candidates[0].source_id
+    assert plan.used_media_ids == [candidates[0].source_id]
+    assert all(slide.fixed_asset for slide in plan.slides[1:])
+    assert all(slide.media.source_account == "tipo3_fondo" for slide in plan.slides[1:])
+
+
 def _metrics_stub(
     *,
     quality: float,
@@ -404,6 +456,8 @@ def _metrics_stub(
     face_center: float = 0.6,
     portrait_focus: float = 0.45,
     affluent: float | None = None,
+    laptop: float = 0.0,
+    hands: float = 0.0,
 ) -> ImageMetrics:
     return ImageMetrics(
         brightness=150.0,
@@ -422,4 +476,6 @@ def _metrics_stub(
         face_center_score=face_center if faces else 0.0,
         portrait_focus_score=portrait_focus,
         affluent_lifestyle_score=luxury if affluent is None else affluent,
+        laptop_score=laptop,
+        hands_score=hands,
     )

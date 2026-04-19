@@ -93,12 +93,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = (
         "Flujo:\n"
         "1. /create\n"
-        "2. elige Tipo 1 o Tipo 2\n"
+        "2. elige Tipo 1, Tipo 2 o Tipo 3\n"
         "3. elige Español o English\n"
         "4. el bot descarga, elige imágenes y envía el video\n\n"
         "Tipos:\n"
         "1 = historia de 7 imágenes (slide 6 = imagen6.png, febrero)\n"
-        "2 = 4 consejos + hook (slide 3 = imagen6.png, tip3)\n\n"
+        "2 = 4 consejos + hook (slide 3 = imagen6.png, tip3)\n"
+        "3 = hook + herramientas para empezar dropshipping en 2026\n\n"
         "Las cuentas se leen de accounts.txt (una por línea). Para cambiarlas "
         "edita ese archivo y reinicia el bot (o solo guarda, el archivo se "
         "relee en cada /create)."
@@ -142,6 +143,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             [
                 InlineKeyboardButton("Tipo 1", callback_data="wizard:type:1"),
                 InlineKeyboardButton("Tipo 2", callback_data="wizard:type:2"),
+                InlineKeyboardButton("Tipo 3", callback_data="wizard:type:3"),
             ]
         ]
     )
@@ -258,7 +260,10 @@ async def _execute_job(
     await status_message.edit_text("Enviando imágenes con su texto.")
     try:
         await context.bot.send_message(chat_id=chat.id, text=header)
-        await _send_slides_text_then_image(context, chat.id, result.slides)
+        if result.video_type == VideoType.TYPE_3:
+            await _send_slides_images_only(context, chat.id, result.slides)
+        else:
+            await _send_slides_text_then_image(context, chat.id, result.slides)
     except TelegramError as error:
         LOGGER.exception("Telegram refused the send")
         await context.bot.send_message(
@@ -280,6 +285,15 @@ async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
                 await context.bot.send_message(chat_id=chat_id, text=title)
             if body:
                 await context.bot.send_message(chat_id=chat_id, text=body)
+        path = slide.media.local_path
+        if not path.exists():
+            continue
+        with path.open("rb") as handle:
+            await context.bot.send_photo(chat_id=chat_id, photo=handle)
+
+
+async def _send_slides_images_only(context, chat_id: int, slides) -> None:
+    for slide in slides:
         path = slide.media.local_path
         if not path.exists():
             continue
