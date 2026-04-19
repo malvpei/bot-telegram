@@ -82,36 +82,36 @@ class ScriptGenerator:
             "h5": "Estos son mis números reales haciendo Dropshipping en 6 meses y lo cerca que estuve de rendirme",
         }
         october = {
-            "o1": "Octubre · 0€\nEmpecé con ganas, pero me quedé en parálisis por análisis.\nPensé tanto cada paso que no lancé nada de verdad.",
-            "o2": "Octubre · 0€\nArranqué motivado, pero perdí demasiado tiempo con el logo y los colores.\nSentía que trabajaba mucho, pero no avanzaba nada.",
-            "o3": "Octubre · 0€\nTenía todo listo en mi cabeza, pero me daba miedo lanzar anuncios y perder dinero.\nAl final me bloqueé yo solo.",
-            "o4": "Octubre · 0€\nMe metí con muchas ganas, pero dudaba de cada decisión.\nResultado, una tienda a medio terminar y cero ventas.",
+            "o1": "Octubre - 0€\nEmpecé con ganas pero me quedé en parálisis por análisis pensando tanto cada paso que no lancé nada de verdad",
+            "o2": "Octubre - 0€\nArranqué motivado aunque perdí demasiado tiempo con el logo y los colores sintiendo que trabajaba mucho sin avanzar",
+            "o3": "Octubre - 0€\nTenía todo listo en mi cabeza pero me daba miedo lanzar anuncios y perder dinero así que me bloqueé yo solo",
+            "o4": "Octubre - 0€\nMe metí con muchas ganas dudando de cada decisión y acabé con una tienda a medias y cero ventas",
         }
         november = {
-            "n1": "Noviembre · 0€\nSeguí en cero intentando vender solo en orgánico.\nVeía a otros facturar y yo seguía atascado en el mismo punto.",
-            "n2": "Noviembre · 0€\nQuise moverlo sin gastar mis ahorros, pero el miedo a invertir me frenó otra vez.\nPasó otro mes y no cambió nada.",
-            "n3": "Noviembre · 0€\nLo peor fue ver a otros sacar ventas mientras yo seguía a cero.\nEsa comparación me dejó bastante rallado.",
-            "n4": "Noviembre · 0€\nProbé un par de productos al azar y no pegó ninguno.\nEntendí que ir a ciegas no iba a funcionar nunca.",
+            "n1": "Noviembre - 0€\nSeguí en cero intentando vender solo en orgánico mientras veía a otros facturar y yo atascado en el mismo punto",
+            "n2": "Noviembre - 0€\nQuise moverlo sin gastar mis ahorros pero el miedo a invertir me frenó y pasó otro mes sin cambios",
+            "n3": "Noviembre - 0€\nLo peor fue ver a otros sacar ventas mientras yo seguía a cero y esa comparación me dejó bastante rallado",
+            "n4": "Noviembre - 0€\nProbé un par de productos al azar sin que pegara ninguno y entendí que ir a ciegas no iba a funcionar",
         }
         december = {
-            "d1": "Diciembre · {amount}€\nLlegó la primera venta gracias al empujón de Navidad.\nPensé que ya había descubierto el secreto del ecommerce.",
-            "d2": "Diciembre · {amount}€\nEntró una venta pequeña por la locura navideña y me vine arriba enseguida.\nCreí que a partir de ahí todo sería fácil.",
-            "d3": "Diciembre · {amount}€\nPor fin cayó la primera venta en Navidad y sentí que lo había pillado.\nMe monté una película demasiado pronto.",
+            "d1": "Diciembre - {amount}€\nLlegó la primera venta gracias al empujón de Navidad y pensé que ya había descubierto el secreto del ecommerce",
+            "d2": "Diciembre - {amount}€\nEntró una venta pequeña por la locura navideña y me vine arriba creyendo que a partir de ahí todo sería fácil",
+            "d3": "Diciembre - {amount}€\nPor fin cayó la primera venta en Navidad y sentí que lo había pillado aunque me monté una película demasiado pronto",
         }
         january = {
-            "j1": "Enero · 0€\nSe acabaron las fiestas y las ventas murieron por completo.\nPagar Shopify para nada me dejó con una desmotivación brutal.",
-            "j2": "Enero · 0€\nVolví a cero en cuanto pasó Navidad.\nEstuve a punto de dejarlo y buscar un trabajo normal.",
-            "j3": "Enero · 0€\nEl golpe fue duro porque después de Navidad no entró nada.\nMe frustraba seguir pagando la tienda sin ver resultados.",
+            "j1": "Enero - 0€\nSe acabaron las fiestas y las ventas murieron por completo así que pagar Shopify para nada me dejó sin motivación",
+            "j2": "Enero - 0€\nVolví a cero en cuanto pasó Navidad y estuve a punto de dejarlo para buscar un trabajo normal",
+            "j3": "Enero - 0€\nEl golpe fue duro porque después de Navidad no entró nada y me frustraba seguir pagando la tienda sin ver resultados",
         }
         february = {
-            "f1": "Febrero · {amount}€\nVi a un dropshipper en redes usando Dropradar y decidí darme una última oportunidad.\nEsta vez elegí por datos reales y no por intuición.",
-            "f2": "Febrero · {amount}€\nDescubrí Dropradar por otro chaval que seguía y dije, va, una última bala.\nMe guié solo por métricas y ahí empezaron a salir ventas.",
-            "f3": "Febrero · {amount}€\nProbé Dropradar después de ver que otros seguían sacando productos con datos.\nDejé de escoger por gusto personal y la tienda arrancó.",
+            "f1": "Febrero - {amount}€\nVi a un dropshipper usando Dropradar y me di una última oportunidad eligiendo por datos reales en vez de por intuición",
+            "f2": "Febrero - {amount}€\nDescubrí Dropradar por otro chaval que seguía y con una última bala guiada por métricas por fin empezaron a salir ventas",
+            "f3": "Febrero - {amount}€\nProbé Dropradar después de ver que otros sacaban productos con datos y al dejar de escoger por gusto personal la tienda arrancó",
         }
         march = {
-            "m1": "Marzo · {amount}€\nNo me hice millonario ni me compré un Ferrari.\nPero por fin tenía ingresos estables y dejé de ir totalmente a ciegas.",
-            "m2": "Marzo · {amount}€\nNada de jets ni mansiones, eso no va de eso.\nLa diferencia fue empezar a usar métricas reales y dejar de adivinar.",
-            "m3": "Marzo · {amount}€\nNo vivo con lujos, pero ya tenía ventas sólidas cada mes.\nLa lección fue clara, los datos mandan más que la intuición.",
+            "m1": "Marzo - {amount}€\nNo me hice millonario ni me compré un Ferrari pero por fin tenía ingresos estables y dejé de ir totalmente a ciegas",
+            "m2": "Marzo - {amount}€\nNada de jets ni mansiones porque la diferencia real fue empezar a usar métricas de verdad y dejar de adivinar",
+            "m3": "Marzo - {amount}€\nNo vivo con lujos pero ya tenía ventas sólidas cada mes y aprendí que los datos mandan más que la intuición",
         }
         return self._compose_type_1(
             currency="€",
@@ -133,36 +133,36 @@ class ScriptGenerator:
             "h5": "These are my honest 6 month Dropshipping numbers and how close I was to quitting",
         }
         october = {
-            "o1": "October · $0\nI started excited, but I got stuck in analysis paralysis.\nI kept overthinking every step and never really launched.",
-            "o2": "October · $0\nI was motivated, but I wasted way too much time on the logo and colors.\nIt felt like work, but nothing was moving.",
-            "o3": "October · $0\nEverything looked ready in my head, but I was scared to run ads and lose money.\nSo I kept delaying it.",
-            "o4": "October · $0\nI jumped in with energy, but I doubted every single decision.\nThe result was a half built store and zero sales.",
+            "o1": "October - $0\nI started excited but got stuck in analysis paralysis overthinking every step and never really launching",
+            "o2": "October - $0\nI was motivated yet wasted way too much time on the logo and colors feeling busy while nothing actually moved",
+            "o3": "October - $0\nEverything looked ready in my head but I was too scared to run ads and lose money so I just kept delaying",
+            "o4": "October - $0\nI jumped in with energy but doubted every decision and ended up with a half built store and zero sales",
         }
         november = {
-            "n1": "November · $0\nI stayed at zero trying to force organic sales.\nI watched other people making money while I was still stuck.",
-            "n2": "November · $0\nI wanted to avoid risking my savings, so fear kept me frozen again.\nAnother month passed and I was still at zero.",
-            "n3": "November · $0\nThe worst part was seeing everyone else getting sales while I had nothing.\nThat honestly got in my head.",
-            "n4": "November · $0\nI tested a couple of random products and none of them landed.\nI realized winging it was never going to work.",
+            "n1": "November - $0\nI stayed at zero trying to force organic sales while watching other people making money and feeling stuck",
+            "n2": "November - $0\nI wanted to avoid risking my savings so fear kept me frozen and another month passed with the same numbers",
+            "n3": "November - $0\nThe worst part was seeing everyone else getting sales while I had nothing and that really got in my head",
+            "n4": "November - $0\nI tested a couple of random products without a single one landing and realized winging it was never going to work",
         }
         december = {
-            "d1": "December · ${amount}\nMy first sale came in because of the Christmas push.\nI thought I had finally cracked ecommerce.",
-            "d2": "December · ${amount}\nA small Christmas sale hit and I got carried away.\nI really thought it would stay easy from there.",
-            "d3": "December · ${amount}\nThat first sale during Christmas made me think I had figured it out.\nI got confident way too quickly.",
+            "d1": "December - ${amount}\nMy first sale came in thanks to the Christmas push and I thought I had finally cracked ecommerce",
+            "d2": "December - ${amount}\nA small Christmas sale hit and I got carried away believing it would stay that easy from there",
+            "d3": "December - ${amount}\nThat first sale during Christmas made me think I had figured it out and I got confident way too quickly",
         }
         january = {
-            "j1": "January · $0\nThe holidays ended and sales completely died.\nPaying Shopify for nothing was killing my motivation.",
-            "j2": "January · $0\nAs soon as Christmas was over, I went right back to zero.\nI was close to quitting and getting a normal job.",
-            "j3": "January · $0\nReality hit hard because after the holidays nothing came in.\nI hated paying for the store with no results.",
+            "j1": "January - $0\nThe holidays ended and sales completely died so paying Shopify for nothing was killing my motivation",
+            "j2": "January - $0\nAs soon as Christmas was over I went right back to zero and was close to quitting for a normal job",
+            "j3": "January - $0\nReality hit hard because after the holidays nothing came in and I hated paying for a store with no results",
         }
         february = {
-            "f1": "February · ${amount}\nI saw another dropshipper using Dropradar and gave this one last shot.\nThis time I picked products from real data, not my gut.",
-            "f2": "February · ${amount}\nI found Dropradar through someone I followed and thought, one last try.\nI trusted the metrics and sales finally started moving.",
-            "f3": "February · ${amount}\nI tested Dropradar after seeing other people rely on data.\nI stopped choosing products by taste and the store woke up.",
+            "f1": "February - ${amount}\nI saw another dropshipper using Dropradar and gave myself one last shot picking products from real data not gut",
+            "f2": "February - ${amount}\nI found Dropradar through someone I followed and with one last try guided by metrics sales finally started moving",
+            "f3": "February - ${amount}\nI tested Dropradar after seeing others rely on data and once I stopped choosing products by taste the store woke up",
         }
         march = {
-            "m1": "March · ${amount}\nI did not become a millionaire and I did not buy a Ferrari.\nBut I finally had stable income and stopped guessing.",
-            "m2": "March · ${amount}\nNo jets, no mansions, nothing like that.\nThe real change was using solid metrics instead of pure intuition.",
-            "m3": "March · ${amount}\nI am not living some crazy luxury life, but the income finally felt stable.\nThat is when I learned data matters more than guessing.",
+            "m1": "March - ${amount}\nI did not become a millionaire and did not buy a Ferrari but I finally had stable income and stopped guessing",
+            "m2": "March - ${amount}\nNo jets or mansions because the real change was using solid metrics instead of pure intuition",
+            "m3": "March - ${amount}\nI am not living some crazy luxury life but the income finally felt stable and I learned data beats guessing",
         }
         return self._compose_type_1(
             currency="$",
@@ -259,24 +259,24 @@ class ScriptGenerator:
             "h5": "Las 4 cosas que ojalá alguien me hubiera contado antes de meterme en Dropshipping",
         }
         tip1 = {
-            "t1": "Consejo 1. Haz cuentas reales antes de vender\nMucha gente se lanza sin contar comisiones, devoluciones ni pasarelas y luego no entiende por qué no queda dinero al final del mes.\nSi no sabes tu margen real, vender mucho no significa nada y el volumen solo tapa el problema.",
-            "t2": "Consejo 1. Los márgenes no se improvisan\nNo basta con mirar el coste del producto en el proveedor y restar el precio de venta, esa cuenta miente casi siempre.\nEntre cargos de la pasarela, impuestos y devoluciones puede desaparecer todo el beneficio sin que te enteres.",
-            "t3": "Consejo 1. Números claros desde el día uno\nSi no cuentas todos los gastos reales, el margen bonito que ves en la hoja de cálculo es pura ficción.\nEmpieza con una plantilla sencilla, pelea por cada céntimo y toma las decisiones sobre datos, no sobre sensaciones.",
+            "t1": "1. Haz cuentas reales antes de vender\nMucha gente se lanza sin contar comisiones ni devoluciones y no entiende por qué no queda dinero a fin de mes",
+            "t2": "1. Los márgenes no se improvisan\nRestar el coste del producto al precio de venta miente casi siempre porque pasarela e impuestos se comen el beneficio",
+            "t3": "1. Números claros desde el día uno\nSi no cuentas todos los gastos reales el margen que ves en la hoja de cálculo es pura ficción",
         }
         tip2 = {
-            "t1": "Consejo 2. Una tienda barata nunca vende caro\nTu web decide en pocos segundos si el cliente confía lo suficiente para pagar o se va a buscar en otro sitio.\nFotos potentes, tipografías consistentes y una estructura limpia suben la conversión sin tocar el producto.",
-            "t2": "Consejo 2. La primera impresión lo es todo\nAunque tu producto sea bueno, una web descuidada lo tira todo abajo y pierdes la venta antes siquiera de contarla.\nInvierte en imágenes propias y en un diseño que transmita seriedad desde el primer scroll.",
-            "t3": "Consejo 2. El diseño construye confianza en silencio\nLa gente juzga tu marca en segundos y rara vez se equivoca, así que cada detalle visual está comunicando algo.\nCuidar colores, fotos y espacios hace que el cliente sienta seguridad antes incluso de abrir el carrito.",
+            "t1": "2. Una tienda barata nunca vende caro\nTu web decide en segundos si el cliente confía lo suficiente para pagar o se va a buscar en otro sitio",
+            "t2": "2. La primera impresión lo es todo\nAunque tu producto sea bueno una web descuidada tira la venta antes de que llegues a contarla",
+            "t3": "2. El diseño construye confianza en silencio\nLa gente juzga tu marca en segundos y cada detalle visual le está diciendo si puede fiarse o no",
         }
         tip3 = {
-            "t1": "Consejo 3. Encuentras productos rentables\nBuscar artículos a ciegas quema muchísimo tiempo y suele acabar con pruebas que nunca despegan.\nDropradar te da una forma mucho más limpia de detectar productos con potencial real y métricas serias detrás.",
-            "t2": "Consejo 3. Deja de elegir productos por intuición\nLa suerte no escala y las horas que pierdes probando ideas aleatorias cuestan dinero real, no teórico.\nCon Dropradar filtras oportunidades por datos de verdad y te quedas solo con lo que de verdad puede vender.",
-            "t3": "Consejo 3. Atajo directo a productos que mueven\nLa mayoría se pasa semanas buscando ganadores sin una dirección clara y termina quemada antes de encontrar uno.\nDropradar te muestra qué se está vendiendo ahora mismo y por qué funciona, sin tener que adivinar nada.",
+            "t1": "3. Encuentra productos rentables\nBuscar artículos a ciegas quema tiempo y Dropradar te da una forma limpia de ver productos con potencial real",
+            "t2": "3. Deja de elegir productos por intuición\nLa suerte no escala y Dropradar filtra oportunidades por datos para que solo pruebes lo que de verdad vende",
+            "t3": "3. Atajo a productos que mueven\nDropradar te muestra qué se está vendiendo ahora mismo y por qué funciona sin que tengas que adivinar nada",
         }
         tip4 = {
-            "t1": "Consejo 4. No desaparezcas después de la venta\nUn cliente al que no contestas se convierte muy rápido en una disputa con la pasarela y en una comisión perdida.\nResponder rápido baja reclamaciones, sube las valoraciones y te protege mucho más de lo que parece a simple vista.",
-            "t2": "Consejo 4. El postventa protege tu negocio\nLos problemas casi nunca vienen del envío, vienen del silencio después de la compra cuando el cliente se siente solo.\nUn soporte humano y rápido te ahorra comisiones, bloqueos de cuenta y una cantidad brutal de estrés.",
-            "t3": "Consejo 4. El soporte es parte de lo que vendes\nUn cliente que se siente escuchado casi nunca escala el problema, aunque algo no salga perfecto en la entrega.\nResponder rápido y con empatía es la herramienta de retención más barata y más efectiva que vas a tener.",
+            "t1": "4. No desaparezcas después de la venta\nUn cliente al que no contestas se convierte rápido en una disputa y en una comisión perdida",
+            "t2": "4. El postventa protege tu negocio\nLos problemas casi nunca vienen del envío sino del silencio después de la compra cuando el cliente se siente solo",
+            "t3": "4. El soporte es parte de lo que vendes\nResponder rápido y con empatía es la herramienta de retención más barata y más efectiva que vas a tener",
         }
         return self._compose_type_2(hook_options, tip1, tip2, tip3, tip4)
 
@@ -289,24 +289,24 @@ class ScriptGenerator:
             "h5": "The 4 things I wish someone had told me before I jumped into Dropshipping",
         }
         tip1 = {
-            "t1": "Tip 1. Know your real numbers\nToo many sellers skip fees, refunds and payment charges in their math and later wonder why nothing is left at the end of the month.\nIf you do not see your true margin, a big sales number is meaningless and volume just hides the problem.",
-            "t2": "Tip 1. Margins are never obvious\nIt is not enough to stare at the product cost on the supplier page, that calculation lies almost every single time.\nBetween taxes, returns and platform cuts your profit can quietly disappear before you even notice.",
-            "t3": "Tip 1. Run the numbers from day one\nIf you miss the hidden costs, the profit you think you see on your spreadsheet is pure fiction.\nStart with a simple template, fight for every cent and make decisions based on data, not on gut feeling.",
+            "t1": "1. Know your real numbers\nToo many sellers skip fees and refunds in their math and later wonder why nothing is left at the end of the month",
+            "t2": "1. Margins are never obvious\nStaring at the product cost on the supplier page lies almost every time once taxes and platform cuts eat the profit",
+            "t3": "1. Run the numbers from day one\nIf you miss the hidden costs the profit you think you see on your spreadsheet is pure fiction",
         }
         tip2 = {
-            "t1": "Tip 2. A cheap looking store will never sell premium\nYour site decides in just a few seconds whether a visitor trusts you enough to buy or leaves to check somewhere else.\nStrong photos, consistent typography and a clean structure push conversion up without even changing the product.",
-            "t2": "Tip 2. First impressions decide the sale\nEven a solid product dies on a messy storefront and you lose the order before you can even count it as one.\nInvest in real photography and a design that feels trustworthy from the very first scroll on the page.",
-            "t3": "Tip 2. Design builds trust quietly\nPeople size up your brand in seconds and they are rarely wrong, so every visual detail is communicating something to them.\nTaking care of colors, photos and spacing makes the buyer feel safe even before they open the cart.",
+            "t1": "2. A cheap looking store will never sell premium\nYour site decides in seconds whether a visitor trusts you enough to buy or leaves to check somewhere else",
+            "t2": "2. First impressions decide the sale\nEven a solid product dies on a messy storefront and you lose the order before you can even count it",
+            "t3": "2. Design builds trust quietly\nPeople size up your brand in seconds and every visual detail is telling the buyer whether to trust you or not",
         }
         tip3 = {
-            "t1": "Tip 3. Find profitable products\nRandom product hunting burns time fast and usually ends in tests that never really take off the ground.\nDropradar gives you a cleaner way to find items with real potential and actual metrics behind each pick.",
-            "t2": "Tip 3. Stop picking products on gut feeling\nLuck does not scale and the hours you waste testing random ideas are costing you real money, not theoretical money.\nDropradar filters opportunities by real data so you only test the things that can actually move units.",
-            "t3": "Tip 3. Shortcut straight to items that move\nMost sellers spend weeks hunting for winners with no clear direction and burn out long before finding one.\nDropradar shows you what is selling right now and explains why it works, so you stop guessing for good.",
+            "t1": "3. Find profitable products\nRandom hunting burns time fast and Dropradar gives you a cleaner way to spot items with real potential behind them",
+            "t2": "3. Stop picking products on gut feeling\nLuck does not scale and Dropradar filters opportunities by real data so you only test the things that can actually sell",
+            "t3": "3. Shortcut to items that move\nDropradar shows you what is selling right now and why it works so you never have to guess a winner again",
         }
         tip4 = {
-            "t1": "Tip 4. Do not vanish after the sale\nAn ignored customer turns into a chargeback much faster than you think and that hit costs more than the sale itself.\nReplying fast cuts complaints, raises reviews and protects you far more than most sellers realise.",
-            "t2": "Tip 4. After sales care protects the business\nMost disputes do not come from the shipping, they come from the silence once the customer has paid and feels alone.\nHuman and quick support saves you from fees, frozen accounts and a ridiculous amount of stress over time.",
-            "t3": "Tip 4. Support is part of what you sell\nA customer who feels heard almost never escalates the issue, even when something goes wrong during the delivery.\nReplying quickly and with empathy is the cheapest and most effective retention tool you will ever have.",
+            "t1": "4. Do not vanish after the sale\nAn ignored customer turns into a chargeback much faster than you think and that hit costs more than the sale itself",
+            "t2": "4. After sales care protects the business\nMost disputes do not come from shipping but from silence once the customer has paid and feels alone",
+            "t3": "4. Support is part of what you sell\nReplying quickly and with empathy is the cheapest and most effective retention tool you will ever have",
         }
         return self._compose_type_2(hook_options, tip1, tip2, tip3, tip4)
 

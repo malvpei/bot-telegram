@@ -262,6 +262,11 @@ class ImageSelector:
                 LOGGER.info("tipo2 @%s: hook sin cara detectada", account)
                 continue
 
+            self._cap_landscapes_to_one(
+                picked, role_scores, available,
+                replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
+            )
+
             fallback_accounts: list[str] = []
             if not any(self._is_landscape_media(media) for media in picked.values()):
                 replaced = self._inject_landscape(
@@ -332,6 +337,47 @@ class ImageSelector:
                     SlidePlan(index=index, role=role, text="", media=picked[role])
                 )
         return slides
+
+    def _cap_landscapes_to_one(
+        self,
+        picked: dict[SlideRole, MediaCandidate],
+        role_scores: dict[SlideRole, float],
+        available: list[MediaCandidate],
+        *,
+        replaceable_roles: tuple[SlideRole, ...],
+    ) -> None:
+        # TYPE_2 video debe enseñar exactamente un paisaje. Si la selección
+        # actual metió 2 o más, reemplaza las sobrantes (solo dentro de los
+        # slots reemplazables, HOOK no se toca) por la mejor alternativa que
+        # NO sea paisaje y que no colisione por post_key.
+        landscape_roles = [
+            role for role, media in picked.items()
+            if self._is_landscape_media(media) and role in replaceable_roles
+        ]
+        if len(landscape_roles) <= 1:
+            return
+        landscape_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
+        for role in landscape_roles[1:]:
+            original = picked[role]
+            exclude = self._exclude_ids_by_post(picked, available)
+            replacement = self._pick_best(
+                available,
+                exclude_ids=exclude,
+                score_fn=lambda media, current_role=role: (
+                    0.0 if self._is_landscape_media(media)
+                    else self._score_type_2(media, current_role)
+                ),
+            )
+            if replacement is None:
+                continue
+            picked[role] = replacement.media
+            role_scores[role] = replacement.score
+            LOGGER.info(
+                "tipo2 landscape cap: %s -> reemplazo %s por %s",
+                role.value,
+                original.source_id,
+                replacement.media.source_id,
+            )
 
     def _inject_landscape(
         self,
@@ -595,6 +641,9 @@ class ImageSelector:
             if metrics.faces < 1:
                 return -1.0
             score += 0.22 * min(metrics.faces, 2) / 2.0 + 0.08 * metrics.daylight
+            if metrics.is_landscape:
+                # Hook debe ser retrato con cara, el paisaje va en un tip.
+                score -= 0.20
         elif role == SlideRole.TIP4:
             score += 0.08 * metrics.outdoor_score
         elif metrics.is_landscape:
