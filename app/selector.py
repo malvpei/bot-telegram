@@ -41,6 +41,18 @@ LUXURY_KEYWORDS = {
     "dubai", "ferrari", "lamborghini", "rolex", "rich", "luxury", "yacht",
     "private jet", "mansion", "supercar", "rolls", "g wagon", "designer",
     "birkin", "bugatti", "richard mille", "patek", "maybach",
+    # old money / quiet luxury / estilo de vida alto
+    "old money", "quiet luxury", "tailored", "suit", "tuxedo", "blazer",
+    "cashmere", "linen", "polo", "country club", "equestrian",
+    "sailing", "regatta", "estate", "manor", "villa", "penthouse",
+    "first class", "business class", "five star", "champagne", "gala",
+    "art gallery", "museum", "opera", "boarding school", "ivy",
+    "ralph lauren", "loro piana", "hermes", "hermès", "chanel", "dior",
+    "gucci", "louis vuitton", "prada", "riviera", "monaco", "st tropez",
+    "saint tropez", "hamptons", "aspen", "amalfi", "capri", "mayfair",
+    "fifth avenue", "madison avenue", "cartier", "tiffany", "bulgari",
+    "bvlgari", "aston martin", "bentley", "porsche", "audemars piguet",
+    "vacheron", "fine dining", "michelin",
 }
 EXTREME_LUXURY_KEYWORDS = {
     "private jet", "bugatti", "lamborghini", "ferrari", "mclaren", "maybach",
@@ -605,19 +617,24 @@ class ImageSelector:
         if self._is_extreme_luxury(media):
             return -1.0
 
+        # TYPE_1 es historia personal, la cara del creador es lo que engancha.
+        # Cuantas más caras visibles, mejor; hook sin cara se penaliza duro.
+        face_score = min(metrics.faces, 3) / 3.0
         score = (
-            0.40 * metrics.quality_score
-            + 0.18 * metrics.casual_score
-            + 0.14 * metrics.outdoor_score
-            + 0.14 * min(metrics.faces, 2) / 2.0
+            0.28 * metrics.quality_score
+            + 0.12 * metrics.casual_score
+            + 0.10 * metrics.outdoor_score
+            + 0.35 * face_score
             - 0.18 * metrics.luxury_score
         )
         if metrics.has_visual_luxury:
             score -= 0.15
         if role == SlideRole.HOOK:
-            score += 0.14 * metrics.daylight + 0.18 * min(metrics.faces, 2) / 2.0
+            if metrics.faces < 1:
+                score -= 0.40
+            score += 0.10 * metrics.daylight + 0.25 * face_score
             if metrics.is_landscape:
-                score -= 0.10
+                score -= 0.20
         elif role == SlideRole.MARCH:
             # March is the closing slide, slight bump for upbeat outdoor shots.
             score += 0.05 * metrics.outdoor_score
@@ -629,14 +646,16 @@ class ImageSelector:
         metrics = media.metrics
         if metrics is None:
             return 0.0
+        # TYPE_2 vende el estilo de vida: riqueza / old money / lujo silencioso.
+        # Subimos fuerte el peso de luxury y del visual_luxury bonus.
         score = (
-            0.30 * metrics.quality_score
-            + 0.30 * metrics.luxury_score
-            + 0.12 * metrics.outdoor_score
-            + 0.10 * min(metrics.faces, 2) / 2.0
+            0.20 * metrics.quality_score
+            + 0.48 * metrics.luxury_score
+            + 0.10 * metrics.outdoor_score
+            + 0.08 * min(metrics.faces, 2) / 2.0
         )
         if metrics.has_visual_luxury:
-            score += 0.10
+            score += 0.18
         if role == SlideRole.HOOK:
             if metrics.faces < 1:
                 return -1.0
