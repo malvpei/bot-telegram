@@ -274,7 +274,7 @@ class ImageSelector:
                 LOGGER.info("tipo2 @%s: hook sin cara detectada", account)
                 continue
 
-            self._cap_landscapes_to_one(
+            self._cap_non_portrait_to_one(
                 picked, role_scores, available,
                 replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
             )
@@ -350,7 +350,7 @@ class ImageSelector:
                 )
         return slides
 
-    def _cap_landscapes_to_one(
+    def _cap_non_portrait_to_one(
         self,
         picked: dict[SlideRole, MediaCandidate],
         role_scores: dict[SlideRole, float],
@@ -358,25 +358,25 @@ class ImageSelector:
         *,
         replaceable_roles: tuple[SlideRole, ...],
     ) -> None:
-        # TYPE_2 video debe enseñar exactamente un paisaje. Si la selección
-        # actual metió 2 o más, reemplaza las sobrantes (solo dentro de los
-        # slots reemplazables, HOOK no se toca) por la mejor alternativa que
-        # NO sea paisaje y que no colisione por post_key.
-        landscape_roles = [
+        # TYPE_2 solo puede mostrar UNA foto donde el usuario no sea el sujeto
+        # principal — sea paisaje puro o el usuario como actor secundario
+        # (sin cara detectada con tamaño suficiente). El resto de los slots
+        # reemplazables debe ser retrato del creador. HOOK no se toca.
+        non_portrait_roles = [
             role for role, media in picked.items()
-            if self._is_landscape_media(media) and role in replaceable_roles
+            if self._is_non_portrait_media(media) and role in replaceable_roles
         ]
-        if len(landscape_roles) <= 1:
+        if len(non_portrait_roles) <= 1:
             return
-        landscape_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
-        for role in landscape_roles[1:]:
+        non_portrait_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
+        for role in non_portrait_roles[1:]:
             original = picked[role]
             exclude = self._exclude_ids_by_post(picked, available)
             replacement = self._pick_best(
                 available,
                 exclude_ids=exclude,
                 score_fn=lambda media, current_role=role: (
-                    0.0 if self._is_landscape_media(media)
+                    0.0 if self._is_non_portrait_media(media)
                     else self._score_type_2(media, current_role)
                 ),
             )
@@ -385,11 +385,19 @@ class ImageSelector:
             picked[role] = replacement.media
             role_scores[role] = replacement.score
             LOGGER.info(
-                "tipo2 landscape cap: %s -> reemplazo %s por %s",
+                "tipo2 non-portrait cap: %s -> reemplazo %s por %s",
                 role.value,
                 original.source_id,
                 replacement.media.source_id,
             )
+
+    def _is_non_portrait_media(self, media: MediaCandidate) -> bool:
+        # No-sujeto-principal = paisaje puro o foto donde el creador es
+        # actor secundario (sin cara detectada por el clasificador Haar, que
+        # exige mínimo 80x80 px — caras pequeñas o de espaldas no cuentan).
+        if not media.metrics:
+            return False
+        return media.metrics.is_landscape or media.metrics.faces < 1
 
     def _inject_landscape(
         self,
