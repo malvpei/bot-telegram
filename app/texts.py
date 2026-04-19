@@ -257,24 +257,24 @@ class ScriptGenerator:
             "h5": "Las 4 cosas que ojalá alguien me hubiera contado antes de meterme en Dropshipping",
         }
         tip1 = {
-            "t1": "Consejo 1\nCalcula comisiones, costes ocultos, devoluciones y pasarelas antes de vender.\nSi no sabes tu margen real, puedes vender mucho y ganar casi nada.",
-            "t2": "Consejo 1\nNo te quedes solo con el coste del producto.\nEntre comisiones, impuestos y devoluciones se te puede ir el beneficio sin darte cuenta.",
-            "t3": "Consejo 1\nHaz números de verdad desde el primer día.\nSi no cuentas todos los gastos, el margen bonito que ves no existe.",
+            "t1": "Consejo 1. Haz cuentas reales antes de vender\nMucha gente se lanza sin contar comisiones, devoluciones ni pasarelas y luego no entiende por qué no queda dinero al final del mes.\nSi no sabes tu margen real, vender mucho no significa nada y el volumen solo tapa el problema.",
+            "t2": "Consejo 1. Los márgenes no se improvisan\nNo basta con mirar el coste del producto en el proveedor y restar el precio de venta, esa cuenta miente casi siempre.\nEntre cargos de la pasarela, impuestos y devoluciones puede desaparecer todo el beneficio sin que te enteres.",
+            "t3": "Consejo 1. Números claros desde el día uno\nSi no cuentas todos los gastos reales, el margen bonito que ves en la hoja de cálculo es pura ficción.\nEmpieza con una plantilla sencilla, pelea por cada céntimo y toma las decisiones sobre datos, no sobre sensaciones.",
         }
         tip2 = {
-            "t1": "Consejo 2\nTu tienda tiene que verse premium desde que alguien entra.\nBuenas fotos y una página limpia hacen que la confianza suba al instante.",
-            "t2": "Consejo 2\nAunque el producto sea bueno, si la web parece barata nadie confía.\nUn look premium y fotos potentes cambian muchísimo la conversión.",
-            "t3": "Consejo 2\nLa gente decide muy rápido si tu tienda transmite confianza o no.\nPor eso necesitas fotos buenas y una web que se vea seria.",
+            "t1": "Consejo 2. Una tienda barata nunca vende caro\nTu web decide en pocos segundos si el cliente confía lo suficiente para pagar o se va a buscar en otro sitio.\nFotos potentes, tipografías consistentes y una estructura limpia suben la conversión sin tocar el producto.",
+            "t2": "Consejo 2. La primera impresión lo es todo\nAunque tu producto sea bueno, una web descuidada lo tira todo abajo y pierdes la venta antes siquiera de contarla.\nInvierte en imágenes propias y en un diseño que transmita seriedad desde el primer scroll.",
+            "t3": "Consejo 2. El diseño construye confianza en silencio\nLa gente juzga tu marca en segundos y rara vez se equivoca, así que cada detalle visual está comunicando algo.\nCuidar colores, fotos y espacios hace que el cliente sienta seguridad antes incluso de abrir el carrito.",
         }
         tip3 = {
-            "t1": "Consejo 3\nPara encontrar productos ganadores deja de ir a ojo.\nYo usaría Dropradar para ver artículos rentables y en tendencia mucho más rápido.",
-            "t2": "Consejo 3\nLo que más tiempo ahorra es saber qué merece la pena probar.\nCon Dropradar localizas productos con números y tendencias reales.",
-            "t3": "Consejo 3\nBuscar productos al azar te quema rápido.\nDropradar te ayuda a detectar cosas con potencial antes de perder semanas.",
+            "t1": "Consejo 3. Encuentras productos rentables\nBuscar artículos a ciegas quema muchísimo tiempo y suele acabar con pruebas que nunca despegan.\nDropradar te da una forma mucho más limpia de detectar productos con potencial real y métricas serias detrás.",
+            "t2": "Consejo 3. Deja de elegir productos por intuición\nLa suerte no escala y las horas que pierdes probando ideas aleatorias cuestan dinero real, no teórico.\nCon Dropradar filtras oportunidades por datos de verdad y te quedas solo con lo que de verdad puede vender.",
+            "t3": "Consejo 3. Atajo directo a productos que mueven\nLa mayoría se pasa semanas buscando ganadores sin una dirección clara y termina quemada antes de encontrar uno.\nDropradar te muestra qué se está vendiendo ahora mismo y por qué funciona, sin tener que adivinar nada.",
         }
         tip4 = {
-            "t1": "Consejo 4\nResponde rápido después de la compra.\nUn buen soporte evita reclamaciones y te protege en los métodos de pago.",
-            "t2": "Consejo 4\nEl postventa importa más de lo que parece.\nSi contestas tarde, llegan los problemas y luego vienen las disputas.",
-            "t3": "Consejo 4\nNo desaparezcas cuando entra una venta.\nResponder rápido baja reclamaciones y te ahorra muchos dolores de cabeza.",
+            "t1": "Consejo 4. No desaparezcas después de la venta\nUn cliente al que no contestas se convierte muy rápido en una disputa con la pasarela y en una comisión perdida.\nResponder rápido baja reclamaciones, sube las valoraciones y te protege mucho más de lo que parece a simple vista.",
+            "t2": "Consejo 4. El postventa protege tu negocio\nLos problemas casi nunca vienen del envío, vienen del silencio después de la compra cuando el cliente se siente solo.\nUn soporte humano y rápido te ahorra comisiones, bloqueos de cuenta y una cantidad brutal de estrés.",
+            "t3": "Consejo 4. El soporte es parte de lo que vendes\nUn cliente que se siente escuchado casi nunca escala el problema, aunque algo no salga perfecto en la entrega.\nResponder rápido y con empatía es la herramienta de retención más barata y más efectiva que vas a tener.",
         }
         return self._compose_type_2(hook_options, tip1, tip2, tip3, tip4)
 
@@ -287,24 +287,24 @@ class ScriptGenerator:
             "h5": "The 4 things I wish someone had told me before I jumped into Dropshipping",
         }
         tip1 = {
-            "t1": "Tip 1\nWork out fees, hidden costs, returns and payment charges before you sell.\nIf you do not know the real margin, good sales can still mean weak profit.",
-            "t2": "Tip 1\nDo not stop at the product cost.\nFees, taxes and refunds can wipe out your margin before you notice.",
-            "t3": "Tip 1\nRun the numbers properly from day one.\nIf you miss the hidden costs, the profit you think you have is not real.",
+            "t1": "Tip 1. Know your real numbers\nToo many sellers skip fees, refunds and payment charges in their math and later wonder why nothing is left at the end of the month.\nIf you do not see your true margin, a big sales number is meaningless and volume just hides the problem.",
+            "t2": "Tip 1. Margins are never obvious\nIt is not enough to stare at the product cost on the supplier page, that calculation lies almost every single time.\nBetween taxes, returns and platform cuts your profit can quietly disappear before you even notice.",
+            "t3": "Tip 1. Run the numbers from day one\nIf you miss the hidden costs, the profit you think you see on your spreadsheet is pure fiction.\nStart with a simple template, fight for every cent and make decisions based on data, not on gut feeling.",
         }
         tip2 = {
-            "t1": "Tip 2\nYour store needs to look premium the second someone lands on it.\nStrong photos and a clean layout build trust fast.",
-            "t2": "Tip 2\nEven a solid product struggles if the site looks cheap.\nA premium look and better photos can change conversion a lot.",
-            "t3": "Tip 2\nPeople judge your store in a few seconds.\nThat is why better photos and a polished design matter so much.",
+            "t1": "Tip 2. A cheap looking store will never sell premium\nYour site decides in just a few seconds whether a visitor trusts you enough to buy or leaves to check somewhere else.\nStrong photos, consistent typography and a clean structure push conversion up without even changing the product.",
+            "t2": "Tip 2. First impressions decide the sale\nEven a solid product dies on a messy storefront and you lose the order before you can even count it as one.\nInvest in real photography and a design that feels trustworthy from the very first scroll on the page.",
+            "t3": "Tip 2. Design builds trust quietly\nPeople size up your brand in seconds and they are rarely wrong, so every visual detail is communicating something to them.\nTaking care of colors, photos and spacing makes the buyer feel safe even before they open the cart.",
         }
         tip3 = {
-            "t1": "Tip 3\nStop guessing when you search for products.\nDropradar makes it easier to spot profitable items that are already trending.",
-            "t2": "Tip 3\nThe fastest shortcut is knowing what is worth testing.\nDropradar helps you find products backed by real trends and numbers.",
-            "t3": "Tip 3\nRandom product hunting burns time fast.\nDropradar gives you a cleaner way to find items with real potential.",
+            "t1": "Tip 3. Find profitable products\nRandom product hunting burns time fast and usually ends in tests that never really take off the ground.\nDropradar gives you a cleaner way to find items with real potential and actual metrics behind each pick.",
+            "t2": "Tip 3. Stop picking products on gut feeling\nLuck does not scale and the hours you waste testing random ideas are costing you real money, not theoretical money.\nDropradar filters opportunities by real data so you only test the things that can actually move units.",
+            "t3": "Tip 3. Shortcut straight to items that move\nMost sellers spend weeks hunting for winners with no clear direction and burn out long before finding one.\nDropradar shows you what is selling right now and explains why it works, so you stop guessing for good.",
         }
         tip4 = {
-            "t1": "Tip 4\nReply fast after the sale.\nGood support reduces complaints and protects you on payment methods.",
-            "t2": "Tip 4\nAfter sales support matters more than people think.\nSlow replies lead to issues and then the disputes start.",
-            "t3": "Tip 4\nDo not vanish once someone buys.\nFast replies prevent chargebacks and save you a lot of stress.",
+            "t1": "Tip 4. Do not vanish after the sale\nAn ignored customer turns into a chargeback much faster than you think and that hit costs more than the sale itself.\nReplying fast cuts complaints, raises reviews and protects you far more than most sellers realise.",
+            "t2": "Tip 4. After sales care protects the business\nMost disputes do not come from the shipping, they come from the silence once the customer has paid and feels alone.\nHuman and quick support saves you from fees, frozen accounts and a ridiculous amount of stress over time.",
+            "t3": "Tip 4. Support is part of what you sell\nA customer who feels heard almost never escalates the issue, even when something goes wrong during the delivery.\nReplying quickly and with empathy is the cheapest and most effective retention tool you will ever have.",
         }
         return self._compose_type_2(hook_options, tip1, tip2, tip3, tip4)
 

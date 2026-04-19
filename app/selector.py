@@ -126,7 +126,7 @@ class ImageSelector:
             role_scores: dict[SlideRole, float] = {}
 
             for role in non_fixed_roles:
-                exclude = {item.source_id for item in picked.values()}
+                exclude = self._exclude_ids_by_post(picked, available)
                 best = self._pick_best(
                     available,
                     exclude_ids=exclude,
@@ -209,7 +209,7 @@ class ImageSelector:
             role_scores: dict[SlideRole, float] = {}
 
             for role in non_fixed_roles:
-                exclude = {item.source_id for item in picked.values()}
+                exclude = self._exclude_ids_by_post(picked, available)
                 best = self._pick_best(
                     available,
                     exclude_ids=exclude,
@@ -308,9 +308,11 @@ class ImageSelector:
         allow_luxury: bool,
     ) -> MediaCandidate | None:
         used_ids = {item.source_id for item in picked.values()}
+        used_post_keys = {self._post_key(item) for item in picked.values()}
         replacement = self._find_landscape_replacement(
             catalog,
             used_ids=used_ids,
+            used_post_keys=used_post_keys,
             allow_luxury=allow_luxury,
             prefer_account=selected_account,
         )
@@ -489,6 +491,7 @@ class ImageSelector:
         catalog: dict[str, list[MediaCandidate]],
         *,
         used_ids: set[str],
+        used_post_keys: set[str],
         allow_luxury: bool,
         prefer_account: str | None = None,
     ) -> CandidateScore | None:
@@ -496,6 +499,8 @@ class ImageSelector:
         for account, candidates in catalog.items():
             for media in candidates:
                 if media.source_id in used_ids:
+                    continue
+                if self._post_key(media) in used_post_keys:
                     continue
                 if self.state.is_media_used(media.source_id):
                     continue
@@ -559,6 +564,31 @@ class ImageSelector:
         elif metrics.is_landscape:
             score += 0.08
         return score
+
+    def _post_key(self, media: MediaCandidate) -> str:
+        # source_id is built as "<user>:<shortcode>:<node_index>". Two
+        # images that share the first two segments come from the same post
+        # (carousel / multi-variant), so they are effectively the same shot.
+        parts = media.source_id.split(":")
+        if len(parts) >= 2:
+            return f"{parts[0]}:{parts[1]}"
+        return media.source_id
+
+    def _exclude_ids_by_post(
+        self,
+        picked: dict[SlideRole, MediaCandidate],
+        available: list[MediaCandidate],
+    ) -> set[str]:
+        # Expand the per-slide exclusion so we skip every sibling image
+        # from any post already picked (blocks "same photo zoomed in").
+        picked_post_keys = {self._post_key(m) for m in picked.values()}
+        if not picked_post_keys:
+            return set()
+        return {
+            candidate.source_id
+            for candidate in available
+            if self._post_key(candidate) in picked_post_keys
+        }
 
     def _is_extreme_luxury(self, media: MediaCandidate) -> bool:
         lowered = (media.caption or "").lower()
