@@ -268,18 +268,30 @@ async def _execute_job(
 
 
 async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
-    # For each slide (hook included) send the text message first, then the
-    # image right below it. This is what the user asked for: every image
-    # appears underneath its matching text.
+    # For each slide send the title (first line) as one message, the body as
+    # a second message, and then the image. The hook has no title, so it goes
+    # in a single message. This keeps title and body visually separated in the
+    # Telegram chat, matching the format the user asked for.
     for slide in slides:
-        text = slide.text.strip() if slide.text else ""
-        if text:
-            await context.bot.send_message(chat_id=chat_id, text=text)
+        raw = slide.text.strip() if slide.text else ""
+        if raw:
+            title, body = _split_title_body(raw)
+            if title:
+                await context.bot.send_message(chat_id=chat_id, text=title)
+            if body:
+                await context.bot.send_message(chat_id=chat_id, text=body)
         path = slide.media.local_path
         if not path.exists():
             continue
         with path.open("rb") as handle:
             await context.bot.send_photo(chat_id=chat_id, photo=handle)
+
+
+def _split_title_body(text: str) -> tuple[str, str]:
+    parts = text.split("\n", 1)
+    if len(parts) == 1:
+        return parts[0].strip(), ""
+    return parts[0].strip(), parts[1].strip()
 
 
 async def _ensure_allowed(update: Update) -> bool:

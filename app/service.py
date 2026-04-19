@@ -8,9 +8,11 @@ from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
+from PIL import Image
+
 from app.config import get_settings
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
-from app.models import GenerationResult, VideoRequest
+from app.models import GenerationResult, VideoPlan, VideoRequest
 from app.render import VideoRenderer
 from app.selector import ImageSelector
 from app.state import StateStore
@@ -18,6 +20,18 @@ from app.texts import ScriptGenerator
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _cover_resize(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
+    scale = max(target_width / image.width, target_height / image.height)
+    new_width = max(1, int(round(image.width * scale)))
+    new_height = max(1, int(round(image.height * scale)))
+    resized = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
+    offset_x = (resized.width - target_width) // 2
+    offset_y = (resized.height - target_height) // 2
+    return resized.crop(
+        (offset_x, offset_y, offset_x + target_width, offset_y + target_height)
+    )
 
 
 class VideoCreationService:
@@ -92,6 +106,7 @@ class VideoCreationService:
 
             job_dir = self.settings.outputs_dir / job_id
             video_path, script_path = self.renderer.render(plan, job_dir)
+            self._normalize_slide_images(plan, job_dir)
 
             self.state.set_last_signature(
                 request.video_type, request.language, script_package.signature
@@ -177,6 +192,34 @@ class VideoCreationService:
             self.settings.state_dir,
         ):
             directory.mkdir(parents=True, exist_ok=True)
+
+    def _normalize_slide_images(self, plan: VideoPlan, job_dir: Path) -> None:
+        # Telegram-bound images must share the vertical TikTok carousel format
+        # (1080x1920 by default). We center-crop each slide to cover the canvas
+        # so the aspect ratio is identical for every image we send.
+        target_width = self.settings.width
+        target_height = self.settings.height
+        slides_dir = job_dir / "slides"
+        slides_dir.mkdir(parents=True, exist_ok=True)
+        for slide in plan.slides:
+            source_path = slide.media.local_path
+            if not source_path.exists():
+                continue
+            out_path = slides_dir / f"slide_{slide.index:02d}.jpg"
+            try:
+                with Image.open(source_path) as image:
+                    normalized = _cover_resize(
+                        image.convert("RGB"), target_width, target_height
+                    )
+                    normalized.save(out_path, format="JPEG", quality=92)
+            except OSError as error:
+                LOGGER.warning(
+                    "No pude normalizar %s: %s", source_path, error
+                )
+                continue
+            slide.media.local_path = out_path
+            slide.media.width = target_width
+            slide.media.height = target_height
 
     def _build_job_id(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")

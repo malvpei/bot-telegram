@@ -75,11 +75,11 @@ class ScriptGenerator:
 
     def _build_type_1_es(self) -> ScriptPackage:
         hook_options = {
-            "h1": "Lo que gané de verdad en mis últimos 6 meses y por qué estuve a nada de dejarlo",
-            "h2": "Mis números reales de estos 6 meses y la razón por la que casi tiré la toalla",
-            "h3": "Exactamente lo que saqué en 6 meses y por qué hubo un momento en que quería dejarlo",
-            "h4": "Las ganancias reales de mis últimos 6 meses y por qué casi mandé todo a la basura",
-            "h5": "Estos son mis números reales en 6 meses y lo cerca que estuve de rendirme",
+            "h1": "Lo que gané de verdad con Dropshipping en mis últimos 6 meses y por qué estuve a nada de dejarlo",
+            "h2": "Mis números reales haciendo Dropshipping estos 6 meses y la razón por la que casi tiré la toalla",
+            "h3": "Exactamente lo que saqué con Dropshipping en 6 meses y por qué hubo un momento en que quería dejarlo",
+            "h4": "Las ganancias reales de mis últimos 6 meses de Dropshipping y por qué casi mandé todo a la basura",
+            "h5": "Estos son mis números reales haciendo Dropshipping en 6 meses y lo cerca que estuve de rendirme",
         }
         october = {
             "o1": "Octubre · 0€\nEmpecé con ganas, pero me quedé en parálisis por análisis.\nPensé tanto cada paso que no lancé nada de verdad.",
@@ -126,11 +126,11 @@ class ScriptGenerator:
 
     def _build_type_1_en(self) -> ScriptPackage:
         hook_options = {
-            "h1": "Exactly what I made in my last 6 months and why I nearly gave up",
-            "h2": "My real numbers from the last 6 months and the reason I almost quit",
-            "h3": "What I actually made in 6 months and why I came close to throwing it away",
-            "h4": "The real money I made in my last 6 months and why I almost walked away",
-            "h5": "These are my honest 6 month numbers and how close I was to quitting",
+            "h1": "Exactly what I made with Dropshipping in my last 6 months and why I nearly gave up",
+            "h2": "My real Dropshipping numbers from the last 6 months and the reason I almost quit",
+            "h3": "What I actually made with Dropshipping in 6 months and why I came close to throwing it away",
+            "h4": "The real money I made from Dropshipping in my last 6 months and why I almost walked away",
+            "h5": "These are my honest 6 month Dropshipping numbers and how close I was to quitting",
         }
         october = {
             "o1": "October · $0\nI started excited, but I got stuck in analysis paralysis.\nI kept overthinking every step and never really launched.",
@@ -236,6 +236,8 @@ class ScriptGenerator:
         # Type 1 narrative must always reach the Dropradar mention in February.
         if "Dropradar" not in slides_by_role[SlideRole.FEBRUARY]:
             raise RuntimeError("Tipo 1: el slide de febrero perdió la mención a Dropradar.")
+        if "Dropshipping" not in slides_by_role[SlideRole.HOOK]:
+            raise RuntimeError("Tipo 1: el hook debe mencionar Dropshipping.")
 
         return ScriptPackage(
             slides_by_role=slides_by_role,
@@ -361,3 +363,5 @@ class ScriptGenerator:
                     )
         if "Dropradar" not in slides_by_role.get(SlideRole.TIP3, ""):
             raise ValueError("Tipo 2: el consejo 3 debe mencionar Dropradar.")
+        if "Dropshipping" not in slides_by_role.get(SlideRole.HOOK, ""):
+            raise ValueError("Tipo 2: el hook debe mencionar Dropshipping.")
