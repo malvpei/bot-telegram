@@ -112,12 +112,19 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
 
     assert package.social_copy.title
     assert package.social_copy.description
+    assert len(package.social_copy.description) >= 220
     assert len(package.social_copy.hashtags) >= 3
     assert all(tag.startswith("#") for tag in package.social_copy.hashtags)
     assert all(" " not in tag for tag in package.social_copy.hashtags)
-    assert "Titulo:" in package.social_copy.formatted
-    assert "Descripcion:" in package.social_copy.formatted
-    assert "Hashtags:" in package.social_copy.formatted
+    assert package.social_copy.hashtag_line == " ".join(package.social_copy.hashtags)
+    assert package.social_copy.messages == [
+        package.social_copy.title,
+        package.social_copy.description,
+        package.social_copy.hashtag_line,
+    ]
+    assert all("Titulo:" not in message for message in package.social_copy.messages)
+    assert all("Descripcion:" not in message for message in package.social_copy.messages)
+    assert all("Hashtags:" not in message for message in package.social_copy.messages)
 
 
 def _extract_amount(text: str) -> int | None:

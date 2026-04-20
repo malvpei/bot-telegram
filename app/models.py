@@ -131,13 +131,12 @@ class SocialCopy:
     hashtags: list[str]
 
     @property
-    def formatted(self) -> str:
-        hashtag_line = " ".join(self.hashtags)
-        return (
-            f"Titulo:\n{self.title}\n\n"
-            f"Descripcion:\n{self.description}\n\n"
-            f"Hashtags:\n{hashtag_line}"
-        )
+    def hashtag_line(self) -> str:
+        return " ".join(self.hashtags)
+
+    @property
+    def messages(self) -> list[str]:
+        return [self.title, self.description, self.hashtag_line]
 
 
 @dataclass

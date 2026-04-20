@@ -471,22 +471,22 @@ class ScriptGenerator:
             return {
                 "es1": (
                     "Mis 6 meses reales con dropshipping",
-                    "No fue una linea recta: empece en cero, casi lo deje y acabe entendiendo que los datos pesan mas que la intuicion.",
+                    "No fue una linea recta: empece con cero ventas, me atasque probando cosas al azar y hubo un punto en el que casi lo deje. Lo que cambio no fue encontrar un producto magico, fue empezar a mirar datos reales, comparar señales y dejar de tomar decisiones solo por intuicion. Si estas empezando, este video resume la parte que normalmente nadie ensena.",
                     ["#dropshipping", "#ecommerce", "#emprender", "#tiendaonline", "#dropradar"],
                 ),
                 "es2": (
                     "De cero ventas a un sistema con datos",
-                    "La parte que casi nadie cuenta: meses flojos, dudas y el cambio que hizo que dejara de escoger productos a ciegas.",
+                    "La parte que casi nadie cuenta es que los primeros meses pueden ser bastante frustrantes: tienda abierta, horas metidas y resultados que no llegan. En mi caso el salto vino cuando deje de escoger productos a ciegas y empece a validar oportunidades con informacion mas clara. No es una historia de lujo rapido, es una historia de aprender a medir antes de escalar.",
                     ["#dropshippingespana", "#ecommerce", "#ventasonline", "#emprendedores", "#dropradar"],
                 ),
                 "es3": (
                     "Lo que aprendi despues de casi rendirme",
-                    "Si estas empezando, mira esto antes de pensar que el problema eres tu. A veces solo falta dejar de adivinar.",
+                    "Si estas empezando y sientes que todo va demasiado lento, mira esto antes de pensar que el problema eres tu. Muchas veces el bloqueo no esta en trabajar poco, sino en probar productos sin criterio, copiar tiendas sin entenderlas y no saber que mirar. Cuando tienes un sistema para elegir mejor, cada prueba te ensena algo en vez de quemarte.",
                     ["#dropshipping", "#negociosonline", "#ecommercetips", "#shopify", "#dropradar"],
                 ),
                 "es4": (
                     "Mis numeros cambiaron cuando cambie el metodo",
-                    "El salto no vino de un producto magico, vino de comparar datos y tomar decisiones con menos ego.",
+                    "El salto no vino de un producto magico ni de una tienda perfecta a la primera. Vino de aceptar que mi gusto personal no era suficiente, comparar datos de productos, mirar demanda, creativos y señales de venta, y tomar decisiones con menos ego. Para mi, esa fue la diferencia entre adivinar y construir un proceso repetible.",
                     ["#emprendimiento", "#dropshipping", "#productoganador", "#ecommerce", "#dropradar"],
                 ),
             }
@@ -494,44 +494,44 @@ class ScriptGenerator:
             return {
                 "es1": (
                     "4 cosas que me habria gustado saber antes",
-                    "Guardar esto te puede ahorrar meses de prueba y error si estas montando tu primera tienda.",
+                    "Guardar esto te puede ahorrar meses de prueba y error si estas montando tu primera tienda. Antes de pensar solo en anuncios o productos virales, necesitas entender margenes, confianza, busqueda de producto y soporte al cliente. Son bases simples, pero si fallan, todo lo demas se vuelve mucho mas dificil de escalar.",
                     ["#dropshipping", "#ecommerce", "#shopify", "#emprenderonline", "#dropradar"],
                 ),
                 "es2": (
                     "La checklist basica antes de vender online",
-                    "Margenes, confianza, producto y soporte. Si una parte falla, la tienda lo nota rapido.",
+                    "Margenes, confianza, producto y soporte: cuatro areas que parecen basicas, pero deciden si una tienda aguanta o se rompe. Puedes tener buen trafico, pero si no entiendes tus costes reales, tu web no genera confianza o eliges productos sin datos, las ventas no compensan el esfuerzo. Usa esta checklist antes de lanzar o antes de meter mas presupuesto.",
                     ["#ecommercetips", "#dropshippingtips", "#tiendaonline", "#ventas", "#dropradar"],
                 ),
                 "es3": (
                     "Antes de lanzar anuncios, revisa esto",
-                    "Muchos fallos no vienen del producto, vienen de vender sin numeros claros y sin un sistema para decidir.",
+                    "Muchos fallos no vienen solo del producto, vienen de vender sin numeros claros y sin un sistema para decidir que probar. Antes de gastar en anuncios, revisa si el margen aguanta comisiones, devoluciones y costes de adquisicion, y si tu tienda transmite confianza en segundos. Un buen producto ayuda, pero una mala estructura puede matar la venta antes de empezar.",
                     ["#dropshipping", "#marketingdigital", "#shopifytips", "#negociosonline", "#dropradar"],
                 ),
                 "es4": (
                     "4 lecciones para no empezar a ciegas",
-                    "Si estas probando productos al azar, cambia el enfoque antes de quemar presupuesto.",
+                    "Si estas probando productos al azar, cambia el enfoque antes de quemar presupuesto. El dropshipping se vuelve mucho mas claro cuando sabes que revisar: numeros, percepcion de marca, demanda real y experiencia del cliente despues de comprar. Este video no es teoria bonita, es una guia rapida para evitar errores que se pagan caros.",
                     ["#ecommerce", "#dropshippingespana", "#emprendedores", "#ventasonline", "#dropradar"],
                 ),
             }
         return {
             "es1": (
                 "Como empezar dropshipping en 2026",
-                "Estas son las herramientas base para montar, buscar productos, crear contenido y mover tu tienda sin complicarte.",
+                "Estas son las herramientas base para empezar sin complicarte mas de la cuenta: montar la tienda, buscar productos con datos, crear guiones, gestionar pagos, editar contenido y mover trafico organico. La clave no es tener mil apps, sino usar pocas herramientas que cubran las partes importantes del proceso. Empieza simple, valida rapido y mejora cuando ya tengas senales reales.",
                 ["#dropshipping2026", "#ecommerce", "#shopify", "#tiktokmarketing", "#dropradar"],
             ),
             "es2": (
                 "Tu stack para lanzar una tienda online",
-                "No necesitas mil herramientas. Empieza con lo esencial y valida antes de complicarte.",
+                "No necesitas mil herramientas para lanzar tu primera tienda online. Necesitas una base para vender, una forma de encontrar productos con potencial, un sistema para crear contenido y una manera sencilla de cobrar, editar y promocionar. Este stack esta pensado para empezar ligero, no para perder semanas configurando cosas antes de validar.",
                 ["#dropshipping", "#tiendaonline", "#herramientas", "#emprender", "#dropradar"],
             ),
             "es3": (
                 "Herramientas para empezar desde cero",
-                "De tienda a producto, guiones, pagos, edicion y trafico organico: este es el orden simple.",
+                "De tienda a producto, guiones, pagos, edicion y trafico organico: este es el orden simple para no perderte al empezar. Primero crea una estructura minima, luego busca productos con criterio, prepara contenido que puedas publicar y mide la respuesta del mercado. Lo importante al principio es avanzar con claridad y no quedarte bloqueado por exceso de opciones.",
                 ["#ecommerce2026", "#dropshippingtips", "#shopify", "#capcut", "#dropradar"],
             ),
             "es4": (
                 "La ruta simple para tu primera tienda",
-                "Si lo estas aplazando por no saber que usar, empieza por esta combinacion y prueba rapido.",
+                "Si lo estas aplazando porque no sabes que herramientas usar, empieza por esta combinacion y prueba rapido. Una tienda sencilla, productos elegidos con datos, guiones claros, pagos bien montados, edicion agil y trafico organico pueden darte suficiente feedback para saber si vas por buen camino. Despues optimizas, pero primero necesitas poner algo real delante del mercado.",
                 ["#dropshipping", "#negociosonline", "#tiktokshop", "#marketingorganico", "#dropradar"],
             ),
         }
@@ -544,22 +544,22 @@ class ScriptGenerator:
             return {
                 "en1": (
                     "My real 6 month dropshipping journey",
-                    "It was not a straight line: zero sales, doubts, one last try, and then better decisions through data.",
+                    "It was not a straight line: zero sales, doubts, random testing and one moment where quitting felt easier than trying again. What changed was not a magic product, it was learning to read real signals, compare opportunities and stop choosing based only on gut feeling. If you are starting out, this is the honest part most people skip.",
                     ["#dropshipping", "#ecommerce", "#onlinebusiness", "#shopify", "#dropradar"],
                 ),
                 "en2": (
                     "What changed after months of guessing",
-                    "The shift was not luck. It was learning to stop picking products blindly and follow signals that made sense.",
+                    "The shift was not luck and it did not happen overnight. I spent months guessing, overthinking the store and testing products without a clear reason, then realized the process needed better data. Once I started looking at demand, product signals and content angles more seriously, every test became easier to understand.",
                     ["#dropshippingtips", "#ecommercebusiness", "#entrepreneur", "#productresearch", "#dropradar"],
                 ),
                 "en3": (
                     "From almost quitting to clearer numbers",
-                    "If you are starting out, watch this before blaming yourself. Sometimes the system needs better data.",
+                    "If you are starting out, watch this before blaming yourself for slow results. Sometimes the problem is not effort, it is testing products blindly, copying stores without context and having no clear way to judge what is worth trying. A better decision system will not make everything easy, but it makes every test more useful.",
                     ["#dropshipping", "#ecommercejourney", "#shopifystore", "#onlineincome", "#dropradar"],
                 ),
                 "en4": (
                     "The lesson my first sales taught me",
-                    "The product was only part of it. The real unlock was choosing with less ego and more data.",
+                    "The product was only part of it. The real unlock was accepting that personal taste is not a strategy, then choosing with less ego and more data around demand, creatives, competition and sales signals. That shift made dropshipping feel less like gambling and more like a process I could actually improve.",
                     ["#ecommerce", "#dropshippingbusiness", "#digitalbusiness", "#shopifytips", "#dropradar"],
                 ),
             }
@@ -567,44 +567,44 @@ class ScriptGenerator:
             return {
                 "en1": (
                     "4 things I wish I knew before dropshipping",
-                    "Save this before launching your first store. These basics can save months of trial and error.",
+                    "Save this before launching your first store. Before thinking only about ads or viral products, you need to understand margins, trust, product research and customer support. These basics are not flashy, but if one of them breaks, the whole store becomes harder to scale.",
                     ["#dropshipping", "#ecommerce", "#shopify", "#dropshippingtips", "#dropradar"],
                 ),
                 "en2": (
                     "The simple checklist before selling online",
-                    "Margins, trust, product research and support. If one breaks, the store feels it fast.",
+                    "Margins, trust, product research and support: four areas that decide whether an online store survives or quietly bleeds money. You can have traffic, but if your numbers are unclear, your site feels unsafe or your product logic is weak, the sales will not fix the structure. Use this as a quick checklist before spending more budget.",
                     ["#ecommercetips", "#onlinebusiness", "#shopifystore", "#productresearch", "#dropradar"],
                 ),
                 "en3": (
                     "Watch this before running ads",
-                    "A lot of stores fail before traffic even arrives because the numbers and product logic are not clear.",
+                    "A lot of stores fail before traffic even has a real chance because the numbers and product logic are not clear. Before running ads, check whether your margin can survive fees, refunds and acquisition costs, and whether the store builds trust fast enough. A good product helps, but a weak setup can kill the sale first.",
                     ["#dropshippingtips", "#ecommercemarketing", "#shopifytips", "#digitalmarketing", "#dropradar"],
                 ),
                 "en4": (
                     "4 lessons so you do not start blind",
-                    "Random product testing burns budget quickly. Build a cleaner decision system first.",
+                    "Random product testing burns budget quickly. Dropshipping becomes much clearer when you know what to check first: numbers, perceived trust, real demand and the customer experience after purchase. This is a short practical guide for avoiding the beginner mistakes that cost the most.",
                     ["#dropshipping", "#ecommercebusiness", "#entrepreneurtips", "#onlinestore", "#dropradar"],
                 ),
             }
         return {
             "en1": (
                 "How to start dropshipping in 2026",
-                "These are the core tools for building, researching products, creating content and moving your store.",
+                "These are the core tools for starting without overcomplicating the process: building the store, researching products with data, creating scripts, taking payments, editing content and driving organic traffic. You do not need a huge software stack at the beginning. You need a simple setup that lets you validate fast and improve once the market gives you real feedback.",
                 ["#dropshipping2026", "#ecommerce", "#shopify", "#tiktokmarketing", "#dropradar"],
             ),
             "en2": (
                 "Your starter stack for an online store",
-                "You do not need a hundred tools. Start with the essentials, validate fast, then improve.",
+                "You do not need a hundred tools to launch your first online store. You need a selling platform, a cleaner way to find products, a content workflow, payment setup, fast editing and a traffic source you can practice every day. This stack is built for momentum, not for spending weeks configuring things before you test.",
                 ["#dropshipping", "#onlinestore", "#ecommercetools", "#entrepreneur", "#dropradar"],
             ),
             "en3": (
                 "Tools to start from zero",
-                "Store, product research, scripts, payments, editing and organic traffic: this is the simple order.",
+                "Store, product research, scripts, payments, editing and organic traffic: this is the simple order if you are starting from zero. Build the minimum structure first, then choose products with clearer signals, publish content consistently and measure what the market responds to. The goal is not perfection, it is useful feedback.",
                 ["#ecommerce2026", "#dropshippingtips", "#shopify", "#capcut", "#dropradar"],
             ),
             "en4": (
                 "The simple route to your first store",
-                "If you keep delaying because you do not know what to use, start with this setup and test fast.",
+                "If you keep delaying because you do not know what to use, start with this setup and test fast. A simple store, data-backed product research, clear scripts, payments, quick editing and organic content can give you enough feedback to know if you are moving in the right direction. Optimize later, but get something real in front of the market first.",
                 ["#dropshipping", "#onlinebusiness", "#tiktokmarketing", "#organicmarketing", "#dropradar"],
             ),
         }
