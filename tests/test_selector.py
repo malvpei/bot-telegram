@@ -348,6 +348,91 @@ def test_type_2_caps_landscape_dominant_images_to_one(temp_workspace):
     assert landscape_count <= 1
 
 
+def test_type_2_rejects_if_non_user_images_cannot_be_replaced(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "no_user"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="no_user", idx=i, caption="old money")
+        for i in range(4)
+    ]
+    candidates[0].metrics = _metrics_stub(
+        quality=0.86,
+        daylight=0.8,
+        faces=1,
+        is_landscape=False,
+        luxury=0.7,
+        portrait_focus=0.78,
+        affluent=0.84,
+    )
+    for candidate in candidates[1:]:
+        candidate.metrics = _metrics_stub(
+            quality=0.9,
+            daylight=0.8,
+            faces=0,
+            is_landscape=False,
+            outdoor=0.55,
+            luxury=0.8,
+            portrait_focus=0.0,
+            affluent=0.9,
+        )
+
+    selector = ImageSelector(settings, state)
+    with pytest.raises(ValueError):
+        selector.create_plan({"no_user": candidates}, VideoType.TYPE_2, Language.ES)
+
+
+def test_type_2_replaces_square_non_user_images_until_only_one_remains(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "mixed_user"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="mixed_user", idx=i, caption="quiet luxury")
+        for i in range(7)
+    ]
+    candidates[0].metrics = _metrics_stub(
+        quality=0.82,
+        daylight=0.75,
+        faces=1,
+        is_landscape=False,
+        luxury=0.68,
+        portrait_focus=0.76,
+        affluent=0.8,
+    )
+    for candidate in candidates[1:4]:
+        candidate.metrics = _metrics_stub(
+            quality=0.94,
+            daylight=0.82,
+            faces=0,
+            is_landscape=False,
+            outdoor=0.58,
+            luxury=0.82,
+            portrait_focus=0.0,
+            affluent=0.92,
+        )
+    for candidate in candidates[4:]:
+        candidate.metrics = _metrics_stub(
+            quality=0.78,
+            daylight=0.72,
+            faces=1,
+            is_landscape=False,
+            luxury=0.55,
+            portrait_focus=0.62,
+            affluent=0.7,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"mixed_user": candidates}, VideoType.TYPE_2, Language.ES)
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    non_user_count = sum(
+        1 for media in non_fixed if selector._is_type_2_non_user_media(media)
+    )
+    assert non_user_count <= 1
+
+
 def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "hookface"

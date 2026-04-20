@@ -303,14 +303,16 @@ class ImageSelector:
                 continue
 
             hook_media = picked[SlideRole.HOOK]
-            if not hook_media.metrics or hook_media.metrics.faces < 1:
-                LOGGER.info("tipo2 @%s: hook sin cara detectada", account)
+            if not self._is_type_2_user_visible_media(hook_media):
+                LOGGER.info("tipo2 @%s: hook sin usuario visible", account)
                 continue
 
-            self._cap_landscapes_to_one(
+            if not self._enforce_type_2_user_visibility(
+                account,
                 picked, role_scores, available,
                 replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
-            )
+            ):
+                continue
 
             slides = self._build_slide_plans(
                 TYPE_2_ROLES,
@@ -468,16 +470,77 @@ class ImageSelector:
             )
 
     def _is_landscape_dominant_media(self, media: MediaCandidate) -> bool:
-        # No-sujeto-principal = paisaje puro o foto donde el creador es
-        # actor secundario (sin cara detectada por el clasificador Haar, que
-        # exige mínimo 80x80 px — caras pequeñas o de espaldas no cuentan).
+        return self._is_type_2_non_user_media(media)
+
+    def _enforce_type_2_user_visibility(
+        self,
+        account: str,
+        picked: dict[SlideRole, MediaCandidate],
+        role_scores: dict[SlideRole, float],
+        available: list[MediaCandidate],
+        *,
+        replaceable_roles: tuple[SlideRole, ...],
+    ) -> bool:
+        non_user_roles = [
+            role for role, media in picked.items()
+            if self._is_type_2_non_user_media(media) and role in replaceable_roles
+        ]
+        if len(non_user_roles) <= 1:
+            return True
+
+        non_user_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
+        for role in non_user_roles[1:]:
+            original = picked[role]
+            exclude = self._exclude_ids_by_post(picked, available)
+            replacement = self._pick_best(
+                available,
+                exclude_ids=exclude,
+                score_fn=lambda media, current_role=role: (
+                    0.0 if self._is_type_2_non_user_media(media)
+                    else self._score_type_2(media, current_role)
+                ),
+            )
+            if replacement is None:
+                LOGGER.info(
+                    "tipo2 @%s: no pude reemplazar %s sin usuario visible",
+                    account,
+                    original.source_id,
+                )
+                return False
+            picked[role] = replacement.media
+            role_scores[role] = replacement.score
+            LOGGER.info(
+                "tipo2 user visibility cap: %s -> reemplazo %s por %s",
+                role.value,
+                original.source_id,
+                replacement.media.source_id,
+            )
+
+        remaining = [
+            role for role, media in picked.items()
+            if self._is_type_2_non_user_media(media) and role in replaceable_roles
+        ]
+        if len(remaining) > 1:
+            LOGGER.info(
+                "tipo2 @%s: descartada, %d fotos sin usuario visible",
+                account,
+                len(remaining),
+            )
+            return False
+        return True
+
+    def _is_type_2_non_user_media(self, media: MediaCandidate) -> bool:
+        if not media.metrics:
+            return True
+        return not self._is_type_2_user_visible_media(media)
+
+    def _is_type_2_user_visible_media(self, media: MediaCandidate) -> bool:
         if not media.metrics:
             return False
-        return (
-            media.metrics.is_landscape
-            and media.metrics.faces < 1
-            and media.metrics.portrait_focus_score < 0.18
-        )
+        metrics = media.metrics
+        if metrics.faces >= 1:
+            return True
+        return metrics.face_area_ratio > 0 and metrics.portrait_focus_score >= 0.22
 
     def _inject_landscape(
         self,
