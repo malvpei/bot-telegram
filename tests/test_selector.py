@@ -438,9 +438,42 @@ def test_type_3_uses_one_real_hook_and_rotating_backgrounds(temp_workspace):
 
     assert [slide.role for slide in plan.slides] == list(TYPE_3_ROLES)
     assert plan.slides[0].media.source_id == candidates[0].source_id
-    assert plan.used_media_ids == [candidates[0].source_id]
+    assert candidates[0].source_id in plan.used_media_ids
+    assert candidates[0].content_fingerprint in plan.used_media_ids
     assert all(slide.fixed_asset for slide in plan.slides[1:])
     assert all(slide.media.source_account == "tipo3_fondo" for slide in plan.slides[1:])
+
+
+def test_visual_fingerprint_blocks_reusing_same_image(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "fingerprint"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="fingerprint", idx=i, caption="old money laptop")
+        for i in range(2)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.86,
+            daylight=0.78,
+            faces=1,
+            is_landscape=False,
+            casual=0.05,
+            luxury=0.75,
+            portrait_focus=0.72,
+            affluent=0.84,
+            laptop=1.0,
+            hands=0.5,
+        )
+
+    selector = ImageSelector(settings, state)
+    selector._prepare_candidates(candidates)
+    assert candidates[0].content_fingerprint == candidates[1].content_fingerprint
+    state.reserve_media([candidates[0].content_fingerprint], job_id="previous")
+
+    with pytest.raises(ValueError):
+        selector.create_plan({"fingerprint": [candidates[1]]}, VideoType.TYPE_3, Language.ES)
 
 
 def _metrics_stub(

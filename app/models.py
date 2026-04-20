@@ -112,6 +112,7 @@ class MediaCandidate:
     height: int
     created_at: str
     metrics: ImageMetrics | None = None
+    content_fingerprint: str | None = None
 
 
 @dataclass
@@ -124,11 +125,28 @@ class SlidePlan:
 
 
 @dataclass
+class SocialCopy:
+    title: str
+    description: str
+    hashtags: list[str]
+
+    @property
+    def formatted(self) -> str:
+        hashtag_line = " ".join(self.hashtags)
+        return (
+            f"Titulo:\n{self.title}\n\n"
+            f"Descripcion:\n{self.description}\n\n"
+            f"Hashtags:\n{hashtag_line}"
+        )
+
+
+@dataclass
 class ScriptPackage:
     slides_by_role: dict[SlideRole, str]
     ordered_slides: list[str]
     signature: str
     plain_text: str
+    social_copy: SocialCopy
 
 
 @dataclass
@@ -146,6 +164,7 @@ class GenerationResult:
     video_path: Path | None
     script_path: Path
     preview_text: str
+    social_copy: SocialCopy
     chosen_account: str
     video_type: VideoType
     language: Language

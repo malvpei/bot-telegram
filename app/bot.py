@@ -260,6 +260,7 @@ async def _execute_job(
     await status_message.edit_text("Enviando imágenes con su texto.")
     try:
         await context.bot.send_message(chat_id=chat.id, text=header)
+        await context.bot.send_message(chat_id=chat.id, text=result.social_copy.formatted)
         if result.video_type == VideoType.TYPE_3:
             await _send_slides_images_only(context, chat.id, result.slides)
         else:

@@ -160,7 +160,7 @@ class ImageSelector:
             available = [
                 candidate
                 for candidate in raw_candidates
-                if not self.state.is_media_used(candidate.source_id)
+                if not self._is_candidate_used(candidate)
                 and not self._is_extreme_luxury(candidate)
             ]
             LOGGER.info(
@@ -234,7 +234,7 @@ class ImageSelector:
                 video_type=VideoType.TYPE_1,
                 language=language,
                 slides=slides,
-                used_media_ids=[media.source_id for media in picked.values()],
+                used_media_ids=self._reservation_keys(picked.values()),
                 fallback_accounts=fallback_accounts,
             )
             ranked.append((self._plan_score(role_scores, VideoType.TYPE_1), plan))
@@ -262,7 +262,7 @@ class ImageSelector:
             available = [
                 candidate
                 for candidate in raw_candidates
-                if not self.state.is_media_used(candidate.source_id)
+                if not self._is_candidate_used(candidate)
             ]
             LOGGER.info(
                 "tipo2 @%s: %d/%d candidatos disponibles",
@@ -323,7 +323,7 @@ class ImageSelector:
                 video_type=VideoType.TYPE_2,
                 language=language,
                 slides=slides,
-                used_media_ids=[media.source_id for media in picked.values()],
+                used_media_ids=self._reservation_keys(picked.values()),
                 fallback_accounts=[],
             )
             ranked.append((self._plan_score(role_scores, VideoType.TYPE_2), plan))
@@ -351,7 +351,7 @@ class ImageSelector:
             available = [
                 candidate
                 for candidate in raw_candidates
-                if not self.state.is_media_used(candidate.source_id)
+                if not self._is_candidate_used(candidate)
             ]
             LOGGER.info(
                 "tipo3 @%s: %d/%d candidatos disponibles",
@@ -388,7 +388,7 @@ class ImageSelector:
                 video_type=VideoType.TYPE_3,
                 language=language,
                 slides=slides,
-                used_media_ids=[hook.media.source_id],
+                used_media_ids=self._reservation_keys([hook.media]),
                 fallback_accounts=[],
             )
             ranked.append((hook.score, plan))
@@ -489,7 +489,7 @@ class ImageSelector:
         replaceable_roles: tuple[SlideRole, ...],
         allow_luxury: bool,
     ) -> MediaCandidate | None:
-        used_ids = {item.source_id for item in picked.values()}
+        used_ids = set(self._reservation_keys(picked.values()))
         used_post_keys = {self._post_key(item) for item in picked.values()}
         replacement = self._find_landscape_replacement(
             catalog,
@@ -531,14 +531,24 @@ class ImageSelector:
     def _prepare_candidates(self, media_items: list[MediaCandidate]) -> None:
         for media in media_items:
             if media.metrics is not None:
+                if media.content_fingerprint is None:
+                    try:
+                        media.content_fingerprint = self._fingerprint_image(media)
+                    except (UnidentifiedImageError, OSError, ValueError) as error:
+                        LOGGER.warning(
+                            "Skipping unreadable image %s: %s", media.local_path, error
+                        )
+                        media.metrics = None
                 continue
             try:
                 media.metrics = self._analyze_image(media)
+                media.content_fingerprint = self._fingerprint_image(media)
             except (UnidentifiedImageError, OSError, ValueError) as error:
                 LOGGER.warning(
                     "Skipping unreadable image %s: %s", media.local_path, error
                 )
                 media.metrics = None
+                media.content_fingerprint = None
 
     def _analyze_image(self, media: MediaCandidate) -> ImageMetrics:
         rgb = self._open_image_rgb_array(media)
@@ -662,6 +672,17 @@ class ImageSelector:
             media.height, media.width = rgb.shape[:2]
             return rgb.astype(np.uint8)
 
+    def _fingerprint_image(self, media: MediaCandidate) -> str:
+        with Image.open(media.local_path) as raw:
+            image = raw.convert("L").resize((8, 8), Image.Resampling.LANCZOS)
+        pixels = np.asarray(image, dtype=np.float32)
+        mean = float(pixels.mean())
+        bits = pixels >= mean
+        value = 0
+        for bit in bits.flatten():
+            value = (value << 1) | int(bit)
+        return f"ahash:{value:016x}"
+
     def _looks_like_heic(self, path) -> bool:
         try:
             header = path.read_bytes()[:32]
@@ -780,7 +801,7 @@ class ImageSelector:
                     continue
                 if self._post_key(media) in used_post_keys:
                     continue
-                if self.state.is_media_used(media.source_id):
+                if self._is_candidate_used(media):
                     continue
                 if not media.metrics or not self._is_landscape_media(media):
                     continue
@@ -943,6 +964,20 @@ class ImageSelector:
 
     def _is_landscape_media(self, media: MediaCandidate) -> bool:
         return bool(media.metrics and media.metrics.is_landscape)
+
+    def _is_candidate_used(self, media: MediaCandidate) -> bool:
+        return self.state.any_media_used(self._reservation_keys([media]))
+
+    def _reservation_keys(self, media_items) -> list[str]:
+        keys: list[str] = []
+        seen: set[str] = set()
+        for media in media_items:
+            for key in (media.source_id, media.content_fingerprint):
+                if not key or key in seen:
+                    continue
+                seen.add(key)
+                keys.append(key)
+        return keys
 
     def _first_image_is_valid(self, media: MediaCandidate) -> bool:
         if media.metrics is None:

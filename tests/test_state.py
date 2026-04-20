@@ -63,3 +63,31 @@ def test_atomic_write_survives_partial_read(state_dir):
 
     # Reading should fall back to the empty default rather than raising.
     assert store.is_media_used("id-1") is False
+
+
+def test_recent_chosen_accounts_returns_newest_unique_accounts(state_dir):
+    store = StateStore(state_dir)
+    for job_id, account, video_type in [
+        ("job-1", "alpha", VideoType.TYPE_1),
+        ("job-2", "beta", VideoType.TYPE_2),
+        ("job-3", "alpha", VideoType.TYPE_1),
+        ("job-4", "gamma", VideoType.TYPE_1),
+    ]:
+        store.log_job(
+            store.build_job_record(
+                job_id=job_id,
+                chosen_account=account,
+                requested_accounts=[account],
+                fallback_accounts=[],
+                video_type=video_type,
+                language=Language.ES,
+                video_path=None,
+                script_path=f"{job_id}.txt",
+            )
+        )
+
+    assert store.recent_chosen_accounts(limit=3) == ["gamma", "alpha", "beta"]
+    assert store.recent_chosen_accounts(limit=2, video_type=VideoType.TYPE_1) == [
+        "gamma",
+        "alpha",
+    ]

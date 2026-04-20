@@ -8,8 +8,9 @@ from uuid import uuid4
 from PIL import Image
 
 from app.config import get_settings
-from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoType
+from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoRequest, VideoType
 from app.service import VideoCreationService
+from app.state import StateStore
 
 
 class FakeRenderer:
@@ -30,6 +31,28 @@ class FakeRenderer:
 
     def render_slide_still(self, slide: SlidePlan, video_type: VideoType) -> Image.Image:
         return Image.new("RGB", (72, 128), (40, 80, 120))
+
+
+class FakeCollector:
+    def __init__(self) -> None:
+        self.seen: list[str] = []
+
+    def collect_one(self, username: str) -> list[str]:
+        self.seen.append(username)
+        return [username]
+
+
+class PlanWhenGoodSelector:
+    def create_plan(self, catalog, video_type, language):
+        if "good" not in catalog:
+            raise ValueError("no viable account yet")
+        return VideoPlan(
+            chosen_account="good",
+            video_type=video_type,
+            language=language,
+            slides=[],
+            used_media_ids=["good:1"],
+        )
 
 
 def test_type_3_outputs_skip_full_video_render():
@@ -99,5 +122,66 @@ def test_type_3_outputs_skip_full_video_render():
         assert plan.slides[1].media.local_path.name == "slide_02.jpg"
         assert plan.slides[0].media.local_path.exists()
         assert plan.slides[1].media.local_path.exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_picker_keeps_searching_beyond_first_failed_accounts(monkeypatch):
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), account_pick_attempts=0)
+        service.state = StateStore(root / "state")
+        service.collector = FakeCollector()
+        service.selector = PlanWhenGoodSelector()
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        plan, tried = service._pick_account_with_plan(
+            ["bad1", "bad2", "bad3", "good"],
+            request,
+        )
+
+        assert plan.chosen_account == "good"
+        assert tried == ["bad1", "bad2", "bad3", "good"]
+        assert service.collector.seen == tried
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_picker_prioritizes_accounts_not_recently_used(monkeypatch):
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), account_pick_attempts=0)
+        service.state = StateStore(root / "state")
+        service.state.log_job(
+            service.state.build_job_record(
+                job_id="job-old",
+                chosen_account="old",
+                requested_accounts=["old"],
+                fallback_accounts=[],
+                video_type=VideoType.TYPE_1,
+                language=Language.ES,
+                video_path=None,
+                script_path="script.txt",
+            )
+        )
+
+        ordered = service._ordered_accounts_for_pick(
+            ["old", "fresh"],
+            VideoType.TYPE_1,
+        )
+
+        assert ordered == ["fresh", "old"]
     finally:
         shutil.rmtree(root, ignore_errors=True)

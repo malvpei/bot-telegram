@@ -8,6 +8,7 @@ from app.models import (
     Language,
     ScriptPackage,
     SlideRole,
+    SocialCopy,
     TYPE_1_ROLES,
     TYPE_2_ROLES,
     TYPE_3_ROLES,
@@ -117,6 +118,7 @@ class ScriptGenerator:
             "m3": "Marzo - {amount}€\nNo vivo con lujos pero ya tenía ventas sólidas cada mes y aprendí que los datos mandan más que la intuición",
         }
         return self._compose_type_1(
+            language=Language.ES,
             currency="€",
             hook_options=hook_options,
             october=october,
@@ -168,6 +170,7 @@ class ScriptGenerator:
             "m3": "March - ${amount}\nI am not living some crazy luxury life but the income finally felt stable and I learned data beats guessing",
         }
         return self._compose_type_1(
+            language=Language.EN,
             currency="$",
             hook_options=hook_options,
             october=october,
@@ -181,6 +184,7 @@ class ScriptGenerator:
     def _compose_type_1(
         self,
         *,
+        language: Language,
         currency: str,
         hook_options: dict[str, str],
         october: dict[str, str],
@@ -220,6 +224,7 @@ class ScriptGenerator:
         }
 
         ordered = [slides_by_role[role] for role in TYPE_1_ROLES]
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_1, language)
         signature = _hash_signature(
             [
                 hook_key,
@@ -233,6 +238,7 @@ class ScriptGenerator:
                 str(february_amount),
                 str(march_amount),
                 currency,
+                social_key,
             ]
         )
 
@@ -247,6 +253,7 @@ class ScriptGenerator:
             ordered_slides=ordered,
             signature=signature,
             plain_text="\n\n".join(ordered),
+            social_copy=social_copy,
         )
 
     # ------------------------------------------------------------------
@@ -281,7 +288,7 @@ class ScriptGenerator:
             "t2": "4. El postventa protege tu negocio\nLos problemas casi nunca vienen del envío sino del silencio después de la compra cuando el cliente se siente solo",
             "t3": "4. El soporte es parte de lo que vendes\nResponder rápido y con empatía es la herramienta de retención más barata y más efectiva que vas a tener",
         }
-        return self._compose_type_2(hook_options, tip1, tip2, tip3, tip4)
+        return self._compose_type_2(Language.ES, hook_options, tip1, tip2, tip3, tip4)
 
     def _build_type_2_en(self) -> ScriptPackage:
         hook_options = {
@@ -311,10 +318,11 @@ class ScriptGenerator:
             "t2": "4. After sales care protects the business\nMost disputes do not come from shipping but from silence once the customer has paid and feels alone",
             "t3": "4. Support is part of what you sell\nReplying quickly and with empathy is the cheapest and most effective retention tool you will ever have",
         }
-        return self._compose_type_2(hook_options, tip1, tip2, tip3, tip4)
+        return self._compose_type_2(Language.EN, hook_options, tip1, tip2, tip3, tip4)
 
     def _compose_type_2(
         self,
+        language: Language,
         hook_options: dict[str, str],
         tip1: dict[str, str],
         tip2: dict[str, str],
@@ -337,6 +345,7 @@ class ScriptGenerator:
             SlideRole.TIP4: tip4[keys[SlideRole.TIP4]],
         }
 
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_2, language)
         signature = _hash_signature(
             [
                 hook_key,
@@ -344,6 +353,7 @@ class ScriptGenerator:
                 keys[SlideRole.TIP2],
                 keys[SlideRole.TIP3],
                 keys[SlideRole.TIP4],
+                social_key,
             ]
         )
 
@@ -354,6 +364,7 @@ class ScriptGenerator:
             ordered_slides=ordered,
             signature=signature,
             plain_text="\n\n".join(ordered),
+            social_copy=social_copy,
         )
 
     @staticmethod
@@ -389,7 +400,7 @@ class ScriptGenerator:
             SlideRole.TOOL_EDITING: "5. Edicion\nEdita tus videos para mas calidad\nUsa CapCut",
             SlideRole.TOOL_MARKETING: "6. Marketing\nPromociona organicamente\nUsa TikTok",
         }
-        return self._compose_type_3(hooks, tools)
+        return self._compose_type_3(Language.ES, hooks, tools)
 
     def _build_type_3_en(self) -> ScriptPackage:
         hooks = {
@@ -407,24 +418,196 @@ class ScriptGenerator:
             SlideRole.TOOL_EDITING: "5. Editing\nEdit your videos for better quality\nUse CapCut",
             SlideRole.TOOL_MARKETING: "6. Marketing\nPromote your product organically\nUse TikTok",
         }
-        return self._compose_type_3(hooks, tools)
+        return self._compose_type_3(Language.EN, hooks, tools)
 
     def _compose_type_3(
         self,
+        language: Language,
         hook_options: dict[str, str],
         tools: dict[SlideRole, str],
     ) -> ScriptPackage:
         hook_key = random.choice(list(hook_options))
         slides_by_role = {SlideRole.HOOK: hook_options[hook_key], **tools}
         ordered = [slides_by_role[role] for role in TYPE_3_ROLES]
-        signature = _hash_signature([hook_key, *ordered[1:]])
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_3, language)
+        signature = _hash_signature([hook_key, *ordered[1:], social_key])
         self._assert_type_3_rules(slides_by_role)
         return ScriptPackage(
             slides_by_role=slides_by_role,
             ordered_slides=ordered,
             signature=signature,
             plain_text="\n\n".join(ordered),
+            social_copy=social_copy,
         )
+
+    def _choose_social_copy(
+        self,
+        video_type: VideoType,
+        language: Language,
+    ) -> tuple[str, SocialCopy]:
+        variants = self._social_copy_variants(video_type, language)
+        key = random.choice(list(variants))
+        title, description, hashtags = variants[key]
+        return key, SocialCopy(
+            title=title,
+            description=description,
+            hashtags=hashtags,
+        )
+
+    def _social_copy_variants(
+        self,
+        video_type: VideoType,
+        language: Language,
+    ) -> dict[str, tuple[str, str, list[str]]]:
+        if language == Language.EN:
+            return self._social_copy_variants_en(video_type)
+        return self._social_copy_variants_es(video_type)
+
+    def _social_copy_variants_es(
+        self,
+        video_type: VideoType,
+    ) -> dict[str, tuple[str, str, list[str]]]:
+        if video_type == VideoType.TYPE_1:
+            return {
+                "es1": (
+                    "Mis 6 meses reales con dropshipping",
+                    "No fue una linea recta: empece en cero, casi lo deje y acabe entendiendo que los datos pesan mas que la intuicion.",
+                    ["#dropshipping", "#ecommerce", "#emprender", "#tiendaonline", "#dropradar"],
+                ),
+                "es2": (
+                    "De cero ventas a un sistema con datos",
+                    "La parte que casi nadie cuenta: meses flojos, dudas y el cambio que hizo que dejara de escoger productos a ciegas.",
+                    ["#dropshippingespana", "#ecommerce", "#ventasonline", "#emprendedores", "#dropradar"],
+                ),
+                "es3": (
+                    "Lo que aprendi despues de casi rendirme",
+                    "Si estas empezando, mira esto antes de pensar que el problema eres tu. A veces solo falta dejar de adivinar.",
+                    ["#dropshipping", "#negociosonline", "#ecommercetips", "#shopify", "#dropradar"],
+                ),
+                "es4": (
+                    "Mis numeros cambiaron cuando cambie el metodo",
+                    "El salto no vino de un producto magico, vino de comparar datos y tomar decisiones con menos ego.",
+                    ["#emprendimiento", "#dropshipping", "#productoganador", "#ecommerce", "#dropradar"],
+                ),
+            }
+        if video_type == VideoType.TYPE_2:
+            return {
+                "es1": (
+                    "4 cosas que me habria gustado saber antes",
+                    "Guardar esto te puede ahorrar meses de prueba y error si estas montando tu primera tienda.",
+                    ["#dropshipping", "#ecommerce", "#shopify", "#emprenderonline", "#dropradar"],
+                ),
+                "es2": (
+                    "La checklist basica antes de vender online",
+                    "Margenes, confianza, producto y soporte. Si una parte falla, la tienda lo nota rapido.",
+                    ["#ecommercetips", "#dropshippingtips", "#tiendaonline", "#ventas", "#dropradar"],
+                ),
+                "es3": (
+                    "Antes de lanzar anuncios, revisa esto",
+                    "Muchos fallos no vienen del producto, vienen de vender sin numeros claros y sin un sistema para decidir.",
+                    ["#dropshipping", "#marketingdigital", "#shopifytips", "#negociosonline", "#dropradar"],
+                ),
+                "es4": (
+                    "4 lecciones para no empezar a ciegas",
+                    "Si estas probando productos al azar, cambia el enfoque antes de quemar presupuesto.",
+                    ["#ecommerce", "#dropshippingespana", "#emprendedores", "#ventasonline", "#dropradar"],
+                ),
+            }
+        return {
+            "es1": (
+                "Como empezar dropshipping en 2026",
+                "Estas son las herramientas base para montar, buscar productos, crear contenido y mover tu tienda sin complicarte.",
+                ["#dropshipping2026", "#ecommerce", "#shopify", "#tiktokmarketing", "#dropradar"],
+            ),
+            "es2": (
+                "Tu stack para lanzar una tienda online",
+                "No necesitas mil herramientas. Empieza con lo esencial y valida antes de complicarte.",
+                ["#dropshipping", "#tiendaonline", "#herramientas", "#emprender", "#dropradar"],
+            ),
+            "es3": (
+                "Herramientas para empezar desde cero",
+                "De tienda a producto, guiones, pagos, edicion y trafico organico: este es el orden simple.",
+                ["#ecommerce2026", "#dropshippingtips", "#shopify", "#capcut", "#dropradar"],
+            ),
+            "es4": (
+                "La ruta simple para tu primera tienda",
+                "Si lo estas aplazando por no saber que usar, empieza por esta combinacion y prueba rapido.",
+                ["#dropshipping", "#negociosonline", "#tiktokshop", "#marketingorganico", "#dropradar"],
+            ),
+        }
+
+    def _social_copy_variants_en(
+        self,
+        video_type: VideoType,
+    ) -> dict[str, tuple[str, str, list[str]]]:
+        if video_type == VideoType.TYPE_1:
+            return {
+                "en1": (
+                    "My real 6 month dropshipping journey",
+                    "It was not a straight line: zero sales, doubts, one last try, and then better decisions through data.",
+                    ["#dropshipping", "#ecommerce", "#onlinebusiness", "#shopify", "#dropradar"],
+                ),
+                "en2": (
+                    "What changed after months of guessing",
+                    "The shift was not luck. It was learning to stop picking products blindly and follow signals that made sense.",
+                    ["#dropshippingtips", "#ecommercebusiness", "#entrepreneur", "#productresearch", "#dropradar"],
+                ),
+                "en3": (
+                    "From almost quitting to clearer numbers",
+                    "If you are starting out, watch this before blaming yourself. Sometimes the system needs better data.",
+                    ["#dropshipping", "#ecommercejourney", "#shopifystore", "#onlineincome", "#dropradar"],
+                ),
+                "en4": (
+                    "The lesson my first sales taught me",
+                    "The product was only part of it. The real unlock was choosing with less ego and more data.",
+                    ["#ecommerce", "#dropshippingbusiness", "#digitalbusiness", "#shopifytips", "#dropradar"],
+                ),
+            }
+        if video_type == VideoType.TYPE_2:
+            return {
+                "en1": (
+                    "4 things I wish I knew before dropshipping",
+                    "Save this before launching your first store. These basics can save months of trial and error.",
+                    ["#dropshipping", "#ecommerce", "#shopify", "#dropshippingtips", "#dropradar"],
+                ),
+                "en2": (
+                    "The simple checklist before selling online",
+                    "Margins, trust, product research and support. If one breaks, the store feels it fast.",
+                    ["#ecommercetips", "#onlinebusiness", "#shopifystore", "#productresearch", "#dropradar"],
+                ),
+                "en3": (
+                    "Watch this before running ads",
+                    "A lot of stores fail before traffic even arrives because the numbers and product logic are not clear.",
+                    ["#dropshippingtips", "#ecommercemarketing", "#shopifytips", "#digitalmarketing", "#dropradar"],
+                ),
+                "en4": (
+                    "4 lessons so you do not start blind",
+                    "Random product testing burns budget quickly. Build a cleaner decision system first.",
+                    ["#dropshipping", "#ecommercebusiness", "#entrepreneurtips", "#onlinestore", "#dropradar"],
+                ),
+            }
+        return {
+            "en1": (
+                "How to start dropshipping in 2026",
+                "These are the core tools for building, researching products, creating content and moving your store.",
+                ["#dropshipping2026", "#ecommerce", "#shopify", "#tiktokmarketing", "#dropradar"],
+            ),
+            "en2": (
+                "Your starter stack for an online store",
+                "You do not need a hundred tools. Start with the essentials, validate fast, then improve.",
+                ["#dropshipping", "#onlinestore", "#ecommercetools", "#entrepreneur", "#dropradar"],
+            ),
+            "en3": (
+                "Tools to start from zero",
+                "Store, product research, scripts, payments, editing and organic traffic: this is the simple order.",
+                ["#ecommerce2026", "#dropshippingtips", "#shopify", "#capcut", "#dropradar"],
+            ),
+            "en4": (
+                "The simple route to your first store",
+                "If you keep delaying because you do not know what to use, start with this setup and test fast.",
+                ["#dropshipping", "#onlinebusiness", "#tiktokmarketing", "#organicmarketing", "#dropradar"],
+            ),
+        }
 
     @staticmethod
     def _assert_type_3_rules(slides_by_role: dict[SlideRole, str]) -> None:

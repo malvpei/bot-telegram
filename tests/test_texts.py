@@ -95,6 +95,31 @@ def test_type_3_has_tool_stack_without_hosting(state_dir):
     assert "tiktok" in full_text
 
 
+@pytest.mark.parametrize(
+    ("video_type", "language"),
+    [
+        (VideoType.TYPE_1, Language.ES),
+        (VideoType.TYPE_2, Language.ES),
+        (VideoType.TYPE_3, Language.ES),
+        (VideoType.TYPE_1, Language.EN),
+        (VideoType.TYPE_2, Language.EN),
+        (VideoType.TYPE_3, Language.EN),
+    ],
+)
+def test_every_video_type_has_social_copy(state_dir, video_type, language):
+    generator = _make_generator(state_dir)
+    package = generator.generate(video_type, language)
+
+    assert package.social_copy.title
+    assert package.social_copy.description
+    assert len(package.social_copy.hashtags) >= 3
+    assert all(tag.startswith("#") for tag in package.social_copy.hashtags)
+    assert all(" " not in tag for tag in package.social_copy.hashtags)
+    assert "Titulo:" in package.social_copy.formatted
+    assert "Descripcion:" in package.social_copy.formatted
+    assert "Hashtags:" in package.social_copy.formatted
+
+
 def _extract_amount(text: str) -> int | None:
     match = re.search(r"(\d+)", text)
     return int(match.group(1)) if match else None

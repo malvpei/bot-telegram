@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import logging
 import random
@@ -20,6 +20,17 @@ from app.texts import ScriptGenerator
 
 
 LOGGER = logging.getLogger(__name__)
+
+
+def _merge_preserving_order(existing: list[str], new_items: list[str]) -> list[str]:
+    merged = list(existing)
+    seen = set(existing)
+    for item in new_items:
+        if item in seen:
+            continue
+        seen.add(item)
+        merged.append(item)
+    return merged
 
 
 def _cover_resize(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
@@ -75,25 +86,16 @@ class VideoCreationService:
             request.account_inputs, len(request.account_inputs) or 1
         )
         if not usernames:
-            raise ValueError("No se detectaron cuentas de Instagram válidas.")
+            raise ValueError("No se detectaron cuentas de Instagram vÃ¡lidas.")
 
-        plan, tried = self._pick_account_with_plan(usernames, request)
+        job_id = self._build_job_id()
+        plan, tried = self._pick_and_reserve_plan(usernames, request, job_id)
         LOGGER.info(
             "Picked @%s after trying %d account(s) of %d available",
             plan.chosen_account,
             len(tried),
             len(usernames),
         )
-
-        # Reserve image IDs atomically before generating the script + render so
-        # parallel processes cannot collide on the same images.
-        job_id = self._build_job_id()
-        already_used = self.state.reserve_media(plan.used_media_ids, job_id)
-        if already_used:
-            raise RuntimeError(
-                "Otro job acaba de reservar estas imágenes. Reintenta en unos segundos: "
-                + ", ".join(already_used)
-            )
 
         try:
             script_package = self.script_generator.generate(
@@ -139,6 +141,7 @@ class VideoCreationService:
             video_path=video_path,
             script_path=script_path,
             preview_text=script_package.plain_text,
+            social_copy=script_package.social_copy,
             chosen_account=plan.chosen_account,
             video_type=request.video_type,
             language=request.language,
@@ -160,18 +163,45 @@ class VideoCreationService:
         self._normalize_slide_images(plan, job_dir)
         return video_path, script_path
 
+    def _pick_and_reserve_plan(
+        self,
+        usernames: list[str],
+        request: VideoRequest,
+        job_id: str,
+    ) -> tuple[VideoPlan, list[str]]:
+        conflicts: list[str] = []
+        all_tried: list[str] = []
+        for attempt in range(1, 4):
+            plan, tried = self._pick_account_with_plan(usernames, request)
+            all_tried = _merge_preserving_order(all_tried, tried)
+            already_used = self.state.reserve_media(plan.used_media_ids, job_id)
+            if not already_used:
+                return plan, all_tried
+            conflicts.extend(already_used)
+            LOGGER.warning(
+                "Plan reservation conflict on attempt %d for @%s: %s",
+                attempt,
+                plan.chosen_account,
+                ", ".join(already_used),
+            )
+        raise RuntimeError(
+            "Otro job acaba de reservar estas imagenes. He reintentado con otros "
+            "planes pero siguen chocando: "
+            + ", ".join(dict.fromkeys(conflicts))
+        )
+
     def _pick_account_with_plan(
         self, usernames: list[str], request: VideoRequest
     ):
-        # Probamos varias cuentas y dejamos que el selector compare las viables
-        # entre sí; así evitamos quedarnos con la primera que solo cumple.
-        shuffled = list(usernames)
-        random.shuffle(shuffled)
-        max_attempts = min(self.settings.account_pick_attempts, len(shuffled))
+        # Try accounts progressively. Recently chosen accounts go last so a
+        # big account file rotates instead of picking the same creator again.
+        ordered = self._ordered_accounts_for_pick(usernames, request.video_type)
+        max_attempts = self._max_account_attempts(len(ordered))
         tried: list[str] = []
         errors: list[str] = []
         catalog: dict[str, list] = {}
-        for username in shuffled[:max_attempts]:
+        last_plan_error: str | None = None
+        for username in ordered[:max_attempts]:
             tried.append(username)
             try:
                 catalog[username] = self.collector.collect_one(username)
@@ -179,19 +209,63 @@ class VideoCreationService:
                 LOGGER.warning("@%s descartada (fetch): %s", username, error)
                 errors.append(f"@{username}: {error}")
                 continue
-        if catalog:
+
             try:
                 plan = self.selector.create_plan(
                     catalog, request.video_type, request.language
                 )
                 return plan, tried
             except ValueError as error:
-                LOGGER.warning("Todas las cuentas candidatas fallaron en plan: %s", error)
-                errors.append(str(error))
+                last_plan_error = str(error)
+                LOGGER.info(
+                    "No viable plan after %d/%d tested account(s): %s",
+                    len(tried),
+                    max_attempts,
+                    error,
+                )
+                continue
+        if last_plan_error:
+            errors.append(last_plan_error)
         raise InstagramCollectorError(
-            "Ninguna de las cuentas probadas dio imágenes utilizables.\n"
+            f"Ninguna de las {len(tried)} cuentas probadas dio imagenes utilizables "
+            f"(de {len(usernames)} disponibles).\n"
             + "\n".join(errors)
         )
+
+    def _ordered_accounts_for_pick(
+        self,
+        usernames: list[str],
+        video_type: VideoType,
+    ) -> list[str]:
+        shuffled = list(usernames)
+        random.shuffle(shuffled)
+        recent = set(
+            self.state.recent_chosen_accounts(
+                limit=len(shuffled),
+                video_type=video_type,
+            )
+        )
+        fresh = [username for username in shuffled if username.lower() not in recent]
+        repeated = [username for username in shuffled if username.lower() in recent]
+        if fresh:
+            LOGGER.info(
+                "Account picker: %d fresh / %d recent accounts available",
+                len(fresh),
+                len(repeated),
+            )
+            return fresh + repeated
+        return shuffled
+
+    def _max_account_attempts(self, available_count: int) -> int:
+        configured = self.settings.account_pick_attempts
+        if configured > 0 and configured < available_count:
+            LOGGER.info(
+                "ACCOUNT_PICK_ATTEMPTS=%d is a soft target; picker can continue "
+                "through %d accounts to avoid false exhaustion.",
+                configured,
+                available_count,
+            )
+        return available_count
 
     # ------------------------------------------------------------------
     # Helpers

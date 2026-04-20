@@ -136,7 +136,7 @@ def get_settings() -> Settings:
         download_backoff_seconds=_env_float("DOWNLOAD_BACKOFF_SECONDS", 1.5),
         output_retention_days=_env_int("OUTPUT_RETENTION_DAYS", 7),
         account_cache_ttl_hours=_env_int("ACCOUNT_CACHE_TTL_HOURS", 72),
-        account_pick_attempts=_env_int("ACCOUNT_PICK_ATTEMPTS", 3),
+        account_pick_attempts=_env_int("ACCOUNT_PICK_ATTEMPTS", 0),
         ig_sessionid=os.getenv("IG_SESSIONID", "").strip(),
         ig_ds_user_id=os.getenv("IG_DS_USER_ID", "").strip(),
         ig_csrftoken=os.getenv("IG_CSRFTOKEN", "").strip(),

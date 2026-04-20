@@ -96,6 +96,13 @@ class StateStore:
             used = self._read_json(self._used_media_path, {})
         return [media_id for media_id in media_ids if media_id not in used]
 
+    def any_media_used(self, media_ids: list[str]) -> bool:
+        if not media_ids:
+            return False
+        with self._exclusive():
+            used = self._read_json(self._used_media_path, {})
+        return any(media_id in used for media_id in media_ids)
+
     def mark_media_used(self, media_ids: list[str], job_id: str) -> None:
         if not media_ids:
             return
@@ -181,6 +188,31 @@ class StateStore:
             jobs = self._read_json(self._jobs_log_path, [])
             jobs.append(payload)
             self._write_json(self._jobs_log_path, jobs)
+
+    def recent_chosen_accounts(
+        self,
+        *,
+        limit: int,
+        video_type: VideoType | None = None,
+    ) -> list[str]:
+        if limit <= 0:
+            return []
+        with self._exclusive():
+            jobs = self._read_json(self._jobs_log_path, [])
+        recent: list[str] = []
+        seen: set[str] = set()
+        expected_type = video_type.value if video_type is not None else None
+        for job in reversed(jobs):
+            if expected_type and job.get("video_type") != expected_type:
+                continue
+            account = str(job.get("chosen_account") or "").strip().lower()
+            if not account or account in seen:
+                continue
+            seen.add(account)
+            recent.append(account)
+            if len(recent) >= limit:
+                break
+        return recent
 
     def build_job_record(
         self,
