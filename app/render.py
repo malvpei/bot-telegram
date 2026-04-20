@@ -108,7 +108,7 @@ class VideoRenderer:
                         )
                         writer.append_data(blended.astype(np.uint8))
 
-        script_path.write_text(self._build_script(plan), encoding="utf-8")
+        self.write_script(plan, job_dir)
         self._enforce_size_limit(video_path)
         return video_path, script_path
 
@@ -116,6 +116,12 @@ class VideoRenderer:
         source_image = self._load_source_image(slide.media.local_path)
         frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
         return Image.fromarray(frame)
+
+    def write_script(self, plan: VideoPlan, job_dir: Path) -> Path:
+        job_dir.mkdir(parents=True, exist_ok=True)
+        script_path = job_dir / "script.txt"
+        script_path.write_text(self._build_script(plan), encoding="utf-8")
+        return script_path
 
     # ------------------------------------------------------------------
     # Frame composition

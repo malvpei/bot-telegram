@@ -191,7 +191,7 @@ class StateStore:
         fallback_accounts: list[str],
         video_type: VideoType,
         language: Language,
-        video_path: str,
+        video_path: str | None,
         script_path: str,
     ) -> dict[str, Any]:
         return {

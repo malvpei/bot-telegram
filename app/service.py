@@ -105,8 +105,7 @@ class VideoCreationService:
                 slide.text = script_package.slides_by_role[slide.role]
 
             job_dir = self.settings.outputs_dir / job_id
-            video_path, script_path = self.renderer.render(plan, job_dir)
-            self._normalize_slide_images(plan, job_dir)
+            video_path, script_path = self._render_outputs(plan, job_dir)
 
             self.state.set_last_signature(
                 request.video_type, request.language, script_package.signature
@@ -124,7 +123,7 @@ class VideoCreationService:
                     fallback_accounts=plan.fallback_accounts,
                     video_type=request.video_type,
                     language=request.language,
-                    video_path=str(video_path),
+                    video_path=str(video_path) if video_path is not None else None,
                     script_path=str(script_path),
                 )
             )
@@ -146,6 +145,20 @@ class VideoCreationService:
             fallback_accounts=plan.fallback_accounts,
             slides=list(plan.slides),
         )
+
+    def _render_outputs(self, plan: VideoPlan, job_dir: Path) -> tuple[Path | None, Path]:
+        if plan.video_type == VideoType.TYPE_3:
+            LOGGER.info("Rendering tipo3 still images for job %s", job_dir.name)
+            script_path = self.renderer.write_script(plan, job_dir)
+            self._normalize_slide_images(plan, job_dir)
+            return None, script_path
+
+        LOGGER.info(
+            "Rendering video type %s for job %s", plan.video_type.value, job_dir.name
+        )
+        video_path, script_path = self.renderer.render(plan, job_dir)
+        self._normalize_slide_images(plan, job_dir)
+        return video_path, script_path
 
     def _pick_account_with_plan(
         self, usernames: list[str], request: VideoRequest

@@ -143,7 +143,7 @@ class VideoPlan:
 
 @dataclass
 class GenerationResult:
-    video_path: Path
+    video_path: Path | None
     script_path: Path
     preview_text: str
     chosen_account: str
