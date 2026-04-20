@@ -28,21 +28,35 @@ SYSTEM_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
-TYPE_3_TOOL_BADGES: dict[SlideRole, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
-    SlideRole.TOOL_STORE: ("Shopify", (255, 255, 255), (92, 156, 55)),
-    SlideRole.TOOL_PRODUCT_SEARCH: ("Dropradar", (163, 245, 48), (20, 20, 20)),
-    SlideRole.TOOL_SCRIPTS: ("ChatGPT", (104, 176, 154), (255, 255, 255)),
-    SlideRole.TOOL_PAYMENTS: ("Stripe", (99, 91, 255), (255, 255, 255)),
-    SlideRole.TOOL_EDITING: ("CapCut", (255, 255, 255), (0, 0, 0)),
-    SlideRole.TOOL_MARKETING: ("TikTok", (0, 0, 0), (255, 255, 255)),
+TYPE_3_TOOL_BADGES: dict[str, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
+    "shopify": ("Shopify", (255, 255, 255), (92, 156, 55)),
+    "dropradar": ("Dropradar", (163, 245, 48), (20, 20, 20)),
+    "chatgpt": ("ChatGPT", (104, 176, 154), (255, 255, 255)),
+    "paypal": ("PayPal", (255, 255, 255), (0, 94, 166)),
+    "stripe": ("Stripe", (99, 91, 255), (255, 255, 255)),
+    "canva": ("Canva", (0, 196, 204), (255, 255, 255)),
+    "capcut": ("CapCut", (255, 255, 255), (0, 0, 0)),
+    "instagram": ("Instagram", (225, 48, 108), (255, 255, 255)),
+    "tiktok": ("TikTok", (0, 0, 0), (255, 255, 255)),
 }
-TYPE_3_ICON_FILES: dict[SlideRole, tuple[str, ...]] = {
+TYPE_3_ROLE_TOOL_OPTIONS: dict[SlideRole, tuple[str, ...]] = {
     SlideRole.TOOL_STORE: ("shopify",),
     SlideRole.TOOL_PRODUCT_SEARCH: ("dropradar",),
     SlideRole.TOOL_SCRIPTS: ("chatgpt",),
-    SlideRole.TOOL_PAYMENTS: ("stripe",),
-    SlideRole.TOOL_EDITING: ("capcut",),
-    SlideRole.TOOL_MARKETING: ("tiktok",),
+    SlideRole.TOOL_PAYMENTS: ("paypal", "stripe"),
+    SlideRole.TOOL_EDITING: ("canva", "capcut"),
+    SlideRole.TOOL_MARKETING: ("instagram", "tiktok"),
+}
+TYPE_3_ICON_ALIASES: dict[str, tuple[str, ...]] = {
+    "shopify": ("shopify",),
+    "dropradar": ("dropradar",),
+    "chatgpt": ("chatgpt",),
+    "paypal": ("paypal", "paypall"),
+    "stripe": ("stripe",),
+    "canva": ("canva", "canvas"),
+    "capcut": ("capcut",),
+    "instagram": ("instagram", "istagram"),
+    "tiktok": ("tiktok", "tikok"),
 }
 
 
@@ -212,7 +226,7 @@ class VideoRenderer:
         width, height = image.size
         icon_box_size = int(width * 0.44)
         icon_top = int(height * 0.45)
-        self._draw_type_3_icon(image, slide.role, width, icon_top, icon_box_size)
+        self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -225,11 +239,13 @@ class VideoRenderer:
         self,
         draw: ImageDraw.ImageDraw,
         role: SlideRole,
+        text: str,
         width: int,
         height: int,
     ) -> None:
+        tool_key = self._type_3_tool_key(role, text)
         label, fill, text_fill = TYPE_3_TOOL_BADGES.get(
-            role,
+            tool_key,
             ("Tool", (255, 255, 255), (0, 0, 0)),
         )
         badge_size = int(width * 0.34)
@@ -271,14 +287,15 @@ class VideoRenderer:
         self,
         image: Image.Image,
         role: SlideRole,
+        text: str,
         width: int,
         y0: int,
         icon_size: int,
     ) -> None:
-        icon_path = self._type_3_icon_path(role)
+        icon_path = self._type_3_icon_path(role, text)
         if icon_path is None:
             draw = ImageDraw.Draw(image)
-            self._draw_type_3_badge(draw, role, width, image.height)
+            self._draw_type_3_badge(draw, role, text, width, image.height)
             return
         with Image.open(icon_path) as raw_icon:
             icon = raw_icon.convert("RGBA")
@@ -305,8 +322,8 @@ class VideoRenderer:
         )
         return fitted
 
-    def _type_3_icon_path(self, role: SlideRole) -> Path | None:
-        needles = TYPE_3_ICON_FILES.get(role)
+    def _type_3_icon_path(self, role: SlideRole, text: str) -> Path | None:
+        needles = TYPE_3_ICON_ALIASES.get(self._type_3_tool_key(role, text))
         if not needles or not self._type_3_icons_dir.exists():
             return None
         for path in sorted(self._type_3_icons_dir.iterdir(), key=lambda item: item.name.lower()):
@@ -316,6 +333,17 @@ class VideoRenderer:
             if any(needle in lowered for needle in needles):
                 return path
         return None
+
+    def _type_3_tool_key(self, role: SlideRole, text: str) -> str:
+        options = TYPE_3_ROLE_TOOL_OPTIONS.get(role, ())
+        lowered = text.lower()
+        for tool_key in options:
+            aliases = TYPE_3_ICON_ALIASES.get(tool_key, (tool_key,))
+            if any(alias in lowered for alias in aliases):
+                return tool_key
+        if options:
+            return options[0]
+        return "tool"
 
     def _build_gradient_overlay(self) -> Image.Image:
         width = self.settings.width

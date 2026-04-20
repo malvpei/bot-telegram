@@ -396,9 +396,24 @@ class ScriptGenerator:
             SlideRole.TOOL_STORE: "1. Tienda\nConstruye tu tienda por solo 1€\nUsa Shopify",
             SlideRole.TOOL_PRODUCT_SEARCH: "2. Busqueda de productos\nEncuentra productos ganadores\nUsa Dropradar",
             SlideRole.TOOL_SCRIPTS: "3. Guiones\nSigue guiones para tus videos\nUsa ChatGPT",
-            SlideRole.TOOL_PAYMENTS: "4. Pagos\nGestiona tus pagos de forma segura\nUsa Stripe",
-            SlideRole.TOOL_EDITING: "5. Edicion\nEdita tus videos para mas calidad\nUsa CapCut",
-            SlideRole.TOOL_MARKETING: "6. Marketing\nPromociona organicamente\nUsa TikTok",
+            SlideRole.TOOL_PAYMENTS: random.choice(
+                (
+                    "4. Pagos\nGestiona tus pagos y cobros con confianza\nUsa PayPal",
+                    "4. Pagos\nGestiona tus pagos de forma segura\nUsa Stripe",
+                )
+            ),
+            SlideRole.TOOL_EDITING: random.choice(
+                (
+                    "5. Edicion\nCrea diseños y piezas visuales para tu marca\nUsa Canva",
+                    "5. Edicion\nEdita tus videos para mas calidad\nUsa CapCut",
+                )
+            ),
+            SlideRole.TOOL_MARKETING: random.choice(
+                (
+                    "6. Marketing\nPublica contenido visual y crea comunidad\nUsa Instagram",
+                    "6. Marketing\nPromociona organicamente con videos cortos\nUsa TikTok",
+                )
+            ),
         }
         return self._compose_type_3(Language.ES, hooks, tools)
 
@@ -414,9 +429,24 @@ class ScriptGenerator:
             SlideRole.TOOL_STORE: "1. Store\nBuild your store for only $1\nUse Shopify",
             SlideRole.TOOL_PRODUCT_SEARCH: "2. Product Search\nFind winning products\nUse Dropradar",
             SlideRole.TOOL_SCRIPTS: "3. Scripts\nFollow scripts for your videos\nUse ChatGPT",
-            SlideRole.TOOL_PAYMENTS: "4. Payments\nManage your payments securely\nUse Stripe",
-            SlideRole.TOOL_EDITING: "5. Editing\nEdit your videos for better quality\nUse CapCut",
-            SlideRole.TOOL_MARKETING: "6. Marketing\nPromote your product organically\nUse TikTok",
+            SlideRole.TOOL_PAYMENTS: random.choice(
+                (
+                    "4. Payments\nManage customer payments with confidence\nUse PayPal",
+                    "4. Payments\nManage your payments securely\nUse Stripe",
+                )
+            ),
+            SlideRole.TOOL_EDITING: random.choice(
+                (
+                    "5. Editing\nCreate clean visuals and brand assets\nUse Canva",
+                    "5. Editing\nEdit your videos for better quality\nUse CapCut",
+                )
+            ),
+            SlideRole.TOOL_MARKETING: random.choice(
+                (
+                    "6. Marketing\nPost visual content and build community\nUse Instagram",
+                    "6. Marketing\nPromote organically with short videos\nUse TikTok",
+                )
+            ),
         }
         return self._compose_type_3(Language.EN, hooks, tools)
 
@@ -616,9 +646,39 @@ class ScriptGenerator:
             raise ValueError("Tipo 3: hosting no debe aparecer.")
         if "dropshipping" not in slides_by_role.get(SlideRole.HOOK, "").lower():
             raise ValueError("Tipo 3: el hook debe mencionar Dropshipping.")
-        payments_text = slides_by_role.get(SlideRole.TOOL_PAYMENTS, "").lower()
-        if "stripe" not in payments_text or "paypal" in payments_text:
-            raise ValueError("Tipo 3: el slide de pagos debe usar Stripe y no PayPal.")
+        ScriptGenerator._assert_one_tool(
+            slides_by_role,
+            SlideRole.TOOL_PAYMENTS,
+            ("paypal", "stripe"),
+            "pagos",
+        )
+        ScriptGenerator._assert_one_tool(
+            slides_by_role,
+            SlideRole.TOOL_EDITING,
+            ("canva", "capcut"),
+            "edicion",
+        )
+        ScriptGenerator._assert_one_tool(
+            slides_by_role,
+            SlideRole.TOOL_MARKETING,
+            ("instagram", "tiktok"),
+            "marketing",
+        )
         expected_roles = set(TYPE_3_ROLES)
         if set(slides_by_role) != expected_roles:
             raise ValueError("Tipo 3: faltan slides de herramientas.")
+
+    @staticmethod
+    def _assert_one_tool(
+        slides_by_role: dict[SlideRole, str],
+        role: SlideRole,
+        options: tuple[str, ...],
+        label: str,
+    ) -> None:
+        text = slides_by_role.get(role, "").lower()
+        matches = [tool for tool in options if tool in text]
+        if len(matches) != 1:
+            raise ValueError(
+                f"Tipo 3: el slide de {label} debe usar exactamente una de estas herramientas: "
+                + ", ".join(options)
+            )

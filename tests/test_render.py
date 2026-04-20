@@ -94,6 +94,44 @@ def test_type_3_icon_fitting_removes_padding_and_uses_common_box():
     assert ys.max() - ys.min() >= 176
 
 
+def test_type_3_icon_path_follows_selected_tool_text():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        icons_dir = root / "tipo3" / "iconos"
+        icons_dir.mkdir(parents=True)
+        for name in (
+            "paypal.png",
+            "stripe-v2-svgrepo-com.png",
+            "canva.png",
+            "capcut-icon.png",
+            "Instagram_icon.png",
+            "tiktok.png",
+        ):
+            Image.new("RGBA", (16, 16), (255, 255, 255, 255)).save(icons_dir / name)
+        settings = replace(get_settings(), root_dir=root)
+        renderer = VideoRenderer(settings)
+
+        assert renderer._type_3_icon_path(
+            SlideRole.TOOL_PAYMENTS,
+            "4. Pagos\nGestiona tus pagos\nUsa PayPal",
+        ).name == "paypal.png"
+        assert renderer._type_3_icon_path(
+            SlideRole.TOOL_PAYMENTS,
+            "4. Pagos\nGestiona tus pagos\nUsa Stripe",
+        ).name == "stripe-v2-svgrepo-com.png"
+        assert renderer._type_3_icon_path(
+            SlideRole.TOOL_EDITING,
+            "5. Edicion\nCrea diseños\nUsa Canva",
+        ).name == "canva.png"
+        assert renderer._type_3_icon_path(
+            SlideRole.TOOL_MARKETING,
+            "6. Marketing\nCrea comunidad\nUsa Instagram",
+        ).name == "Instagram_icon.png"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _candidate(path: Path) -> MediaCandidate:
     return MediaCandidate(
         source_account="test",

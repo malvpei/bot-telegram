@@ -5,6 +5,7 @@ from uuid import uuid4
 
 import pytest
 
+import app.texts as texts_module
 from app.models import Language, SlideRole, TYPE_3_ROLES, VideoType
 from app.state import StateStore
 from app.texts import FORBIDDEN_TYPE_2_TOKENS, ScriptGenerator
@@ -91,11 +92,38 @@ def test_type_3_has_tool_stack_without_hosting(state_dir):
     assert "dropshipping" in package.slides_by_role[SlideRole.HOOK].lower()
     assert "hosting" not in full_text
     assert "hostinger" not in full_text
-    assert "marketing" in full_text
-    assert "tiktok" in full_text
-    payments_text = package.slides_by_role[SlideRole.TOOL_PAYMENTS].lower()
-    assert "stripe" in payments_text
-    assert "paypal" not in payments_text
+    assert _contains_exactly_one(
+        package.slides_by_role[SlideRole.TOOL_PAYMENTS],
+        ("paypal", "stripe"),
+    )
+    assert _contains_exactly_one(
+        package.slides_by_role[SlideRole.TOOL_EDITING],
+        ("canva", "capcut"),
+    )
+    assert _contains_exactly_one(
+        package.slides_by_role[SlideRole.TOOL_MARKETING],
+        ("instagram", "tiktok"),
+    )
+
+
+def test_type_3_can_use_paypal_canva_and_instagram(state_dir, monkeypatch):
+    monkeypatch.setattr(texts_module.random, "choice", lambda seq: list(seq)[0])
+    generator = _make_generator(state_dir)
+    package = generator.generate(VideoType.TYPE_3, Language.ES)
+
+    assert "paypal" in package.slides_by_role[SlideRole.TOOL_PAYMENTS].lower()
+    assert "canva" in package.slides_by_role[SlideRole.TOOL_EDITING].lower()
+    assert "instagram" in package.slides_by_role[SlideRole.TOOL_MARKETING].lower()
+
+
+def test_type_3_can_use_stripe_capcut_and_tiktok(state_dir, monkeypatch):
+    monkeypatch.setattr(texts_module.random, "choice", lambda seq: list(seq)[-1])
+    generator = _make_generator(state_dir)
+    package = generator.generate(VideoType.TYPE_3, Language.EN)
+
+    assert "stripe" in package.slides_by_role[SlideRole.TOOL_PAYMENTS].lower()
+    assert "capcut" in package.slides_by_role[SlideRole.TOOL_EDITING].lower()
+    assert "tiktok" in package.slides_by_role[SlideRole.TOOL_MARKETING].lower()
 
 
 @pytest.mark.parametrize(
@@ -133,3 +161,8 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
 def _extract_amount(text: str) -> int | None:
     match = re.search(r"(\d+)", text)
     return int(match.group(1)) if match else None
+
+
+def _contains_exactly_one(text: str, options: tuple[str, ...]) -> bool:
+    lowered = text.lower()
+    return sum(option in lowered for option in options) == 1
