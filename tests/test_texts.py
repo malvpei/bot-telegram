@@ -93,6 +93,9 @@ def test_type_3_has_tool_stack_without_hosting(state_dir):
     assert "hostinger" not in full_text
     assert "marketing" in full_text
     assert "tiktok" in full_text
+    payments_text = package.slides_by_role[SlideRole.TOOL_PAYMENTS].lower()
+    assert "stripe" in payments_text
+    assert "paypal" not in payments_text
 
 
 @pytest.mark.parametrize(

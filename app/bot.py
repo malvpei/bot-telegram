@@ -17,7 +17,7 @@ from telegram.ext import (
 
 from app.accounts import AccountsFileError, load_accounts
 from app.config import get_settings
-from app.models import Language, SlideRole, VideoRequest, VideoType
+from app.models import Language, VideoRequest, VideoType
 from app.service import VideoCreationService
 
 
@@ -262,10 +262,7 @@ async def _execute_job(
         await context.bot.send_message(chat_id=chat.id, text=header)
         for message in result.social_copy.messages:
             await context.bot.send_message(chat_id=chat.id, text=message)
-        if result.video_type == VideoType.TYPE_3:
-            await _send_slides_images_only(context, chat.id, result.slides)
-        else:
-            await _send_slides_text_then_image(context, chat.id, result.slides)
+        await _send_slides_text_then_image(context, chat.id, result.slides)
     except TelegramError as error:
         LOGGER.exception("Telegram refused the send")
         await context.bot.send_message(
@@ -287,17 +284,6 @@ async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
                 await context.bot.send_message(chat_id=chat_id, text=title)
             if body:
                 await context.bot.send_message(chat_id=chat_id, text=body)
-        path = slide.media.local_path
-        if not path.exists():
-            continue
-        with path.open("rb") as handle:
-            await context.bot.send_photo(chat_id=chat_id, photo=handle)
-
-
-async def _send_slides_images_only(context, chat_id: int, slides) -> None:
-    for slide in slides:
-        if slide.role == SlideRole.HOOK and slide.text:
-            await context.bot.send_message(chat_id=chat_id, text=slide.text.strip())
         path = slide.media.local_path
         if not path.exists():
             continue

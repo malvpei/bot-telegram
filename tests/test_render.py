@@ -19,7 +19,7 @@ def test_type_3_tool_slide_uses_icon_asset():
     try:
         icons_dir = root / "tipo3" / "iconos"
         icons_dir.mkdir(parents=True)
-        Image.new("RGBA", (512, 512), (220, 20, 20, 255)).save(icons_dir / "paypal.png")
+        Image.new("RGBA", (512, 512), (99, 91, 255, 255)).save(icons_dir / "stripe.png")
         bg_path = root / "background.jpg"
         Image.new("RGB", (360, 640), (30, 30, 30)).save(bg_path)
 
@@ -34,7 +34,7 @@ def test_type_3_tool_slide_uses_icon_asset():
         slide = SlidePlan(
             index=2,
             role=SlideRole.TOOL_PAYMENTS,
-            text="4. Payments\nManage payments securely\nUse PayPal",
+            text="4. Payments\nManage payments securely\nUse Stripe",
             media=_candidate(bg_path),
             fixed_asset=True,
         )
@@ -42,10 +42,12 @@ def test_type_3_tool_slide_uses_icon_asset():
         still = renderer.render_slide_still(slide, VideoType.TYPE_3)
         pixels = np.asarray(still)
         icon_region = pixels[290:430, 120:240]
+        text_region = pixels[50:250, 20:340]
 
-        assert icon_region[..., 0].mean() > 150
-        assert icon_region[..., 1].mean() < 80
-        assert icon_region[..., 2].mean() < 80
+        assert icon_region[..., 0].mean() > 70
+        assert icon_region[..., 1].mean() > 60
+        assert icon_region[..., 2].mean() > 150
+        assert text_region.max() <= 35
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

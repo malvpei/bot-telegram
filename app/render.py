@@ -32,7 +32,7 @@ TYPE_3_TOOL_BADGES: dict[SlideRole, tuple[str, tuple[int, int, int], tuple[int, 
     SlideRole.TOOL_STORE: ("Shopify", (255, 255, 255), (92, 156, 55)),
     SlideRole.TOOL_PRODUCT_SEARCH: ("Dropradar", (163, 245, 48), (20, 20, 20)),
     SlideRole.TOOL_SCRIPTS: ("ChatGPT", (104, 176, 154), (255, 255, 255)),
-    SlideRole.TOOL_PAYMENTS: ("PayPal", (255, 255, 255), (0, 94, 166)),
+    SlideRole.TOOL_PAYMENTS: ("Stripe", (99, 91, 255), (255, 255, 255)),
     SlideRole.TOOL_EDITING: ("CapCut", (255, 255, 255), (0, 0, 0)),
     SlideRole.TOOL_MARKETING: ("TikTok", (0, 0, 0), (255, 255, 255)),
 }
@@ -40,7 +40,7 @@ TYPE_3_ICON_FILES: dict[SlideRole, tuple[str, ...]] = {
     SlideRole.TOOL_STORE: ("shopify",),
     SlideRole.TOOL_PRODUCT_SEARCH: ("dropradar",),
     SlideRole.TOOL_SCRIPTS: ("chatgpt",),
-    SlideRole.TOOL_PAYMENTS: ("paypal",),
+    SlideRole.TOOL_PAYMENTS: ("stripe",),
     SlideRole.TOOL_EDITING: ("capcut",),
     SlideRole.TOOL_MARKETING: ("tiktok",),
 }
@@ -209,79 +209,9 @@ class VideoRenderer:
         )
 
     def _draw_type_3_tool_slide(self, image: Image.Image, slide: SlidePlan) -> None:
-        draw = ImageDraw.Draw(image)
         width, height = image.size
-        title, subtitle, cta = self._split_type_3_tool_text(slide.text)
-
-        title_font, title_lines = self._fit_text(
-            title,
-            draw,
-            max_width=width - 110,
-            max_height=int(height * 0.11),
-            base_size=72,
-            min_size=44,
-            bold=True,
-            stroke_width=3,
-        )
-        subtitle_font, subtitle_lines = self._fit_text(
-            subtitle,
-            draw,
-            max_width=width - 110,
-            max_height=int(height * 0.12),
-            base_size=42,
-            min_size=28,
-            bold=False,
-            stroke_width=2,
-        )
-        cta_font, cta_lines = self._fit_text(
-            cta,
-            draw,
-            max_width=width - 120,
-            max_height=int(height * 0.08),
-            base_size=34,
-            min_size=24,
-            bold=True,
-            stroke_width=2,
-        )
-
         icon_box_size = int(width * 0.44)
         icon_top = int(height * 0.45)
-        title_height = self._block_height(title_lines, title_font, draw, stroke_width=3)
-        subtitle_height = self._block_height(subtitle_lines, subtitle_font, draw, stroke_width=2)
-        cta_height = self._block_height(cta_lines, cta_font, draw, stroke_width=2)
-        title_gap = 34
-        total_text_height = title_height + title_gap + subtitle_height
-        if cta:
-            total_text_height += 22 + cta_height
-        top_y = max(78, icon_top - 64 - total_text_height)
-        self._draw_lines(
-            draw,
-            title_lines,
-            title_font,
-            start_y=top_y,
-            width=width,
-            fill=(255, 255, 255),
-            stroke_width=3,
-        )
-        self._draw_lines(
-            draw,
-            subtitle_lines,
-            subtitle_font,
-            start_y=top_y + title_height + title_gap,
-            width=width,
-            fill=(255, 255, 255),
-            stroke_width=2,
-        )
-        if cta:
-            self._draw_lines(
-                draw,
-                cta_lines,
-                cta_font,
-                start_y=top_y + title_height + title_gap + subtitle_height + 22,
-                width=width,
-                fill=(255, 255, 255),
-                stroke_width=2,
-            )
         self._draw_type_3_icon(image, slide.role, width, icon_top, icon_box_size)
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
