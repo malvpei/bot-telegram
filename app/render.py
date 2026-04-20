@@ -218,8 +218,8 @@ class VideoRenderer:
             draw,
             max_width=width - 110,
             max_height=int(height * 0.11),
-            base_size=58,
-            min_size=36,
+            base_size=72,
+            min_size=44,
             bold=True,
             stroke_width=3,
         )
@@ -228,8 +228,8 @@ class VideoRenderer:
             draw,
             max_width=width - 110,
             max_height=int(height * 0.12),
-            base_size=34,
-            min_size=24,
+            base_size=42,
+            min_size=28,
             bold=False,
             stroke_width=2,
         )
@@ -238,21 +238,22 @@ class VideoRenderer:
             draw,
             max_width=width - 120,
             max_height=int(height * 0.08),
-            base_size=30,
-            min_size=22,
+            base_size=34,
+            min_size=24,
             bold=True,
             stroke_width=2,
         )
 
-        icon_size = int(width * 0.34)
+        icon_box_size = int(width * 0.44)
         icon_top = int(height * 0.45)
         title_height = self._block_height(title_lines, title_font, draw, stroke_width=3)
         subtitle_height = self._block_height(subtitle_lines, subtitle_font, draw, stroke_width=2)
         cta_height = self._block_height(cta_lines, cta_font, draw, stroke_width=2)
-        total_text_height = title_height + 18 + subtitle_height
+        title_gap = 34
+        total_text_height = title_height + title_gap + subtitle_height
         if cta:
-            total_text_height += 16 + cta_height
-        top_y = max(80, icon_top - 72 - total_text_height)
+            total_text_height += 22 + cta_height
+        top_y = max(78, icon_top - 64 - total_text_height)
         self._draw_lines(
             draw,
             title_lines,
@@ -266,7 +267,7 @@ class VideoRenderer:
             draw,
             subtitle_lines,
             subtitle_font,
-            start_y=top_y + title_height + 18,
+            start_y=top_y + title_height + title_gap,
             width=width,
             fill=(255, 255, 255),
             stroke_width=2,
@@ -276,12 +277,12 @@ class VideoRenderer:
                 draw,
                 cta_lines,
                 cta_font,
-                start_y=top_y + title_height + subtitle_height + 34,
+                start_y=top_y + title_height + title_gap + subtitle_height + 22,
                 width=width,
                 fill=(255, 255, 255),
                 stroke_width=2,
             )
-        self._draw_type_3_icon(image, slide.role, width, icon_top, icon_size)
+        self._draw_type_3_icon(image, slide.role, width, icon_top, icon_box_size)
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -351,9 +352,28 @@ class VideoRenderer:
             return
         with Image.open(icon_path) as raw_icon:
             icon = raw_icon.convert("RGBA")
-        icon.thumbnail((icon_size, icon_size), Image.Resampling.LANCZOS)
-        x = (width - icon.width) // 2
+        icon = self._fit_type_3_icon(icon, icon_size)
+        x = (width - icon_size) // 2
         image.alpha_composite(icon, (x, y0))
+
+    def _fit_type_3_icon(self, icon: Image.Image, box_size: int) -> Image.Image:
+        alpha_bbox = icon.getbbox()
+        if alpha_bbox is not None:
+            icon = icon.crop(alpha_bbox)
+        scale = min(box_size / icon.width, box_size / icon.height)
+        icon = icon.resize(
+            (
+                max(1, int(round(icon.width * scale))),
+                max(1, int(round(icon.height * scale))),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+        fitted = Image.new("RGBA", (box_size, box_size), (0, 0, 0, 0))
+        fitted.alpha_composite(
+            icon,
+            ((box_size - icon.width) // 2, (box_size - icon.height) // 2),
+        )
+        return fitted
 
     def _type_3_icon_path(self, role: SlideRole) -> Path | None:
         needles = TYPE_3_ICON_FILES.get(role)

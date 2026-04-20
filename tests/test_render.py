@@ -77,6 +77,21 @@ def test_type_3_hook_still_does_not_render_hook_text():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_3_icon_fitting_removes_padding_and_uses_common_box():
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    icon = Image.new("RGBA", (500, 500), (0, 0, 0, 0))
+    icon.paste(Image.new("RGBA", (160, 160), (10, 220, 30, 255)), (170, 170))
+
+    fitted = renderer._fit_type_3_icon(icon, 180)
+    alpha = np.asarray(fitted)[..., 3]
+    ys, xs = np.where(alpha > 0)
+
+    assert fitted.size == (180, 180)
+    assert xs.max() - xs.min() >= 176
+    assert ys.max() - ys.min() >= 176
+
+
 def _candidate(path: Path) -> MediaCandidate:
     return MediaCandidate(
         source_account="test",
