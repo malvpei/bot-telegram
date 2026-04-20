@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 import math
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Callable
 
 import cv2
@@ -373,14 +373,19 @@ class ImageSelector:
             slides: list[SlidePlan] = [
                 SlidePlan(index=1, role=SlideRole.HOOK, text="", media=hook.media)
             ]
+            background_index = sum(ord(char) for char in account) % len(backgrounds)
+            background = backgrounds[background_index]
             for index, role in enumerate(TYPE_3_ROLES[1:], start=2):
-                background = backgrounds[(index - 2) % len(backgrounds)]
+                slide_background = replace(
+                    background,
+                    source_id=f"{background.source_id}:{index}",
+                )
                 slides.append(
                     SlidePlan(
                         index=index,
                         role=role,
                         text="",
-                        media=background,
+                        media=slide_background,
                         fixed_asset=True,
                     )
                 )

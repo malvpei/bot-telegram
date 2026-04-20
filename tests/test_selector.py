@@ -485,7 +485,7 @@ def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):
     assert hook_slide.media.source_id == candidates[0].source_id
 
 
-def test_type_3_uses_one_real_hook_and_rotating_backgrounds(temp_workspace):
+def test_type_3_uses_one_real_hook_and_one_background_for_all_tools(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "type3"
     account_dir.mkdir()
@@ -527,6 +527,7 @@ def test_type_3_uses_one_real_hook_and_rotating_backgrounds(temp_workspace):
     assert candidates[0].content_fingerprint in plan.used_media_ids
     assert all(slide.fixed_asset for slide in plan.slides[1:])
     assert all(slide.media.source_account == "tipo3_fondo" for slide in plan.slides[1:])
+    assert len({slide.media.local_path for slide in plan.slides[1:]}) == 1
 
 
 def test_visual_fingerprint_blocks_reusing_same_image(temp_workspace):

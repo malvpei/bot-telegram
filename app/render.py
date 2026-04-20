@@ -36,6 +36,14 @@ TYPE_3_TOOL_BADGES: dict[SlideRole, tuple[str, tuple[int, int, int], tuple[int, 
     SlideRole.TOOL_EDITING: ("CapCut", (255, 255, 255), (0, 0, 0)),
     SlideRole.TOOL_MARKETING: ("TikTok", (0, 0, 0), (255, 255, 255)),
 }
+TYPE_3_ICON_FILES: dict[SlideRole, tuple[str, ...]] = {
+    SlideRole.TOOL_STORE: ("shopify",),
+    SlideRole.TOOL_PRODUCT_SEARCH: ("dropradar",),
+    SlideRole.TOOL_SCRIPTS: ("chatgpt",),
+    SlideRole.TOOL_PAYMENTS: ("paypal",),
+    SlideRole.TOOL_EDITING: ("capcut",),
+    SlideRole.TOOL_MARKETING: ("tiktok",),
+}
 
 
 class VideoRenderer:
@@ -43,6 +51,7 @@ class VideoRenderer:
         self.settings = settings
         self._gradient_overlay = self._build_gradient_overlay()
         self._font_dir = settings.fonts_dir
+        self._type_3_icons_dir = settings.root_dir / "tipo3" / "iconos"
 
     def render(self, plan: VideoPlan, job_dir: Path) -> tuple[Path, Path]:
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -168,9 +177,7 @@ class VideoRenderer:
     ) -> np.ndarray:
         canvas = self._cover_image(source_image, progress).convert("RGBA")
         if slide.role == SlideRole.HOOK:
-            overlay = Image.new("RGBA", canvas.size, (0, 0, 0, 45))
-            canvas = Image.alpha_composite(canvas, overlay)
-            self._draw_type_3_hook_text(canvas, slide.text)
+            return np.asarray(canvas.convert("RGB"))
         else:
             self._draw_type_3_tool_slide(canvas, slide)
         return np.asarray(canvas.convert("RGB"))
@@ -209,35 +216,43 @@ class VideoRenderer:
         title_font, title_lines = self._fit_text(
             title,
             draw,
-            max_width=width - 90,
-            max_height=int(height * 0.14),
-            base_size=60,
-            min_size=38,
+            max_width=width - 110,
+            max_height=int(height * 0.11),
+            base_size=58,
+            min_size=36,
             bold=True,
             stroke_width=3,
         )
         subtitle_font, subtitle_lines = self._fit_text(
             subtitle,
             draw,
-            max_width=width - 90,
-            max_height=int(height * 0.16),
-            base_size=38,
-            min_size=26,
+            max_width=width - 110,
+            max_height=int(height * 0.12),
+            base_size=34,
+            min_size=24,
             bold=False,
             stroke_width=2,
         )
         cta_font, cta_lines = self._fit_text(
             cta,
             draw,
-            max_width=width - 100,
-            max_height=int(height * 0.12),
-            base_size=38,
-            min_size=26,
+            max_width=width - 120,
+            max_height=int(height * 0.08),
+            base_size=30,
+            min_size=22,
             bold=True,
             stroke_width=2,
         )
 
-        top_y = int(height * 0.075)
+        icon_size = int(width * 0.34)
+        icon_top = int(height * 0.45)
+        title_height = self._block_height(title_lines, title_font, draw, stroke_width=3)
+        subtitle_height = self._block_height(subtitle_lines, subtitle_font, draw, stroke_width=2)
+        cta_height = self._block_height(cta_lines, cta_font, draw, stroke_width=2)
+        total_text_height = title_height + 18 + subtitle_height
+        if cta:
+            total_text_height += 16 + cta_height
+        top_y = max(80, icon_top - 72 - total_text_height)
         self._draw_lines(
             draw,
             title_lines,
@@ -247,27 +262,26 @@ class VideoRenderer:
             fill=(255, 255, 255),
             stroke_width=3,
         )
-        title_height = self._block_height(title_lines, title_font, draw, stroke_width=3)
         self._draw_lines(
             draw,
             subtitle_lines,
             subtitle_font,
-            start_y=top_y + title_height + 22,
+            start_y=top_y + title_height + 18,
             width=width,
             fill=(255, 255, 255),
             stroke_width=2,
         )
-        subtitle_height = self._block_height(subtitle_lines, subtitle_font, draw, stroke_width=2)
-        self._draw_lines(
-            draw,
-            cta_lines,
-            cta_font,
-            start_y=top_y + title_height + subtitle_height + 48,
-            width=width,
-            fill=(255, 255, 255),
-            stroke_width=2,
-        )
-        self._draw_type_3_badge(draw, slide.role, width, height)
+        if cta:
+            self._draw_lines(
+                draw,
+                cta_lines,
+                cta_font,
+                start_y=top_y + title_height + subtitle_height + 34,
+                width=width,
+                fill=(255, 255, 255),
+                stroke_width=2,
+            )
+        self._draw_type_3_icon(image, slide.role, width, icon_top, icon_size)
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
@@ -321,6 +335,37 @@ class VideoRenderer:
                 fill=text_fill,
             )
             y += (bbox[3] - bbox[1]) + 16
+
+    def _draw_type_3_icon(
+        self,
+        image: Image.Image,
+        role: SlideRole,
+        width: int,
+        y0: int,
+        icon_size: int,
+    ) -> None:
+        icon_path = self._type_3_icon_path(role)
+        if icon_path is None:
+            draw = ImageDraw.Draw(image)
+            self._draw_type_3_badge(draw, role, width, image.height)
+            return
+        with Image.open(icon_path) as raw_icon:
+            icon = raw_icon.convert("RGBA")
+        icon.thumbnail((icon_size, icon_size), Image.Resampling.LANCZOS)
+        x = (width - icon.width) // 2
+        image.alpha_composite(icon, (x, y0))
+
+    def _type_3_icon_path(self, role: SlideRole) -> Path | None:
+        needles = TYPE_3_ICON_FILES.get(role)
+        if not needles or not self._type_3_icons_dir.exists():
+            return None
+        for path in sorted(self._type_3_icons_dir.iterdir(), key=lambda item: item.name.lower()):
+            if not path.is_file():
+                continue
+            lowered = path.name.lower()
+            if any(needle in lowered for needle in needles):
+                return path
+        return None
 
     def _build_gradient_overlay(self) -> Image.Image:
         width = self.settings.width

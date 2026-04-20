@@ -17,7 +17,7 @@ from telegram.ext import (
 
 from app.accounts import AccountsFileError, load_accounts
 from app.config import get_settings
-from app.models import Language, VideoRequest, VideoType
+from app.models import Language, SlideRole, VideoRequest, VideoType
 from app.service import VideoCreationService
 
 
@@ -296,6 +296,8 @@ async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
 
 async def _send_slides_images_only(context, chat_id: int, slides) -> None:
     for slide in slides:
+        if slide.role == SlideRole.HOOK and slide.text:
+            await context.bot.send_message(chat_id=chat_id, text=slide.text.strip())
         path = slide.media.local_path
         if not path.exists():
             continue
