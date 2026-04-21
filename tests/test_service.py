@@ -252,3 +252,46 @@ def test_picker_prioritizes_accounts_not_recently_used(monkeypatch):
         assert ordered == ["fresh", "old"]
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_picker_uses_oldest_recent_account_before_newest(monkeypatch):
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), account_pick_attempts=0)
+        service.state = StateStore(root / "state")
+        service.state.log_job(
+            service.state.build_job_record(
+                job_id="job-oldest",
+                chosen_account="oldest",
+                requested_accounts=["oldest"],
+                fallback_accounts=[],
+                video_type=VideoType.TYPE_1,
+                language=Language.ES,
+                video_path=None,
+                script_path="script.txt",
+            )
+        )
+        service.state.log_job(
+            service.state.build_job_record(
+                job_id="job-newest",
+                chosen_account="newest",
+                requested_accounts=["newest"],
+                fallback_accounts=[],
+                video_type=VideoType.TYPE_1,
+                language=Language.ES,
+                video_path=None,
+                script_path="script.txt",
+            )
+        )
+
+        ordered = service._ordered_accounts_for_pick(
+            ["newest", "oldest"],
+            VideoType.TYPE_1,
+        )
+
+        assert ordered == ["oldest", "newest"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)

@@ -101,6 +101,23 @@ def _make_candidate(
     )
 
 
+def test_reservation_keys_block_every_image_from_same_post(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "alpha"
+    account_dir.mkdir()
+    first = _make_candidate(account_dir, username="alpha", idx=1)
+    second = _make_candidate(account_dir, username="alpha", idx=2)
+    first.source_id = "alpha:POST1:0"
+    second.source_id = "alpha:POST1:1"
+    selector = ImageSelector(settings, state)
+
+    used_keys = selector.reservation_keys_for([first])
+    state.mark_media_used([first.source_id], "job-1")
+
+    assert "post:alpha:POST1" in used_keys
+    assert selector._is_candidate_used(second)
+
+
 def test_type_1_plan_aligns_fixed_slide_and_roles(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "alpha"

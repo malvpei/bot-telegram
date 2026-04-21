@@ -300,13 +300,22 @@ class VideoCreationService:
         shuffled = list(usernames)
         random.shuffle(shuffled)
         recent = set(
-            self.state.recent_chosen_accounts(
-                limit=len(shuffled),
-                video_type=video_type,
-            )
+            self.state.recent_chosen_accounts(limit=len(shuffled), video_type=video_type)
         )
         fresh = [username for username in shuffled if username.lower() not in recent]
+        recent_order = self.state.recent_chosen_accounts(
+            limit=len(shuffled),
+            video_type=video_type,
+        )
+        recent_position = {
+            account: index
+            for index, account in enumerate(recent_order)
+        }
         repeated = [username for username in shuffled if username.lower() in recent]
+        repeated.sort(
+            key=lambda username: recent_position.get(username.lower(), -1),
+            reverse=True,
+        )
         if fresh:
             LOGGER.info(
                 "Account picker: %d fresh / %d recent accounts available",
@@ -314,7 +323,7 @@ class VideoCreationService:
                 len(repeated),
             )
             return fresh + repeated
-        return shuffled
+        return repeated
 
     def _max_account_attempts(self, available_count: int) -> int:
         configured = self.settings.account_pick_attempts

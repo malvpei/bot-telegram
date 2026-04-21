@@ -1084,12 +1084,22 @@ class ImageSelector:
         keys: list[str] = []
         seen: set[str] = set()
         for media in media_items:
-            for key in (media.source_id, media.content_fingerprint):
+            for key in (
+                media.source_id,
+                self._post_reservation_key(media),
+                media.content_fingerprint,
+            ):
                 if not key or key in seen:
                     continue
                 seen.add(key)
                 keys.append(key)
         return keys
+
+    def _post_reservation_key(self, media: MediaCandidate) -> str | None:
+        post_key = self._post_key(media)
+        if not post_key or post_key == media.source_id:
+            return None
+        return f"post:{post_key}"
 
     def _first_image_is_valid(self, media: MediaCandidate) -> bool:
         if media.metrics is None:

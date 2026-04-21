@@ -89,19 +89,23 @@ class StateStore:
     def is_media_used(self, media_id: str) -> bool:
         with self._exclusive():
             used = self._read_json(self._used_media_path, {})
-        return media_id in used
+        return self._media_id_is_used(media_id, used)
 
     def filter_unused(self, media_ids: list[str]) -> list[str]:
         with self._exclusive():
             used = self._read_json(self._used_media_path, {})
-        return [media_id for media_id in media_ids if media_id not in used]
+        return [
+            media_id
+            for media_id in media_ids
+            if not self._media_id_is_used(media_id, used)
+        ]
 
     def any_media_used(self, media_ids: list[str]) -> bool:
         if not media_ids:
             return False
         with self._exclusive():
             used = self._read_json(self._used_media_path, {})
-        return any(media_id in used for media_id in media_ids)
+        return any(self._media_id_is_used(media_id, used) for media_id in media_ids)
 
     def mark_media_used(self, media_ids: list[str], job_id: str) -> None:
         if not media_ids:
@@ -120,7 +124,11 @@ class StateStore:
             return []
         with self._exclusive():
             used = self._read_json(self._used_media_path, {})
-            already = [mid for mid in media_ids if mid in used]
+            already = [
+                mid
+                for mid in media_ids
+                if self._media_id_is_used(mid, used)
+            ]
             if already:
                 return already
             timestamp = datetime.now(timezone.utc).isoformat()
@@ -241,3 +249,12 @@ class StateStore:
     @staticmethod
     def _bucket_key(video_type: VideoType, language: Language) -> str:
         return f"{video_type.value}:{language.value}"
+
+    @staticmethod
+    def _media_id_is_used(media_id: str, used: dict[str, Any]) -> bool:
+        if media_id in used:
+            return True
+        if not media_id.startswith("post:"):
+            return False
+        source_prefix = media_id.removeprefix("post:") + ":"
+        return any(key.startswith(source_prefix) for key in used)
