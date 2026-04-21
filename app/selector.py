@@ -144,6 +144,33 @@ class ImageSelector:
             return self._create_type_2_plan(catalog, language)
         return self._create_type_3_plan(catalog, language)
 
+    def pick_extra_image(
+        self,
+        media_items: list[MediaCandidate],
+        video_type: VideoType,
+    ) -> MediaCandidate:
+        self._prepare_candidates(media_items)
+        available = [
+            candidate
+            for candidate in media_items
+            if not self._is_candidate_used(candidate)
+            and candidate.metrics is not None
+            and not self._is_extreme_luxury(candidate)
+        ]
+        best = self._pick_best(
+            available,
+            exclude_ids=set(),
+            score_fn=lambda media: self._score_extra_image(media, video_type),
+        )
+        if best is None:
+            raise ValueError(
+                "No encontré otra imagen válida de esa cuenta sin repetir."
+            )
+        return best.media
+
+    def reservation_keys_for(self, media_items) -> list[str]:
+        return self._reservation_keys(media_items)
+
     # ------------------------------------------------------------------
     # Type 1
     # ------------------------------------------------------------------
@@ -1000,6 +1027,23 @@ class ImageSelector:
         if metrics.is_landscape and metrics.faces < 1 and metrics.laptop_score <= 0:
             score -= 0.18
         return score
+
+    def _score_extra_image(self, media: MediaCandidate, video_type: VideoType) -> float:
+        if video_type == VideoType.TYPE_1:
+            return max(
+                self._score_type_1(media, SlideRole.HOOK),
+                self._score_type_1(media, SlideRole.OCTOBER),
+                self._score_type_1(media, SlideRole.MARCH),
+            )
+        if video_type == VideoType.TYPE_2:
+            if not self._is_type_2_user_visible_media(media):
+                return 0.0
+            return max(
+                self._score_type_2(media, SlideRole.HOOK),
+                self._score_type_2(media, SlideRole.TIP1),
+                self._score_type_2(media, SlideRole.TIP4),
+            )
+        return self._score_type_3_hook(media)
 
     def _post_key(self, media: MediaCandidate) -> str:
         # source_id is built as "<user>:<shortcode>:<node_index>". Two

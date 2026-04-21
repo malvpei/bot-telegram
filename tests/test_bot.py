@@ -5,16 +5,24 @@ from uuid import uuid4
 
 from PIL import Image
 
-from app.bot import _send_slides_text_then_image
+from app.bot import (
+    REGENERATE_ACCEPT,
+    REGENERATE_CANCEL,
+    _ask_for_another_same_account,
+    _clear_wizard_state,
+    _send_slides_text_then_image,
+)
 from app.models import ImageMetrics, MediaCandidate, SlidePlan, SlideRole
 
 
 class FakeTelegramBot:
     def __init__(self) -> None:
         self.events: list[tuple[str, str]] = []
+        self.reply_markup = None
 
-    async def send_message(self, *, chat_id: int, text: str) -> None:
+    async def send_message(self, *, chat_id: int, text: str, reply_markup=None) -> None:
         self.events.append(("message", text))
+        self.reply_markup = reply_markup
 
     async def send_photo(self, *, chat_id: int, photo) -> None:
         self.events.append(("photo", Path(photo.name).name))
@@ -23,6 +31,7 @@ class FakeTelegramBot:
 class FakeContext:
     def __init__(self) -> None:
         self.bot = FakeTelegramBot()
+        self.user_data = {}
 
 
 def test_type_3_slide_text_is_sent_before_image():
@@ -70,3 +79,37 @@ def test_type_3_slide_text_is_sent_before_image():
         ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_repeat_prompt_has_accept_and_cancel_buttons():
+    context = FakeContext()
+
+    asyncio.run(_ask_for_another_same_account(context, 123, "alpha"))
+
+    assert context.bot.events == [
+        (
+            "message",
+            "¿Quieres otra imagen distinta de @alpha por si alguna no te convence?",
+        )
+    ]
+    buttons = context.bot.reply_markup.inline_keyboard[0]
+    assert [button.text for button in buttons] == ["Aceptar", "Cancelar"]
+    assert [button.callback_data for button in buttons] == [
+        REGENERATE_ACCEPT,
+        REGENERATE_CANCEL,
+    ]
+
+
+def test_clear_wizard_state_keeps_repeat_request():
+    context = FakeContext()
+    context.user_data.update(
+        {
+            "accounts_snapshot": ["alpha", "beta"],
+            "video_type": "1",
+            "repeat_request": {"chosen_account": "alpha"},
+        }
+    )
+
+    _clear_wizard_state(context)
+
+    assert context.user_data == {"repeat_request": {"chosen_account": "alpha"}}

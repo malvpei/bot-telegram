@@ -12,7 +12,7 @@ from PIL import Image
 
 from app.config import get_settings
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
-from app.models import GenerationResult, VideoPlan, VideoRequest, VideoType
+from app.models import GenerationResult, MediaCandidate, VideoPlan, VideoRequest, VideoType
 from app.render import VideoRenderer
 from app.selector import ImageSelector
 from app.state import StateStore
@@ -81,6 +81,10 @@ class VideoCreationService:
         with self._job_lock:
             return self._create_video_locked(request)
 
+    def create_extra_image(self, request: VideoRequest) -> MediaCandidate:
+        with self._job_lock:
+            return self._create_extra_image_locked(request)
+
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
         usernames = extract_usernames(
             request.account_inputs, len(request.account_inputs) or 1
@@ -148,6 +152,62 @@ class VideoCreationService:
             fallback_accounts=plan.fallback_accounts,
             slides=list(plan.slides),
         )
+
+    def _create_extra_image_locked(self, request: VideoRequest) -> MediaCandidate:
+        usernames = extract_usernames(
+            request.account_inputs, len(request.account_inputs) or 1
+        )
+        if not usernames:
+            raise ValueError("No se detectó la cuenta de Instagram para repetir.")
+        account = usernames[0]
+        candidates = self.collector.collect_one(account)
+
+        conflicts: list[str] = []
+        media: MediaCandidate | None = None
+        media_ids: list[str] = []
+        job_id = self._build_job_id()
+        for attempt in range(1, 4):
+            media = self.selector.pick_extra_image(candidates, request.video_type)
+            media_ids = self.selector.reservation_keys_for([media])
+            already_used = self.state.reserve_media(media_ids, job_id)
+            if not already_used:
+                break
+            conflicts.extend(already_used)
+            LOGGER.warning(
+                "Extra image reservation conflict on attempt %d for @%s: %s",
+                attempt,
+                account,
+                ", ".join(already_used),
+            )
+            media = None
+        if media is None:
+            raise RuntimeError(
+                "Otro job acaba de reservar la imagen extra. Reintenté pero "
+                "sigue chocando: "
+                + ", ".join(dict.fromkeys(conflicts))
+            )
+
+        try:
+            job_dir = self.settings.outputs_dir / job_id
+            normalized = self._normalize_extra_image(media, job_dir)
+            self.state.log_job(
+                self.state.build_job_record(
+                    job_id=job_id,
+                    chosen_account=account,
+                    requested_accounts=[account],
+                    fallback_accounts=[],
+                    video_type=request.video_type,
+                    language=request.language,
+                    video_path=None,
+                    script_path=str(normalized.local_path),
+                )
+            )
+        except Exception:
+            self.state.release_media(media_ids)
+            raise
+
+        self._cleanup_old_outputs()
+        return normalized
 
     def _render_outputs(self, plan: VideoPlan, job_dir: Path) -> tuple[Path | None, Path]:
         if plan.video_type == VideoType.TYPE_3:
@@ -312,6 +372,26 @@ class VideoCreationService:
             slide.media.local_path = out_path
             slide.media.width = target_width
             slide.media.height = target_height
+
+    def _normalize_extra_image(
+        self,
+        media: MediaCandidate,
+        job_dir: Path,
+    ) -> MediaCandidate:
+        target_width = self.settings.width
+        target_height = self.settings.height
+        extra_dir = job_dir / "extra"
+        extra_dir.mkdir(parents=True, exist_ok=True)
+        out_path = extra_dir / "extra_01.jpg"
+        with Image.open(media.local_path) as image:
+            normalized = _cover_resize(
+                image.convert("RGB"), target_width, target_height
+            )
+        normalized.save(out_path, format="JPEG", quality=92)
+        media.local_path = out_path
+        media.width = target_width
+        media.height = target_height
+        return media
 
     def _build_job_id(self) -> str:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")

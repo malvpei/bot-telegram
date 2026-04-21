@@ -22,6 +22,8 @@ from app.service import VideoCreationService
 
 
 TYPE_STATE, LANGUAGE_STATE = range(2)
+REGENERATE_ACCEPT = "regen:accept"
+REGENERATE_CANCEL = "regen:cancel"
 
 LOGGER = logging.getLogger(__name__)
 
@@ -66,6 +68,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("accounts", accounts_command))
     application.add_handler(wizard_handler)
+    application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
     application.add_error_handler(error_handler)
 
     application.run_polling(drop_pending_updates=True)
@@ -219,7 +222,7 @@ async def wizard_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         f"con {len(accounts)} cuentas."
     )
     await _execute_job(update, context, request)
-    context.user_data.clear()
+    _clear_wizard_state(context)
     return ConversationHandler.END
 
 
@@ -227,6 +230,45 @@ async def wizard_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     context.user_data.clear()
     await update.effective_message.reply_text("Cancelado.")
     return ConversationHandler.END
+
+
+async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_allowed(update):
+        return
+    query = update.callback_query
+    await query.answer()
+
+    if query.data == REGENERATE_CANCEL:
+        context.user_data.pop("repeat_request", None)
+        await query.edit_message_text("Perfecto, lo dejo aquí.")
+        return
+
+    repeat_request = context.user_data.get("repeat_request")
+    if not isinstance(repeat_request, dict):
+        await query.edit_message_text(
+            "Ya no tengo guardada la última cuenta. Lanza /create otra vez."
+        )
+        return
+
+    try:
+        request = VideoRequest(
+            chat_id=update.effective_chat.id,
+            user_id=update.effective_user.id,
+            video_type=VideoType(repeat_request["video_type"]),
+            language=Language(repeat_request["language"]),
+            account_inputs=[repeat_request["chosen_account"]],
+        )
+    except (KeyError, ValueError):
+        context.user_data.pop("repeat_request", None)
+        await query.edit_message_text(
+            "No pude recuperar bien la última selección. Lanza /create otra vez."
+        )
+        return
+
+    await query.edit_message_text(
+        f"Buscando una imagen distinta de @{request.account_inputs[0]}."
+    )
+    await _execute_extra_image(update, context, request)
 
 
 async def _execute_job(
@@ -263,11 +305,54 @@ async def _execute_job(
         for message in result.social_copy.messages:
             await context.bot.send_message(chat_id=chat.id, text=message)
         await _send_slides_text_then_image(context, chat.id, result.slides)
+        context.user_data["repeat_request"] = {
+            "chosen_account": result.chosen_account,
+            "video_type": result.video_type.value,
+            "language": result.language.value,
+        }
+        await _ask_for_another_same_account(context, chat.id, result.chosen_account)
     except TelegramError as error:
         LOGGER.exception("Telegram refused the send")
         await context.bot.send_message(
             chat_id=chat.id,
             text=f"Telegram rechazó el envío.\nCausa: {error}",
+        )
+
+
+async def _execute_extra_image(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    request: VideoRequest,
+) -> None:
+    chat = update.effective_chat
+    status_message = await context.bot.send_message(
+        chat_id=chat.id,
+        text="Estoy buscando una imagen nueva de la misma cuenta.",
+    )
+    service: VideoCreationService = context.application.bot_data["service"]
+
+    try:
+        media = await asyncio.to_thread(service.create_extra_image, request)
+    except Exception as error:
+        LOGGER.exception("Extra image generation failed")
+        await status_message.edit_text(f"No pude sacar otra imagen.\n\n{error}")
+        return
+
+    await status_message.edit_text(f"Te mando otra imagen de @{media.source_account}.")
+    try:
+        with media.local_path.open("rb") as handle:
+            await context.bot.send_photo(chat_id=chat.id, photo=handle)
+        context.user_data["repeat_request"] = {
+            "chosen_account": media.source_account,
+            "video_type": request.video_type.value,
+            "language": request.language.value,
+        }
+        await _ask_for_another_same_account(context, chat.id, media.source_account)
+    except TelegramError as error:
+        LOGGER.exception("Telegram refused the extra image")
+        await context.bot.send_message(
+            chat_id=chat.id,
+            text=f"Telegram rechazó la imagen.\nCausa: {error}",
         )
 
 
@@ -291,11 +376,35 @@ async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
             await context.bot.send_photo(chat_id=chat_id, photo=handle)
 
 
+async def _ask_for_another_same_account(context, chat_id: int, account: str) -> None:
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Aceptar", callback_data=REGENERATE_ACCEPT),
+                InlineKeyboardButton("Cancelar", callback_data=REGENERATE_CANCEL),
+            ]
+        ]
+    )
+    await context.bot.send_message(
+        chat_id=chat_id,
+        text=(
+            f"¿Quieres otra imagen distinta de @{account} por si "
+            "alguna no te convence?"
+        ),
+        reply_markup=keyboard,
+    )
+
+
 def _split_title_body(text: str) -> tuple[str, str]:
     parts = text.split("\n", 1)
     if len(parts) == 1:
         return parts[0].strip(), ""
     return parts[0].strip(), parts[1].strip()
+
+
+def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop("accounts_snapshot", None)
+    context.user_data.pop("video_type", None)
 
 
 async def _ensure_allowed(update: Update) -> bool:
