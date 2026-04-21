@@ -79,11 +79,11 @@ class ScriptGenerator:
 
     def _build_type_1_es(self) -> ScriptPackage:
         hook_options = {
-            "h1": "Lo que gané de verdad con Dropshipping en mis últimos 6 meses y por qué estuve a nada de dejarlo",
-            "h2": "Mis números reales haciendo Dropshipping estos 6 meses y la razón por la que casi tiré la toalla",
-            "h3": "Exactamente lo que saqué con Dropshipping en 6 meses y por qué hubo un momento en que quería dejarlo",
-            "h4": "Las ganancias reales de mis últimos 6 meses de Dropshipping y por qué casi mandé todo a la basura",
-            "h5": "Estos son mis números reales haciendo Dropshipping en 6 meses y lo cerca que estuve de rendirme",
+            "h1": "Quise hacer dinero con Dropshipping durante 6 meses y esta fue la parte que casi nadie enseña",
+            "h2": "Me metí en Dropshipping para ganar dinero y estos números explican por qué casi lo dejé",
+            "h3": "Esto fue lo que pasó con mi dinero mes a mes haciendo Dropshipping y el giro no me lo esperaba",
+            "h4": "Probé Dropshipping buscando dinero extra y cada foto enseña por qué estuve a punto de rendirme",
+            "h5": "Si crees que hacer dinero con Dropshipping es rápido mira cómo fueron mis 6 meses reales",
         }
         october = {
             "o1": "Octubre - 0€\nEmpecé con ganas pero me quedé en parálisis por análisis pensando tanto cada paso que no lancé nada de verdad",
@@ -131,11 +131,11 @@ class ScriptGenerator:
 
     def _build_type_1_en(self) -> ScriptPackage:
         hook_options = {
-            "h1": "Exactly what I made with Dropshipping in my last 6 months and why I nearly gave up",
-            "h2": "My real Dropshipping numbers from the last 6 months and the reason I almost quit",
-            "h3": "What I actually made with Dropshipping in 6 months and why I came close to throwing it away",
-            "h4": "The real money I made from Dropshipping in my last 6 months and why I almost walked away",
-            "h5": "These are my honest 6 month Dropshipping numbers and how close I was to quitting",
+            "h1": "I tried to make money with Dropshipping for 6 months and this is the part people skip",
+            "h2": "I got into Dropshipping for the money and these numbers show why I nearly quit",
+            "h3": "This is what happened to my money month by month with Dropshipping and the turn surprised me",
+            "h4": "I tested Dropshipping for extra money and every photo shows why I almost gave up",
+            "h5": "If you think making money with Dropshipping is fast watch my real 6 month timeline",
         }
         october = {
             "o1": "October - $0\nI started excited but got stuck in analysis paralysis overthinking every step and never really launching",
@@ -262,11 +262,11 @@ class ScriptGenerator:
 
     def _build_type_2_es(self) -> ScriptPackage:
         hook_options = {
-            "h1": "Las 4 cosas que me habría encantado saber cuando empecé en Dropshipping",
-            "h2": "Las únicas 4 cosas que de verdad deberías saber para sacar ingresos con Dropshipping",
-            "h3": "Literalmente habría pagado por saber estas 4 cosas al empezar en Dropshipping",
-            "h4": "Las 4 cosas que me habrían ahorrado meses de prueba y error en Dropshipping",
-            "h5": "Las 4 cosas que ojalá alguien me hubiera contado antes de meterme en Dropshipping",
+            "h1": "Antes de intentar hacer dinero con Dropshipping mira estas 4 cosas o vas a empezar a ciegas",
+            "h2": "Si quieres que Dropshipping te deje dinero estas 4 cosas importan más de lo que parece",
+            "h3": "Habría pagado dinero por saber esto antes de empezar Dropshipping porque me habría ahorrado meses",
+            "h4": "Estas 4 cosas deciden si Dropshipping te da dinero o si solo te hace perder tiempo",
+            "h5": "Si vas en serio con Dropshipping y dinero online necesitas ver la siguiente foto",
         }
         tip1 = {
             "t1": "1. Haz cuentas reales antes de vender\nMucha gente se lanza sin contar comisiones ni devoluciones y no entiende por qué no queda dinero a fin de mes",
@@ -292,11 +292,11 @@ class ScriptGenerator:
 
     def _build_type_2_en(self) -> ScriptPackage:
         hook_options = {
-            "h1": "The 4 things I wish I knew when I started with Dropshipping",
-            "h2": "The only 4 things you really need to know to make money with Dropshipping",
-            "h3": "I genuinely would have paid to know these 4 things when I started Dropshipping",
-            "h4": "These 4 things would have saved me months of trial and error in Dropshipping",
-            "h5": "The 4 things I wish someone had told me before I jumped into Dropshipping",
+            "h1": "Before trying to make money with Dropshipping look at these 4 things or you start blind",
+            "h2": "If you want Dropshipping to make money these 4 things matter more than they look",
+            "h3": "I would have paid money to know this before starting Dropshipping because it cost me months",
+            "h4": "These 4 things decide whether Dropshipping makes money or just burns your time",
+            "h5": "If you are serious about Dropshipping and online money you need to see the next photo",
         }
         tip1 = {
             "t1": "1. Know your real numbers\nToo many sellers skip fees and refunds in their math and later wonder why nothing is left at the end of the month",
@@ -478,11 +478,66 @@ class ScriptGenerator:
         variants = self._social_copy_variants(video_type, language)
         key = random.choice(list(variants))
         title, description, hashtags = variants[key]
+        description = self._develop_social_copy_description(
+            video_type,
+            language,
+            key,
+            description,
+        )
         return key, SocialCopy(
             title=title,
             description=description,
             hashtags=hashtags,
         )
+
+    def _develop_social_copy_description(
+        self,
+        video_type: VideoType,
+        language: Language,
+        key: str,
+        description: str,
+    ) -> str:
+        additions = self._social_copy_description_additions(video_type, language)
+        extra = additions.get(key)
+        if not extra:
+            return description
+        return f"{description} {extra}"
+
+    def _social_copy_description_additions(
+        self,
+        video_type: VideoType,
+        language: Language,
+    ) -> dict[str, str]:
+        if language == Language.EN:
+            if video_type == VideoType.TYPE_1:
+                return {
+                    "en1": "I wanted the carousel to feel like a real timeline, not a flex, because the months with no sales are exactly where most beginners panic and quit before the useful lesson appears.",
+                    "en2": "The important part is seeing the order of the decisions, because one small change in how I judged products made the later numbers make much more sense.",
+                    "en3": "Each slide is there to make the next one matter, from the first doubts to the moment where the process finally stopped feeling random.",
+                    "en4": "Use it as a reality check before chasing the next shiny product, because the money only started making sense when the testing process got more disciplined.",
+                }
+            if video_type == VideoType.TYPE_2:
+                return {
+                    "en1": "The goal is not to scare you, it is to make the first steps feel clearer so you know what to fix before spending money on traffic.",
+                    "en2": "Read each point as a quick audit of your own store, because one weak area can make the rest of the setup look worse than it really is.",
+                    "en3": "This is the kind of checklist I wish I had beside me before paying for ads, choosing products or assuming the problem was just the creative.",
+                    "en4": "If one slide feels uncomfortable, that is probably the part worth checking first before you put more money or time into the store.",
+                }
+        if video_type == VideoType.TYPE_1:
+            return {
+                "es1": "La idea es que cada foto te obligue a ver la siguiente, porque el mes malo no se entiende igual cuando sabes lo que vino despues y por que cambie la forma de elegir productos.",
+                "es2": "Lo importante no es solo la cifra final, sino ver el orden de decisiones que me hizo pasar de probar por probar a entender que señales estaba mirando.",
+                "es3": "Cada slide esta pensada como una parte de la historia: la duda, el bloqueo, el intento fallido y el momento en el que el metodo empezo a tener sentido.",
+                "es4": "Usalo como una referencia realista antes de perseguir otro producto viral, porque el dinero empezo a ordenarse cuando deje de improvisar cada prueba.",
+            }
+        if video_type == VideoType.TYPE_2:
+            return {
+                "es1": "No va de asustarte, va de que empieces con mas claridad y sepas que revisar antes de meter dinero en trafico o dar por perdido un producto.",
+                "es2": "Lee cada punto como una mini auditoria de tu tienda, porque a veces una sola parte floja hace que todo el sistema parezca peor de lo que es.",
+                "es3": "Es la checklist que me habria gustado tener delante antes de pagar anuncios, elegir productos o pensar que el problema era solo el creativo.",
+                "es4": "Si una de las fotos te incomoda, probablemente esa sea la parte que necesitas arreglar antes de meter mas dinero o mas horas en la tienda.",
+            }
+        return {}
 
     def _social_copy_variants(
         self,

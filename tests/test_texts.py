@@ -71,6 +71,35 @@ def test_type_2_en_passes_punctuation_rule(state_dir):
     assert "Dropradar" in package.slides_by_role[SlideRole.TIP3]
 
 
+@pytest.mark.parametrize(
+    ("video_type", "language", "money_terms"),
+    [
+        (VideoType.TYPE_1, Language.ES, ("dinero", "€")),
+        (VideoType.TYPE_2, Language.ES, ("dinero", "€")),
+        (VideoType.TYPE_1, Language.EN, ("money", "$")),
+        (VideoType.TYPE_2, Language.EN, ("money", "$")),
+    ],
+)
+def test_type_1_and_2_hooks_mention_money_and_dropshipping(
+    state_dir,
+    monkeypatch,
+    video_type,
+    language,
+    money_terms,
+):
+    generator = _make_generator(state_dir)
+    for index in range(5):
+        monkeypatch.setattr(
+            texts_module.random,
+            "choice",
+            lambda seq, index=index: list(seq)[min(index, len(list(seq)) - 1)],
+        )
+        package = generator.generate(video_type, language)
+        hook = package.slides_by_role[SlideRole.HOOK].lower()
+        assert "dropshipping" in hook
+        assert any(term in hook for term in money_terms)
+
+
 def test_consecutive_generations_differ(state_dir):
     generator = _make_generator(state_dir)
     first = generator.generate(VideoType.TYPE_1, Language.ES)
@@ -144,6 +173,8 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
     assert package.social_copy.title
     assert package.social_copy.description
     assert len(package.social_copy.description) >= 220
+    if video_type in (VideoType.TYPE_1, VideoType.TYPE_2):
+        assert len(package.social_copy.description) >= 340
     assert len(package.social_copy.hashtags) >= 3
     assert all(tag.startswith("#") for tag in package.social_copy.hashtags)
     assert all(" " not in tag for tag in package.social_copy.hashtags)
