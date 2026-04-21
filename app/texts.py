@@ -406,25 +406,25 @@ class ScriptGenerator:
             "h6": "Dropshipping en 2026\nestas son las herramientas que realmente necesitas",
         }
         tools = {
-            SlideRole.TOOL_STORE: "1. Tienda\nMonta tu tienda por solo 1€ el primer mes\nUsa Shopify",
-            SlideRole.TOOL_PRODUCT_SEARCH: "2. Busqueda de productos\nEncuentra productos ganadores con datos reales\nUsa Dropradar",
-            SlideRole.TOOL_SCRIPTS: "3. Guiones\nGenera guiones rapidos para todos tus videos\nUsa ChatGPT",
+            SlideRole.TOOL_STORE: "1. Tienda\nCrea tu tienda online\nUsa Shopify",
+            SlideRole.TOOL_PRODUCT_SEARCH: "2. Productos\nEncuentra productos ganadores\nUsa Dropradar",
+            SlideRole.TOOL_SCRIPTS: "3. Guiones\nEscribe guiones rapidos\nUsa ChatGPT",
             SlideRole.TOOL_PAYMENTS: random.choice(
                 (
-                    "4. Pagos\nGestiona tus cobros con confianza desde el primer dia\nUsa PayPal",
-                    "4. Pagos\nGestiona tus pagos online de forma segura y sencilla\nUsa Stripe",
+                    "4. Pagos\nCobra tus pedidos\nUsa PayPal",
+                    "4. Pagos\nCobra de forma segura\nUsa Stripe",
                 )
             ),
             SlideRole.TOOL_EDITING: random.choice(
                 (
-                    "5. Edicion\nCrea disenos y piezas visuales limpias para tu marca\nUsa Canva",
-                    "5. Edicion\nEdita tus videos con cortes y efectos de calidad\nUsa CapCut",
+                    "5. Edicion\nCrea visuales limpios\nUsa Canva",
+                    "5. Edicion\nEdita videos rapido\nUsa CapCut",
                 )
             ),
             SlideRole.TOOL_MARKETING: random.choice(
                 (
-                    "6. Marketing\nPublica contenido visual y construye comunidad cada dia\nUsa Instagram",
-                    "6. Marketing\nPromociona organicamente con videos cortos que enganchan\nUsa TikTok",
+                    "6. Marketing\nCrea comunidad\nUsa Instagram",
+                    "6. Marketing\nPublica videos cortos\nUsa TikTok",
                 )
             ),
         }
@@ -440,25 +440,25 @@ class ScriptGenerator:
             "h6": "Dropshipping in 2026\nthese are the tools you actually need to begin",
         }
         tools = {
-            SlideRole.TOOL_STORE: "1. Store\nBuild your store for only $1 the first month\nUse Shopify",
-            SlideRole.TOOL_PRODUCT_SEARCH: "2. Product Search\nFind winning products backed by real data\nUse Dropradar",
-            SlideRole.TOOL_SCRIPTS: "3. Scripts\nGenerate quick scripts for every video you post\nUse ChatGPT",
+            SlideRole.TOOL_STORE: "1. Store\nBuild your online store\nUse Shopify",
+            SlideRole.TOOL_PRODUCT_SEARCH: "2. Products\nFind winning products\nUse Dropradar",
+            SlideRole.TOOL_SCRIPTS: "3. Scripts\nWrite quick scripts\nUse ChatGPT",
             SlideRole.TOOL_PAYMENTS: random.choice(
                 (
-                    "4. Payments\nHandle customer payments with confidence from day one\nUse PayPal",
-                    "4. Payments\nHandle your online payments safely and easily\nUse Stripe",
+                    "4. Payments\nTake customer payments\nUse PayPal",
+                    "4. Payments\nTake secure payments\nUse Stripe",
                 )
             ),
             SlideRole.TOOL_EDITING: random.choice(
                 (
-                    "5. Editing\nCreate clean visuals and brand assets in minutes\nUse Canva",
-                    "5. Editing\nEdit your videos with smooth cuts and clean effects\nUse CapCut",
+                    "5. Editing\nCreate clean visuals\nUse Canva",
+                    "5. Editing\nEdit videos fast\nUse CapCut",
                 )
             ),
             SlideRole.TOOL_MARKETING: random.choice(
                 (
-                    "6. Marketing\nPost visual content and build a real community daily\nUse Instagram",
-                    "6. Marketing\nPromote organically with short videos people watch\nUse TikTok",
+                    "6. Marketing\nBuild a community\nUse Instagram",
+                    "6. Marketing\nPost short videos\nUse TikTok",
                 )
             ),
         }
