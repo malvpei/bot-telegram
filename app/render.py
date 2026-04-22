@@ -224,7 +224,7 @@ class VideoRenderer:
 
     def _draw_type_3_tool_slide(self, image: Image.Image, slide: SlidePlan) -> None:
         width, height = image.size
-        icon_box_size = int(width * 0.44)
+        icon_box_size = int(width * 0.40)
         icon_top = int(height * 0.45)
         self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
 
