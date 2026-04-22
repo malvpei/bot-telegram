@@ -253,8 +253,9 @@ class VideoCreationService:
     def _pick_account_with_plan(
         self, usernames: list[str], request: VideoRequest
     ):
-        # Try accounts progressively. Recently chosen accounts go last so a
-        # big account file rotates instead of picking the same creator again.
+        # Try accounts progressively. Fresh accounts are favored, but recent
+        # accounts are still mixed with randomness so the picker never behaves
+        # like a chronological queue.
         ordered = self._ordered_accounts_for_pick(usernames, request.video_type)
         max_attempts = self._max_account_attempts(len(ordered))
         tried: list[str] = []
@@ -299,26 +300,32 @@ class VideoCreationService:
     ) -> list[str]:
         shuffled = list(usernames)
         random.shuffle(shuffled)
-        recent = set(self.state.recent_chosen_accounts(limit=len(shuffled)))
-        fresh = [username for username in shuffled if username.lower() not in recent]
         recent_order = self.state.recent_chosen_accounts(limit=len(shuffled))
         recent_position = {
             account: index
             for index, account in enumerate(recent_order)
         }
-        repeated = [username for username in shuffled if username.lower() in recent]
-        repeated.sort(
-            key=lambda username: recent_position.get(username.lower(), -1),
-            reverse=True,
+        fresh_count = sum(
+            1 for username in shuffled
+            if username.lower() not in recent_position
         )
-        if fresh:
-            LOGGER.info(
-                "Account picker: %d fresh / %d recent accounts available",
-                len(fresh),
-                len(repeated),
-            )
-            return fresh + repeated
-        return repeated
+        recent_count = len(shuffled) - fresh_count
+        age_denominator = max(len(recent_position) - 1, 1)
+
+        def account_score(username: str) -> float:
+            recent_index = recent_position.get(username.lower())
+            if recent_index is None:
+                return 3.0 + random.random()
+            age_score = recent_index / age_denominator
+            return (age_score * 0.55) + random.random()
+
+        ordered = sorted(shuffled, key=account_score, reverse=True)
+        LOGGER.info(
+            "Account picker: %d fresh / %d recent accounts available",
+            fresh_count,
+            recent_count,
+        )
+        return ordered
 
     def _max_account_attempts(self, available_count: int) -> int:
         configured = self.settings.account_pick_attempts

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import math
+import random
 import re
 from dataclasses import dataclass, replace
 from typing import Callable
@@ -103,6 +104,8 @@ TYPE_2_REPLACEABLE_FOR_LANDSCAPE: tuple[SlideRole, ...] = (
     SlideRole.TIP1,
     SlideRole.TIP2,
 )
+TOP_PICK_SCORE_RATIO = 0.92
+TOP_PICK_SCORE_WINDOW = 0.08
 
 
 def _word_in_text(word: str, lowered: str) -> bool:
@@ -867,7 +870,7 @@ class ImageSelector:
         exclude_ids: set[str],
         score_fn: Callable[[MediaCandidate], float],
     ) -> CandidateScore | None:
-        best: CandidateScore | None = None
+        scored: list[CandidateScore] = []
         for media in pool:
             if media.source_id in exclude_ids:
                 continue
@@ -876,9 +879,19 @@ class ImageSelector:
             score = score_fn(media)
             if score <= 0:
                 continue
-            if best is None or score > best.score:
-                best = CandidateScore(media=media, score=score)
-        return best
+            scored.append(CandidateScore(media=media, score=score))
+        if not scored:
+            return None
+        best_score = max(candidate.score for candidate in scored)
+        cutoff = max(
+            best_score * TOP_PICK_SCORE_RATIO,
+            best_score - TOP_PICK_SCORE_WINDOW,
+        )
+        top_candidates = [
+            candidate for candidate in scored
+            if candidate.score >= cutoff
+        ]
+        return random.choice(top_candidates)
 
     def _find_landscape_replacement(
         self,
@@ -889,7 +902,7 @@ class ImageSelector:
         allow_luxury: bool,
         prefer_account: str | None = None,
     ) -> CandidateScore | None:
-        best: CandidateScore | None = None
+        scored: list[CandidateScore] = []
         for account, candidates in catalog.items():
             for media in candidates:
                 if media.source_id in used_ids:
@@ -906,9 +919,19 @@ class ImageSelector:
                 base = 0.55 * metrics.quality_score + 0.35 * metrics.outdoor_score + 0.10 * metrics.daylight
                 if account == prefer_account:
                     base += 0.05
-                if best is None or base > best.score:
-                    best = CandidateScore(media=media, score=base)
-        return best
+                scored.append(CandidateScore(media=media, score=base))
+        if not scored:
+            return None
+        best_score = max(candidate.score for candidate in scored)
+        cutoff = max(
+            best_score * TOP_PICK_SCORE_RATIO,
+            best_score - TOP_PICK_SCORE_WINDOW,
+        )
+        top_candidates = [
+            candidate for candidate in scored
+            if candidate.score >= cutoff
+        ]
+        return random.choice(top_candidates)
 
     def _plan_score(
         self,
