@@ -48,6 +48,16 @@ def _env_bool(key: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_path(key: str, default: Path, root_dir: Path) -> Path:
+    raw = os.getenv(key, "").strip()
+    if not raw:
+        return default
+    path = Path(raw)
+    if path.is_absolute():
+        return path
+    return root_dir / path
+
+
 @dataclass(frozen=True)
 class Settings:
     root_dir: Path
@@ -89,23 +99,26 @@ def get_settings() -> Settings:
     root_dir = Path(__file__).resolve().parents[1]
     load_dotenv(root_dir / ".env")
 
-    data_dir = root_dir / "data"
+    data_dir = _env_path("DATA_DIR", root_dir / "data", root_dir)
     downloads_dir = data_dir / "downloads"
     outputs_dir = data_dir / "outputs"
     state_dir = data_dir / "state"
     fixed_assets_dir = root_dir / "assets" / "fixed"
     fonts_dir = root_dir / "assets" / "fonts"
 
-    raw_fixed = os.getenv("FIXED_IMAGE_PATH", "").strip()
-    fixed_image_path = Path(raw_fixed) if raw_fixed else fixed_assets_dir / "imagen6.png"
-
-    raw_session = os.getenv("INSTAGRAM_SESSION_PATH", "").strip()
-    instagram_session_path = (
-        Path(raw_session) if raw_session else state_dir / "instagram_session"
+    fixed_image_path = _env_path(
+        "FIXED_IMAGE_PATH",
+        fixed_assets_dir / "imagen6.png",
+        root_dir,
     )
 
-    raw_accounts = os.getenv("ACCOUNTS_FILE", "").strip()
-    accounts_file = Path(raw_accounts) if raw_accounts else root_dir / "accounts.txt"
+    instagram_session_path = _env_path(
+        "INSTAGRAM_SESSION_PATH",
+        state_dir / "instagram_session",
+        root_dir,
+    )
+
+    accounts_file = _env_path("ACCOUNTS_FILE", root_dir / "accounts.txt", root_dir)
 
     return Settings(
         root_dir=root_dir,

@@ -579,6 +579,40 @@ def test_visual_fingerprint_blocks_reusing_same_image(temp_workspace):
         selector.create_plan({"fingerprint": [candidates[1]]}, VideoType.TYPE_3, Language.ES)
 
 
+def test_visual_fingerprint_blocks_slightly_changed_image(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "near_fingerprint"
+    account_dir.mkdir()
+
+    first = _make_candidate(account_dir, username="near_fingerprint", idx=1)
+    second = _make_candidate(account_dir, username="near_fingerprint", idx=2)
+    with Image.open(first.local_path) as image:
+        changed = image.convert("RGB").resize((image.width - 8, image.height - 8))
+        changed.save(second.local_path)
+    second.source_id = "near_fingerprint:other_post:0"
+    second.permalink = "https://instagram.com/near_fingerprint/p/other_post"
+    for candidate in (first, second):
+        candidate.metrics = _metrics_stub(
+            quality=0.86,
+            daylight=0.78,
+            faces=1,
+            is_landscape=False,
+            casual=0.05,
+            luxury=0.75,
+            portrait_focus=0.72,
+            affluent=0.84,
+            laptop=1.0,
+            hands=0.5,
+        )
+
+    selector = ImageSelector(settings, state)
+    selector._prepare_candidates([first])
+    state.reserve_media(selector.reservation_keys_for([first]), job_id="previous")
+
+    with pytest.raises(ValueError):
+        selector.create_plan({"near_fingerprint": [second]}, VideoType.TYPE_3, Language.ES)
+
+
 def _metrics_stub(
     *,
     quality: float,

@@ -629,9 +629,10 @@ class ImageSelector:
     def _prepare_candidates(self, media_items: list[MediaCandidate]) -> None:
         for media in media_items:
             if media.metrics is not None:
-                if media.content_fingerprint is None:
+                if not media.content_fingerprints:
                     try:
-                        media.content_fingerprint = self._fingerprint_image(media)
+                        media.content_fingerprints = self._fingerprint_images(media)
+                        media.content_fingerprint = media.content_fingerprints[0]
                     except (UnidentifiedImageError, OSError, ValueError) as error:
                         LOGGER.warning(
                             "Skipping unreadable image %s: %s", media.local_path, error
@@ -640,13 +641,15 @@ class ImageSelector:
                 continue
             try:
                 media.metrics = self._analyze_image(media)
-                media.content_fingerprint = self._fingerprint_image(media)
+                media.content_fingerprints = self._fingerprint_images(media)
+                media.content_fingerprint = media.content_fingerprints[0]
             except (UnidentifiedImageError, OSError, ValueError) as error:
                 LOGGER.warning(
                     "Skipping unreadable image %s: %s", media.local_path, error
                 )
                 media.metrics = None
                 media.content_fingerprint = None
+                media.content_fingerprints = []
 
     def _analyze_image(self, media: MediaCandidate) -> ImageMetrics:
         rgb = self._open_image_rgb_array(media)
@@ -770,16 +773,42 @@ class ImageSelector:
             media.height, media.width = rgb.shape[:2]
             return rgb.astype(np.uint8)
 
-    def _fingerprint_image(self, media: MediaCandidate) -> str:
+    def _fingerprint_images(self, media: MediaCandidate) -> list[str]:
         with Image.open(media.local_path) as raw:
-            image = raw.convert("L").resize((8, 8), Image.Resampling.LANCZOS)
-        pixels = np.asarray(image, dtype=np.float32)
+            image = raw.convert("L")
+        return [
+            self._average_hash(image),
+            self._difference_hash(image),
+            self._perceptual_hash(image),
+        ]
+
+    def _average_hash(self, image: Image.Image) -> str:
+        small = image.resize((8, 8), Image.Resampling.LANCZOS)
+        pixels = np.asarray(small, dtype=np.float32)
         mean = float(pixels.mean())
         bits = pixels >= mean
+        return f"ahash:{self._bits_to_hex(bits)}"
+
+    def _difference_hash(self, image: Image.Image) -> str:
+        small = image.resize((9, 8), Image.Resampling.LANCZOS)
+        pixels = np.asarray(small, dtype=np.float32)
+        bits = pixels[:, 1:] >= pixels[:, :-1]
+        return f"dhash:{self._bits_to_hex(bits)}"
+
+    def _perceptual_hash(self, image: Image.Image) -> str:
+        small = image.resize((32, 32), Image.Resampling.LANCZOS)
+        pixels = np.asarray(small, dtype=np.float32)
+        dct = cv2.dct(pixels)
+        low_freq = dct[:8, :8]
+        median = float(np.median(low_freq[1:, 1:]))
+        bits = low_freq >= median
+        return f"phash:{self._bits_to_hex(bits)}"
+
+    def _bits_to_hex(self, bits: np.ndarray) -> str:
         value = 0
         for bit in bits.flatten():
             value = (value << 1) | int(bit)
-        return f"ahash:{value:016x}"
+        return f"{value:016x}"
 
     def _looks_like_heic(self, path) -> bool:
         try:
@@ -1110,6 +1139,8 @@ class ImageSelector:
             for key in (
                 media.source_id,
                 self._post_reservation_key(media),
+                self._permalink_reservation_key(media),
+                *media.content_fingerprints,
                 media.content_fingerprint,
             ):
                 if not key or key in seen:
@@ -1123,6 +1154,12 @@ class ImageSelector:
         if not post_key or post_key == media.source_id:
             return None
         return f"post:{post_key}"
+
+    def _permalink_reservation_key(self, media: MediaCandidate) -> str | None:
+        permalink = (media.permalink or "").strip().rstrip("/")
+        if not permalink or permalink.startswith("fixed://"):
+            return None
+        return f"permalink:{permalink.lower()}"
 
     def _first_image_is_valid(self, media: MediaCandidate) -> bool:
         if media.metrics is None:

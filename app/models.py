@@ -113,6 +113,7 @@ class MediaCandidate:
     created_at: str
     metrics: ImageMetrics | None = None
     content_fingerprint: str | None = None
+    content_fingerprints: list[str] = field(default_factory=list)
 
 
 @dataclass

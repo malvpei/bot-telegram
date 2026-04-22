@@ -24,6 +24,11 @@ from app.models import Language, VideoType
 _LOCK_TIMEOUT_SECONDS = 30.0
 _ATOMIC_REPLACE_RETRIES = 5
 _ATOMIC_REPLACE_BACKOFF_SECONDS = 0.05
+_VISUAL_HASH_THRESHOLDS = {
+    "ahash": 6,
+    "dhash": 8,
+    "phash": 10,
+}
 
 
 class StateStore:
@@ -289,7 +294,34 @@ class StateStore:
     def _media_id_is_used(media_id: str, used: dict[str, Any]) -> bool:
         if media_id in used:
             return True
-        if not media_id.startswith("post:"):
+        if media_id.startswith("post:"):
+            source_prefix = media_id.removeprefix("post:") + ":"
+            return any(key.startswith(source_prefix) for key in used)
+        return StateStore._visual_hash_is_used(media_id, used)
+
+    @staticmethod
+    def _visual_hash_is_used(media_id: str, used: dict[str, Any]) -> bool:
+        prefix, separator, raw_value = media_id.partition(":")
+        if not separator or prefix not in _VISUAL_HASH_THRESHOLDS:
             return False
-        source_prefix = media_id.removeprefix("post:") + ":"
-        return any(key.startswith(source_prefix) for key in used)
+        try:
+            value = int(raw_value, 16)
+        except ValueError:
+            return False
+        threshold = _VISUAL_HASH_THRESHOLDS[prefix]
+        expected_length = len(raw_value)
+        for used_id in used:
+            used_prefix, used_separator, used_raw_value = used_id.partition(":")
+            if (
+                used_separator != ":"
+                or used_prefix != prefix
+                or len(used_raw_value) != expected_length
+            ):
+                continue
+            try:
+                used_value = int(used_raw_value, 16)
+            except ValueError:
+                continue
+            if (value ^ used_value).bit_count() <= threshold:
+                return True
+        return False
