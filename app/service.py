@@ -299,14 +299,9 @@ class VideoCreationService:
     ) -> list[str]:
         shuffled = list(usernames)
         random.shuffle(shuffled)
-        recent = set(
-            self.state.recent_chosen_accounts(limit=len(shuffled), video_type=video_type)
-        )
+        recent = set(self.state.recent_chosen_accounts(limit=len(shuffled)))
         fresh = [username for username in shuffled if username.lower() not in recent]
-        recent_order = self.state.recent_chosen_accounts(
-            limit=len(shuffled),
-            video_type=video_type,
-        )
+        recent_order = self.state.recent_chosen_accounts(limit=len(shuffled))
         recent_position = {
             account: index
             for index, account in enumerate(recent_order)

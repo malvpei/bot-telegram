@@ -19,6 +19,7 @@ from app.accounts import AccountsFileError, load_accounts
 from app.config import get_settings
 from app.models import Language, VideoRequest, VideoType
 from app.service import VideoCreationService
+from app.state import StateStore
 
 
 TYPE_STATE, LANGUAGE_STATE = range(2)
@@ -409,13 +410,43 @@ def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def _ensure_allowed(update: Update) -> bool:
     settings = get_settings()
-    if not settings.allowed_chat_ids:
+    chat_allowed = (
+        not settings.allowed_chat_ids
+        or bool(
+            update.effective_chat
+            and update.effective_chat.id in settings.allowed_chat_ids
+        )
+    )
+    if not chat_allowed:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "Este chat no está autorizado para usar el bot."
+            )
+        return False
+
+    if update.effective_user is None:
+        if update.effective_message:
+            await update.effective_message.reply_text(
+                "No pude identificar tu cuenta de Telegram."
+            )
+        return False
+
+    store = StateStore(
+        settings.state_dir,
+        history_max_per_bucket=settings.history_max_per_bucket,
+    )
+    username = update.effective_user.username or update.effective_user.full_name or ""
+    if store.claim_or_check_owner(
+        user_id=update.effective_user.id,
+        chat_id=update.effective_chat.id if update.effective_chat else None,
+        username=username,
+    ):
         return True
-    if update.effective_chat and update.effective_chat.id in settings.allowed_chat_ids:
-        return True
+
     if update.effective_message:
         await update.effective_message.reply_text(
-            "Este chat no está autorizado para usar el bot."
+            "Este bot ya está vinculado a otra cuenta de Telegram. Usa la misma "
+            "cuenta/número en tus dos móviles."
         )
     return False
 

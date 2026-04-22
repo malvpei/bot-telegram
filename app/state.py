@@ -34,6 +34,7 @@ class StateStore:
         self._recent_scripts_path = self.state_dir / "recent_scripts.json"
         self._script_history_path = self.state_dir / "script_history.json"
         self._jobs_log_path = self.state_dir / "jobs_log.json"
+        self._owner_path = self.state_dir / "telegram_owner.json"
         self._lock_path = self.state_dir / ".state.lock"
         self._thread_lock = Lock()
         self._history_max = max(20, history_max_per_bucket)
@@ -221,6 +222,40 @@ class StateStore:
             if len(recent) >= limit:
                 break
         return recent
+
+    def claim_or_check_owner(
+        self,
+        *,
+        user_id: int,
+        chat_id: int | None,
+        username: str,
+    ) -> bool:
+        with self._exclusive():
+            owner = self._read_json(self._owner_path, {})
+            owner_id = owner.get("user_id")
+            if owner_id is None:
+                self._write_json(
+                    self._owner_path,
+                    {
+                        "user_id": user_id,
+                        "chat_id": chat_id,
+                        "username": username,
+                        "claimed_at": datetime.now(timezone.utc).isoformat(),
+                    },
+                )
+                return True
+            return int(owner_id) == user_id
+
+    def get_owner_user_id(self) -> int | None:
+        with self._exclusive():
+            owner = self._read_json(self._owner_path, {})
+        owner_id = owner.get("user_id")
+        if owner_id is None:
+            return None
+        try:
+            return int(owner_id)
+        except (TypeError, ValueError):
+            return None
 
     def build_job_record(
         self,

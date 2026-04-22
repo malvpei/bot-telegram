@@ -91,3 +91,24 @@ def test_recent_chosen_accounts_returns_newest_unique_accounts(state_dir):
         "gamma",
         "alpha",
     ]
+
+
+def test_claim_or_check_owner_allows_only_first_telegram_user(state_dir):
+    store = StateStore(state_dir)
+
+    assert store.claim_or_check_owner(
+        user_id=10,
+        chat_id=100,
+        username="owner",
+    )
+    assert store.claim_or_check_owner(
+        user_id=10,
+        chat_id=200,
+        username="owner-second-device",
+    )
+    assert not store.claim_or_check_owner(
+        user_id=11,
+        chat_id=300,
+        username="other",
+    )
+    assert store.get_owner_user_id() == 10
