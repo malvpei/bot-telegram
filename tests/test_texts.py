@@ -226,6 +226,17 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
     assert all("Hashtags:" not in message for message in package.social_copy.messages)
 
 
+@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3])
+@pytest.mark.parametrize("language", [Language.ES, Language.EN])
+def test_social_copy_has_many_title_variants(state_dir, video_type, language):
+    generator = _make_generator(state_dir)
+
+    titles = generator._social_title_variants(video_type, language)
+
+    assert len(titles) >= 12
+    assert len(set(titles.values())) == len(titles)
+
+
 def _extract_amount(text: str) -> int | None:
     match = re.search(r"(\d+)", text)
     return int(match.group(1)) if match else None

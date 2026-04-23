@@ -562,9 +562,16 @@ class ScriptGenerator:
         language: Language,
     ) -> tuple[str, SocialCopy]:
         variants = self._social_copy_variants(video_type, language)
-        key = random.choice(list(variants))
-        title, description, hashtags = variants[key]
-        return key, SocialCopy(
+        copy_key = random.choice(list(variants))
+        fallback_title, description, hashtags = variants[copy_key]
+        title_variants = self._social_title_variants(video_type, language)
+        if title_variants:
+            title_key = random.choice(list(title_variants))
+            title = title_variants[title_key]
+        else:
+            title_key = "default"
+            title = fallback_title
+        return f"{copy_key}:{title_key}", SocialCopy(
             title=title,
             description=description,
             hashtags=hashtags,
@@ -578,6 +585,107 @@ class ScriptGenerator:
         if language == Language.EN:
             return self._social_copy_variants_en(video_type)
         return self._social_copy_variants_es(video_type)
+
+    def _social_title_variants(
+        self,
+        video_type: VideoType,
+        language: Language,
+    ) -> dict[str, str]:
+        if language == Language.EN:
+            return self._social_title_variants_en(video_type)
+        return self._social_title_variants_es(video_type)
+
+    def _social_title_variants_es(self, video_type: VideoType) -> dict[str, str]:
+        if video_type == VideoType.TYPE_1:
+            return {
+                "t1": "Lo que facture cuando deje de adivinar",
+                "t2": "Mi cambio real con dropshipping",
+                "t3": "De perder meses a entender los numeros",
+                "t4": "La parte que nadie me explico al empezar",
+                "t5": "Cuanto hice cuando empece a usar datos",
+                "t6": "El mes donde todo empezo a tener sentido",
+                "t7": "Lo que habria querido saber antes",
+                "t8": "Mi progreso real montando una tienda online",
+                "t9": "De probar al azar a vender con criterio",
+                "t10": "Asi cambio mi tienda en 6 meses",
+                "t11": "El error que me estaba costando dinero",
+                "t12": "La diferencia entre intentarlo y medirlo",
+            }
+        if video_type == VideoType.TYPE_2:
+            return {
+                "t1": "Antes de gastar mas dinero mira esto",
+                "t2": "4 errores que frenan una tienda online",
+                "t3": "La revision que haria antes de vender",
+                "t4": "Si haces dropshipping revisa esto",
+                "t5": "Lo que miraria antes de lanzar anuncios",
+                "t6": "4 puntos que pueden salvar tu presupuesto",
+                "t7": "La base que casi nadie revisa al empezar",
+                "t8": "Esto separa una tienda floja de una seria",
+                "t9": "Antes de buscar otro producto arregla esto",
+                "t10": "Los detalles que te hacen perder ventas",
+                "t11": "Una checklist rapida para tu tienda",
+                "t12": "Si no vendes revisa estas 4 cosas",
+            }
+        return {
+            "t1": "Herramientas simples para empezar en 2026",
+            "t2": "El stack que usaria para lanzar una tienda",
+            "t3": "Tu base para empezar dropshipping",
+            "t4": "6 herramientas para no complicarte al empezar",
+            "t5": "La ruta simple para montar tu primera tienda",
+            "t6": "Empieza con estas herramientas y valida rapido",
+            "t7": "Lo minimo que necesitas para probar una tienda",
+            "t8": "Un stack limpio para vender online",
+            "t9": "De idea a tienda con herramientas simples",
+            "t10": "La base practica para empezar dropshipping",
+            "t11": "Herramientas que si usaria al empezar",
+            "t12": "Ordena tu tienda antes de complicarte",
+        }
+
+    def _social_title_variants_en(self, video_type: VideoType) -> dict[str, str]:
+        if video_type == VideoType.TYPE_1:
+            return {
+                "t1": "What changed when I stopped guessing",
+                "t2": "My real dropshipping progress",
+                "t3": "From random tests to clearer numbers",
+                "t4": "The part I wish I knew earlier",
+                "t5": "How my store changed in 6 months",
+                "t6": "The month dropshipping started making sense",
+                "t7": "The mistake that kept costing me money",
+                "t8": "What helped me read the numbers better",
+                "t9": "From almost quitting to a real process",
+                "t10": "The shift that made my tests useful",
+                "t11": "What I learned after months of trying",
+                "t12": "The difference between guessing and measuring",
+            }
+        if video_type == VideoType.TYPE_2:
+            return {
+                "t1": "Check this before spending more",
+                "t2": "4 mistakes that slow down online stores",
+                "t3": "The review I would do before selling",
+                "t4": "If you dropship, check these first",
+                "t5": "Before running ads, look at this",
+                "t6": "4 points that can save your budget",
+                "t7": "The base most beginners skip",
+                "t8": "What separates weak stores from solid ones",
+                "t9": "Fix this before testing another product",
+                "t10": "Small details that cost sales",
+                "t11": "A quick checklist for your store",
+                "t12": "If sales are slow, review these 4 things",
+            }
+        return {
+            "t1": "Simple tools to start in 2026",
+            "t2": "The stack I would use to launch a store",
+            "t3": "Your base for starting dropshipping",
+            "t4": "6 tools to keep the start simple",
+            "t5": "The simple route for your first store",
+            "t6": "Start with these tools and validate faster",
+            "t7": "The minimum setup for testing a store",
+            "t8": "A clean stack for selling online",
+            "t9": "From idea to store with simple tools",
+            "t10": "A practical base for dropshipping",
+            "t11": "Tools I would actually use at the start",
+            "t12": "Organize your store before overcomplicating it",
+        }
 
     def _social_copy_variants_es(
         self,
