@@ -42,11 +42,11 @@ def test_release_media_frees_ids(state_dir):
     assert not store.is_media_used("y")
 
 
-def test_visual_hash_memory_blocks_near_duplicates(state_dir):
+def test_media_memory_is_exact_not_near_duplicate(state_dir):
     store = StateStore(state_dir)
     store.reserve_media(["ahash:0000000000000000"], job_id="job-1")
 
-    assert store.is_media_used("ahash:0000000000000001")
+    assert not store.is_media_used("ahash:0000000000000001")
     assert not store.is_media_used("ahash:ffffffffffffffff")
 
 

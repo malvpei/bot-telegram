@@ -4,6 +4,7 @@ import logging
 import math
 import random
 import re
+import hashlib
 from dataclasses import dataclass, replace
 from typing import Callable
 
@@ -775,40 +776,11 @@ class ImageSelector:
 
     def _fingerprint_images(self, media: MediaCandidate) -> list[str]:
         with Image.open(media.local_path) as raw:
-            image = raw.convert("L")
-        return [
-            self._average_hash(image),
-            self._difference_hash(image),
-            self._perceptual_hash(image),
-        ]
-
-    def _average_hash(self, image: Image.Image) -> str:
-        small = image.resize((8, 8), Image.Resampling.LANCZOS)
-        pixels = np.asarray(small, dtype=np.float32)
-        mean = float(pixels.mean())
-        bits = pixels >= mean
-        return f"ahash:{self._bits_to_hex(bits)}"
-
-    def _difference_hash(self, image: Image.Image) -> str:
-        small = image.resize((9, 8), Image.Resampling.LANCZOS)
-        pixels = np.asarray(small, dtype=np.float32)
-        bits = pixels[:, 1:] >= pixels[:, :-1]
-        return f"dhash:{self._bits_to_hex(bits)}"
-
-    def _perceptual_hash(self, image: Image.Image) -> str:
-        small = image.resize((32, 32), Image.Resampling.LANCZOS)
-        pixels = np.asarray(small, dtype=np.float32)
-        dct = cv2.dct(pixels)
-        low_freq = dct[:8, :8]
-        median = float(np.median(low_freq[1:, 1:]))
-        bits = low_freq >= median
-        return f"phash:{self._bits_to_hex(bits)}"
-
-    def _bits_to_hex(self, bits: np.ndarray) -> str:
-        value = 0
-        for bit in bits.flatten():
-            value = (value << 1) | int(bit)
-        return f"{value:016x}"
+            image = raw.convert("RGB")
+        digest = hashlib.sha256()
+        digest.update(str(image.size).encode("ascii"))
+        digest.update(image.tobytes())
+        return [f"sha256:{digest.hexdigest()}"]
 
     def _looks_like_heic(self, path) -> bool:
         try:

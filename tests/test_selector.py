@@ -579,7 +579,7 @@ def test_visual_fingerprint_blocks_reusing_same_image(temp_workspace):
         selector.create_plan({"fingerprint": [candidates[1]]}, VideoType.TYPE_3, Language.ES)
 
 
-def test_visual_fingerprint_blocks_slightly_changed_image(temp_workspace):
+def test_exact_fingerprint_does_not_block_slightly_changed_image(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "near_fingerprint"
     account_dir.mkdir()
@@ -609,8 +609,10 @@ def test_visual_fingerprint_blocks_slightly_changed_image(temp_workspace):
     selector._prepare_candidates([first])
     state.reserve_media(selector.reservation_keys_for([first]), job_id="previous")
 
-    with pytest.raises(ValueError):
-        selector.create_plan({"near_fingerprint": [second]}, VideoType.TYPE_3, Language.ES)
+    plan = selector.create_plan({"near_fingerprint": [second]}, VideoType.TYPE_3, Language.ES)
+
+    assert plan.chosen_account == "near_fingerprint"
+    assert plan.slides[0].media.source_id == second.source_id
 
 
 def _metrics_stub(
