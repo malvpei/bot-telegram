@@ -55,18 +55,6 @@ class PlanWhenGoodSelector:
         )
 
 
-class PlanForEveryAccountSelector:
-    def create_plan(self, catalog, video_type, language):
-        account = next(iter(catalog))
-        return VideoPlan(
-            chosen_account=account,
-            video_type=video_type,
-            language=language,
-            slides=[],
-            used_media_ids=[f"{account}:1"],
-        )
-
-
 class ExtraImageSelector:
     def pick_extra_image(self, candidates, video_type):
         return candidates[0]
@@ -236,10 +224,30 @@ def test_picker_keeps_searching_beyond_first_failed_accounts(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_picker_samples_multiple_viable_accounts_before_selecting(monkeypatch):
+def test_picker_uses_pure_random_account_order(monkeypatch):
+    def reverse_shuffle(values):
+        values.reverse()
+
+    monkeypatch.setattr("app.service.random.shuffle", reverse_shuffle)
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), account_pick_attempts=0)
+        service.state = StateStore(root / "state")
+
+        ordered = service._ordered_accounts_for_pick(
+            ["one", "two", "three"],
+            VideoType.TYPE_1,
+        )
+
+        assert ordered == ["three", "two", "one"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_picker_tries_next_random_account_when_video_cannot_be_made(monkeypatch):
     monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
-    monkeypatch.setattr("app.service.random.random", lambda: 0.0)
-    monkeypatch.setattr("app.service.random.choice", lambda values: values[-1])
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -247,7 +255,7 @@ def test_picker_samples_multiple_viable_accounts_before_selecting(monkeypatch):
         service.settings = replace(get_settings(), account_pick_attempts=0)
         service.state = StateStore(root / "state")
         service.collector = FakeCollector()
-        service.selector = PlanForEveryAccountSelector()
+        service.selector = PlanWhenGoodSelector()
         request = VideoRequest(
             chat_id=1,
             user_id=1,
@@ -257,164 +265,11 @@ def test_picker_samples_multiple_viable_accounts_before_selecting(monkeypatch):
         )
 
         plan, tried = service._pick_account_with_plan(
-            ["one", "two", "three", "four", "five", "six"],
+            ["bad", "good"],
             request,
         )
 
-        assert tried == ["one", "two", "three", "four", "five"]
-        assert plan.chosen_account == "five"
-    finally:
-        shutil.rmtree(root, ignore_errors=True)
-
-
-def test_picker_prioritizes_accounts_not_recently_used(monkeypatch):
-    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
-    monkeypatch.setattr("app.service.random.random", lambda: 0.0)
-    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
-    root.mkdir(parents=True)
-    try:
-        service = VideoCreationService.__new__(VideoCreationService)
-        service.settings = replace(get_settings(), account_pick_attempts=0)
-        service.state = StateStore(root / "state")
-        service.state.log_job(
-            service.state.build_job_record(
-                job_id="job-old",
-                chosen_account="old",
-                requested_accounts=["old"],
-                fallback_accounts=[],
-                video_type=VideoType.TYPE_1,
-                language=Language.ES,
-                video_path=None,
-                script_path="script.txt",
-            )
-        )
-
-        ordered = service._ordered_accounts_for_pick(
-            ["old", "fresh"],
-            VideoType.TYPE_1,
-        )
-
-        assert ordered == ["fresh", "old"]
-    finally:
-        shutil.rmtree(root, ignore_errors=True)
-
-
-def test_picker_uses_oldest_recent_account_before_newest(monkeypatch):
-    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
-    monkeypatch.setattr("app.service.random.random", lambda: 0.0)
-    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
-    root.mkdir(parents=True)
-    try:
-        service = VideoCreationService.__new__(VideoCreationService)
-        service.settings = replace(get_settings(), account_pick_attempts=0)
-        service.state = StateStore(root / "state")
-        service.state.log_job(
-            service.state.build_job_record(
-                job_id="job-oldest",
-                chosen_account="oldest",
-                requested_accounts=["oldest"],
-                fallback_accounts=[],
-                video_type=VideoType.TYPE_1,
-                language=Language.ES,
-                video_path=None,
-                script_path="script.txt",
-            )
-        )
-        service.state.log_job(
-            service.state.build_job_record(
-                job_id="job-newest",
-                chosen_account="newest",
-                requested_accounts=["newest"],
-                fallback_accounts=[],
-                video_type=VideoType.TYPE_1,
-                language=Language.ES,
-                video_path=None,
-                script_path="script.txt",
-            )
-        )
-
-        ordered = service._ordered_accounts_for_pick(
-            ["newest", "oldest"],
-            VideoType.TYPE_1,
-        )
-
-        assert ordered == ["oldest", "newest"]
-    finally:
-        shutil.rmtree(root, ignore_errors=True)
-
-
-def test_picker_uses_global_recent_accounts_across_video_types(monkeypatch):
-    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
-    monkeypatch.setattr("app.service.random.random", lambda: 0.0)
-    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
-    root.mkdir(parents=True)
-    try:
-        service = VideoCreationService.__new__(VideoCreationService)
-        service.settings = replace(get_settings(), account_pick_attempts=0)
-        service.state = StateStore(root / "state")
-        service.state.log_job(
-            service.state.build_job_record(
-                job_id="job-type-2",
-                chosen_account="old",
-                requested_accounts=["old"],
-                fallback_accounts=[],
-                video_type=VideoType.TYPE_2,
-                language=Language.ES,
-                video_path=None,
-                script_path="script.txt",
-            )
-        )
-
-        ordered = service._ordered_accounts_for_pick(
-            ["old", "fresh"],
-            VideoType.TYPE_1,
-        )
-
-        assert ordered == ["fresh", "old"]
-    finally:
-        shutil.rmtree(root, ignore_errors=True)
-
-
-def test_picker_keeps_newest_recent_accounts_in_cooldown(monkeypatch):
-    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
-    values = iter([0.0, 0.99])
-    monkeypatch.setattr("app.service.random.random", lambda: next(values))
-    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
-    root.mkdir(parents=True)
-    try:
-        service = VideoCreationService.__new__(VideoCreationService)
-        service.settings = replace(get_settings(), account_pick_attempts=0)
-        service.state = StateStore(root / "state")
-        service.state.log_job(
-            service.state.build_job_record(
-                job_id="job-oldest",
-                chosen_account="oldest",
-                requested_accounts=["oldest"],
-                fallback_accounts=[],
-                video_type=VideoType.TYPE_1,
-                language=Language.ES,
-                video_path=None,
-                script_path="script.txt",
-            )
-        )
-        service.state.log_job(
-            service.state.build_job_record(
-                job_id="job-newest",
-                chosen_account="newest",
-                requested_accounts=["newest"],
-                fallback_accounts=[],
-                video_type=VideoType.TYPE_1,
-                language=Language.ES,
-                video_path=None,
-                script_path="script.txt",
-            )
-        )
-
-        ordered = service._ordered_accounts_for_pick(
-            ["oldest", "newest"],
-            VideoType.TYPE_1,
-        )
-
-        assert ordered == ["oldest", "newest"]
+        assert plan.chosen_account == "good"
+        assert tried == ["bad", "good"]
     finally:
         shutil.rmtree(root, ignore_errors=True)

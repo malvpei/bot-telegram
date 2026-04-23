@@ -20,7 +20,6 @@ from app.texts import ScriptGenerator
 
 
 LOGGER = logging.getLogger(__name__)
-VIABLE_ACCOUNT_POOL_TARGET = 5
 
 
 def _merge_preserving_order(existing: list[str], new_items: list[str]) -> list[str]:
@@ -270,15 +269,13 @@ class VideoCreationService:
     def _pick_account_with_plan(
         self, usernames: list[str], request: VideoRequest
     ):
-        # Try accounts progressively. Account reuse is allowed because image
-        # memory is the strict guard, but we still build a small viable pool
-        # before choosing so the first "good enough" account does not dominate.
+        # Shuffle all accounts and try them one by one. The account choice is
+        # intentionally pure random; if a picked account cannot produce the
+        # requested video, the next random account gets a chance.
         ordered = self._ordered_accounts_for_pick(usernames, request.video_type)
         max_attempts = self._max_account_attempts(len(ordered))
-        target_viable = min(VIABLE_ACCOUNT_POOL_TARGET, max_attempts)
         tried: list[str] = []
         errors: list[str] = []
-        viable_plans: list[VideoPlan] = []
         last_plan_error: str | None = None
         for username in ordered[:max_attempts]:
             tried.append(username)
@@ -293,15 +290,12 @@ class VideoCreationService:
                 plan = self.selector.create_plan(
                     {username: candidates}, request.video_type, request.language
                 )
-                viable_plans.append(plan)
                 LOGGER.info(
-                    "Viable plan candidate @%s (%d/%d)",
+                    "Selected random viable account @%s after %d attempt(s)",
                     plan.chosen_account,
-                    len(viable_plans),
-                    target_viable,
+                    len(tried),
                 )
-                if len(viable_plans) >= target_viable:
-                    break
+                return plan, tried
             except ValueError as error:
                 last_plan_error = str(error)
                 LOGGER.info(
@@ -311,14 +305,6 @@ class VideoCreationService:
                     error,
                 )
                 continue
-        if viable_plans:
-            chosen = random.choice(viable_plans)
-            LOGGER.info(
-                "Selected @%s from %d viable account plan(s)",
-                chosen.chosen_account,
-                len(viable_plans),
-            )
-            return chosen, tried
         if last_plan_error:
             errors.append(last_plan_error)
         raise InstagramCollectorError(
@@ -334,39 +320,13 @@ class VideoCreationService:
     ) -> list[str]:
         shuffled = list(usernames)
         random.shuffle(shuffled)
-        recent_order = self.state.recent_chosen_accounts(limit=len(shuffled))
-        recent_position = {
-            account: index
-            for index, account in enumerate(recent_order)
-        }
-        fresh_count = sum(
-            1 for username in shuffled
-            if username.lower() not in recent_position
-        )
-        recent_count = len(shuffled) - fresh_count
-        age_denominator = max(len(recent_position) - 1, 1)
-        cooldown_size = min(max(12, len(shuffled) // 3), len(recent_position))
-
-        def account_score(username: str) -> float:
-            recent_index = recent_position.get(username.lower())
-            if recent_index is None:
-                return 2.0 + random.random()
-            age_score = recent_index / age_denominator
-            score = age_score + (random.random() * 0.75)
-            if recent_index < cooldown_size:
-                score -= 1.5
-            return score
-
-        ordered = sorted(shuffled, key=account_score, reverse=True)
-        sample = ", ".join(f"@{username}" for username in ordered[:12])
+        sample = ", ".join(f"@{username}" for username in shuffled[:12])
         LOGGER.info(
-            "Account picker: %d fresh / %d recent accounts available, cooldown=%d; first candidates: %s",
-            fresh_count,
-            recent_count,
-            cooldown_size,
+            "Account picker: pure random order over %d account(s); first candidates: %s",
+            len(shuffled),
             sample,
         )
-        return ordered
+        return shuffled
 
     def _max_account_attempts(self, available_count: int) -> int:
         configured = self.settings.account_pick_attempts
