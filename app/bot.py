@@ -68,6 +68,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("accounts", accounts_command))
+    application.add_handler(CommandHandler("memory", memory_command))
     application.add_handler(wizard_handler)
     application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
     application.add_error_handler(error_handler)
@@ -83,6 +84,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Este bot genera videos verticales desde las cuentas de Instagram que "
         "hayas dejado en accounts.txt.\n\n"
         "Comandos:\n"
+        "/memory - ver si la memoria persiste tras redeploy\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas cargadas\n"
         "/cancel — cancelar el wizard actual"
@@ -106,7 +108,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "3 = hook + herramientas para empezar dropshipping en 2026\n\n"
         "Las cuentas se leen de accounts.txt (una por línea). Para cambiarlas "
         "edita ese archivo y reinicia el bot (o solo guarda, el archivo se "
-        "relee en cada /create)."
+        "relee en cada /create).\n\n"
+        "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
+        "jobs y cuentas recientes no vuelven a cero."
     )
     await update.effective_message.reply_text(message)
 
@@ -126,6 +130,51 @@ async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     suffix = "" if len(accounts) <= 20 else f"\n... y {len(accounts) - 20} más"
     await update.effective_message.reply_text(
         f"Cuentas cargadas ({len(accounts)}):\n{preview}{suffix}"
+    )
+
+
+async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_allowed(update):
+        return
+
+    settings = get_settings()
+    store = StateStore(
+        settings.state_dir,
+        history_max_per_bucket=settings.history_max_per_bucket,
+    )
+    marker = store.ensure_persistence_marker()
+    snapshot = store.memory_snapshot(recent_limit=10)
+    try:
+        accounts = load_accounts(settings.accounts_file)
+        accounts_line = f"{len(accounts)} desde {settings.accounts_file}"
+    except AccountsFileError as error:
+        accounts_line = f"error leyendo {settings.accounts_file}: {error}"
+
+    recent = snapshot["recent_accounts"]
+    recent_line = ", ".join(f"@{account}" for account in recent) if recent else "-"
+    top_accounts = snapshot["top_accounts"]
+    top_line = (
+        ", ".join(f"@{account}({count})" for account, count in top_accounts)
+        if top_accounts
+        else "-"
+    )
+    marker_status = "nuevo en este arranque" if marker.get("created_now") else "existente"
+    marker_id = str(marker.get("install_id") or "-")[:12]
+    created_at = marker.get("created_at") or "-"
+
+    await update.effective_message.reply_text(
+        "Memoria del bot\n"
+        f"DATA_DIR: {settings.data_dir}\n"
+        f"State: {snapshot['state_dir']}\n"
+        f"Marker: {marker_id} ({marker_status}, creado {created_at})\n"
+        f"Cuentas cargadas: {accounts_line}\n"
+        f"Fotos bloqueadas: {snapshot['used_media_count']}\n"
+        f"Jobs guardados: {snapshot['jobs_count']}\n"
+        f"Cuentas usadas distintas: {snapshot['unique_chosen_accounts']}\n"
+        f"Ultimas cuentas: {recent_line}\n"
+        f"Mas repetidas: {top_line}\n\n"
+        "Si despues de redeploy fotos/jobs vuelven a 0 o el marker cambia, "
+        "falta Persistent Storage montado en /app/data dentro de Coolify."
     )
 
 

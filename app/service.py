@@ -65,6 +65,22 @@ class VideoCreationService:
     def preflight(self) -> list[str]:
         # Returns a list of human-readable warnings; empty list means OK.
         warnings: list[str] = []
+        marker = self.state.ensure_persistence_marker()
+        memory = self.state.memory_snapshot(recent_limit=8)
+        LOGGER.info(
+            "State memory at %s: %d used media keys, %d jobs, %d unique chosen accounts, marker=%s",
+            memory["state_dir"],
+            memory["used_media_count"],
+            memory["jobs_count"],
+            memory["unique_chosen_accounts"],
+            marker.get("install_id", "-"),
+        )
+        if marker.get("created_now"):
+            warnings.append(
+                "Se ha creado un marker nuevo de memoria persistente en "
+                f"{self.settings.state_dir}. Si este aviso aparece despues de cada "
+                "redeploy, Coolify no esta preservando /app/data."
+            )
         if not self.settings.fixed_image_path.exists():
             warnings.append(
                 "Falta la imagen fija obligatoria: "
@@ -311,20 +327,26 @@ class VideoCreationService:
         )
         recent_count = len(shuffled) - fresh_count
         age_denominator = max(len(recent_position) - 1, 1)
+        cooldown_size = min(max(12, len(shuffled) // 3), len(recent_position))
 
         def account_score(username: str) -> float:
             recent_index = recent_position.get(username.lower())
             if recent_index is None:
-                return random.random() + 0.15
+                return 2.0 + random.random()
             age_score = recent_index / age_denominator
-            recent_penalty = 0.28 * (1.0 - age_score)
-            return random.random() - recent_penalty
+            score = age_score + (random.random() * 0.75)
+            if recent_index < cooldown_size:
+                score -= 1.5
+            return score
 
         ordered = sorted(shuffled, key=account_score, reverse=True)
+        sample = ", ".join(f"@{username}" for username in ordered[:12])
         LOGGER.info(
-            "Account picker: %d fresh / %d recent accounts available",
+            "Account picker: %d fresh / %d recent accounts available, cooldown=%d; first candidates: %s",
             fresh_count,
             recent_count,
+            cooldown_size,
+            sample,
         )
         return ordered
 

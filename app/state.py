@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
 from typing import Any, Iterator
+from uuid import uuid4
 
 try:
     from filelock import FileLock, Timeout as FileLockTimeout
@@ -40,6 +41,7 @@ class StateStore:
         self._script_history_path = self.state_dir / "script_history.json"
         self._jobs_log_path = self.state_dir / "jobs_log.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
+        self._persistence_marker_path = self.state_dir / "persistence_marker.json"
         self._lock_path = self.state_dir / ".state.lock"
         self._thread_lock = Lock()
         self._history_max = max(20, history_max_per_bucket)
@@ -202,6 +204,64 @@ class StateStore:
             jobs = self._read_json(self._jobs_log_path, [])
             jobs.append(payload)
             self._write_json(self._jobs_log_path, jobs)
+
+    def ensure_persistence_marker(self) -> dict[str, Any]:
+        with self._exclusive():
+            marker = self._read_json(self._persistence_marker_path, {})
+            created_now = False
+            if not isinstance(marker, dict) or not marker.get("install_id"):
+                created_now = True
+                marker = {
+                    "install_id": uuid4().hex,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "state_dir": str(self.state_dir),
+                }
+                self._write_json(self._persistence_marker_path, marker)
+            snapshot = dict(marker)
+            snapshot["created_now"] = created_now
+            return snapshot
+
+    def memory_snapshot(self, *, recent_limit: int = 20) -> dict[str, Any]:
+        with self._exclusive():
+            used = self._read_json(self._used_media_path, {})
+            jobs = self._read_json(self._jobs_log_path, [])
+            marker = self._read_json(self._persistence_marker_path, {})
+
+        if not isinstance(used, dict):
+            used = {}
+        if not isinstance(jobs, list):
+            jobs = []
+        if not isinstance(marker, dict):
+            marker = {}
+
+        account_counts: dict[str, int] = {}
+        recent_accounts: list[str] = []
+        recent_seen: set[str] = set()
+        for job in jobs:
+            account = str(job.get("chosen_account") or "").strip().lower()
+            if account:
+                account_counts[account] = account_counts.get(account, 0) + 1
+        for job in reversed(jobs):
+            account = str(job.get("chosen_account") or "").strip().lower()
+            if not account or account in recent_seen:
+                continue
+            recent_seen.add(account)
+            recent_accounts.append(account)
+            if len(recent_accounts) >= recent_limit:
+                break
+
+        return {
+            "state_dir": str(self.state_dir),
+            "used_media_count": len(used),
+            "jobs_count": len(jobs),
+            "unique_chosen_accounts": len(account_counts),
+            "recent_accounts": recent_accounts,
+            "top_accounts": sorted(
+                account_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:recent_limit],
+            "marker": marker,
+        }
 
     def recent_chosen_accounts(
         self,

@@ -332,7 +332,7 @@ def test_picker_uses_global_recent_accounts_across_video_types(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_picker_can_interleave_recent_accounts_instead_of_chronological_queue(monkeypatch):
+def test_picker_keeps_newest_recent_accounts_in_cooldown(monkeypatch):
     monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
     values = iter([0.0, 0.99])
     monkeypatch.setattr("app.service.random.random", lambda: next(values))
@@ -372,6 +372,6 @@ def test_picker_can_interleave_recent_accounts_instead_of_chronological_queue(mo
             VideoType.TYPE_1,
         )
 
-        assert ordered == ["newest", "oldest"]
+        assert ordered == ["oldest", "newest"]
     finally:
         shutil.rmtree(root, ignore_errors=True)

@@ -101,6 +101,44 @@ def test_recent_chosen_accounts_returns_newest_unique_accounts(state_dir):
     ]
 
 
+def test_persistence_marker_is_stable(state_dir):
+    store = StateStore(state_dir)
+
+    first = store.ensure_persistence_marker()
+    second = StateStore(state_dir).ensure_persistence_marker()
+
+    assert first["created_now"] is True
+    assert second["created_now"] is False
+    assert second["install_id"] == first["install_id"]
+
+
+def test_memory_snapshot_reports_usage_and_account_diversity(state_dir):
+    store = StateStore(state_dir)
+    store.ensure_persistence_marker()
+    store.reserve_media(["media-1", "media-2"], job_id="job-1")
+    for job_id, account in [("job-1", "alpha"), ("job-2", "beta"), ("job-3", "alpha")]:
+        store.log_job(
+            store.build_job_record(
+                job_id=job_id,
+                chosen_account=account,
+                requested_accounts=[account],
+                fallback_accounts=[],
+                video_type=VideoType.TYPE_1,
+                language=Language.ES,
+                video_path=None,
+                script_path=f"{job_id}.txt",
+            )
+        )
+
+    snapshot = store.memory_snapshot(recent_limit=5)
+
+    assert snapshot["used_media_count"] == 2
+    assert snapshot["jobs_count"] == 3
+    assert snapshot["unique_chosen_accounts"] == 2
+    assert snapshot["recent_accounts"] == ["alpha", "beta"]
+    assert snapshot["top_accounts"][:2] == [("alpha", 2), ("beta", 1)]
+
+
 def test_claim_or_check_owner_allows_only_first_telegram_user(state_dir):
     store = StateStore(state_dir)
 
