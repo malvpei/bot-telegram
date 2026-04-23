@@ -75,6 +75,11 @@ class VideoCreationService:
             memory["unique_chosen_accounts"],
             marker.get("install_id", "-"),
         )
+        LOGGER.info(
+            "Instagram collection settings: max_posts_per_account=%d, account_cache_ttl_hours=%d",
+            self.settings.max_posts_per_account,
+            self.settings.account_cache_ttl_hours,
+        )
         if marker.get("created_now"):
             warnings.append(
                 "Se ha creado un marker nuevo de memoria persistente en "

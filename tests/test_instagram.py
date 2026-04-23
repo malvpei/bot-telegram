@@ -1,4 +1,4 @@
-from app.instagram import extract_usernames, parse_instagram_username
+from app.instagram import _feed_item_has_image, extract_usernames, parse_instagram_username
 
 
 def test_parse_instagram_username_variants() -> None:
@@ -20,3 +20,18 @@ def test_extract_usernames_deduplicates() -> None:
     )
     assert usernames == ["usuario1", "usuario2"]
 
+
+def test_feed_item_has_image_ignores_videos_and_accepts_carousel_images() -> None:
+    image_candidate = {"image_versions2": {"candidates": [{"url": "https://cdn/image.jpg"}]}}
+
+    assert _feed_item_has_image({"media_type": 2, **image_candidate}) is False
+    assert _feed_item_has_image({"media_type": 1, **image_candidate}) is True
+    assert _feed_item_has_image(
+        {
+            "media_type": 8,
+            "carousel_media": [
+                {"media_type": 2, **image_candidate},
+                {"media_type": 1, **image_candidate},
+            ],
+        }
+    ) is True

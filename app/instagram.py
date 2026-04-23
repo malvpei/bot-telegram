@@ -32,7 +32,7 @@ LOGGER = logging.getLogger(__name__)
 USERNAME_RE = re.compile(r"^[A-Za-z0-9._]{1,30}$")
 RESERVED_PATHS = {"p", "reel", "reels", "stories", "explore", "tv", "accounts", "about"}
 # Bump when cache payload format/source changes so old caches are ignored.
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 FEED_RETRY_ATTEMPTS = 3
 
 DEFAULT_USER_AGENT = (
@@ -455,7 +455,12 @@ class InstagramCollector:
             page_items = page.get("items") or []
             if not page_items:
                 break
-            items.extend(page_items)
+            for item in page_items:
+                if not _feed_item_has_image(item):
+                    continue
+                items.append(item)
+                if len(items) >= max_posts:
+                    break
             if not page.get("more_available"):
                 break
             max_id = page.get("next_max_id")
@@ -465,7 +470,7 @@ class InstagramCollector:
         if not items:
             return None
         LOGGER.info(
-            "IG feed @%s collected %d items across pagination",
+            "IG feed @%s collected %d image post(s) across pagination",
             username,
             len(items),
         )
@@ -542,13 +547,19 @@ class InstagramCollector:
 
         media_items: list[MediaCandidate] = []
         try:
-            for index, post in enumerate(profile.get_posts()):
-                if index >= self.settings.max_posts_per_account:
+            image_post_count = 0
+            for post in profile.get_posts():
+                if image_post_count >= self.settings.max_posts_per_account:
                     break
                 try:
-                    media_items.extend(self._collect_post_media(username, post, account_dir))
+                    post_media = self._collect_post_media(username, post, account_dir)
                 except Exception as error:
                     LOGGER.warning("Skipping post %s of @%s: %s", post.shortcode, username, error)
+                    continue
+                if not post_media:
+                    continue
+                media_items.extend(post_media)
+                image_post_count += 1
         except (ConnectionException, QueryReturnedBadRequestException) as error:
             if not media_items:
                 raise InstagramCollectorError(
@@ -583,6 +594,8 @@ class InstagramCollector:
         # IG logos / suggested-profile avatars mixed with real posts.
         if payload.get("cache_version") != CACHE_VERSION:
             return None
+        if int(payload.get("max_posts_per_account", 0)) != self.settings.max_posts_per_account:
+            return None
         items: list[MediaCandidate] = []
         for raw in payload.get("items", []):
             local = Path(raw["local_path"])
@@ -607,6 +620,7 @@ class InstagramCollector:
         payload = {
             "cached_at": time.time(),
             "cache_version": CACHE_VERSION,
+            "max_posts_per_account": self.settings.max_posts_per_account,
             "items": [
                 {
                     "source_id": item.source_id,
@@ -818,6 +832,16 @@ def _best_feed_image_url(media: dict) -> str | None:
     if not candidates:
         return None
     return candidates[0].get("url")
+
+
+def _feed_item_has_image(item: dict) -> bool:
+    media_type = item.get("media_type")
+    if media_type == 8:
+        return any(
+            media.get("media_type") == 1 and bool(_best_feed_image_url(media))
+            for media in item.get("carousel_media") or []
+        )
+    return media_type == 1 and bool(_best_feed_image_url(item))
 
 
 def _feed_items_to_user(items: list[dict]) -> dict:

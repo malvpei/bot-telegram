@@ -108,7 +108,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `INSTAGRAM_SESSION_PATH` | `data/state/instagram_session` | session file de instaloader |
 | `FIXED_IMAGE_PATH` | `assets/fixed/imagen6.png` | ubicación de imagen6 |
 | `ACCOUNTS_FILE` | `accounts.txt` | archivo con cuentas (una por línea) |
-| `MAX_POSTS_PER_ACCOUNT` | 24 | posts a escanear por cuenta |
+| `MAX_POSTS_PER_ACCOUNT` | 100 | posts con foto a escanear por cuenta |
 | `MAX_URLS_PER_JOB` | 8 | URLs máximas por job (del archivo) |
 | `VIDEO_WIDTH/HEIGHT/FPS` | 1080/1920/30 | render vertical |
 | `SLIDE_SECONDS` | 3.8 | duración de cada slide |

@@ -168,6 +168,8 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"State: {snapshot['state_dir']}\n"
         f"Marker: {marker_id} ({marker_status}, creado {created_at})\n"
         f"Cuentas cargadas: {accounts_line}\n"
+        f"Posts con foto por cuenta: {settings.max_posts_per_account}\n"
+        f"Cache de cuentas: {settings.account_cache_ttl_hours}h\n"
         f"Fotos bloqueadas: {snapshot['used_media_count']}\n"
         f"Jobs guardados: {snapshot['jobs_count']}\n"
         f"Cuentas usadas distintas: {snapshot['unique_chosen_accounts']}\n"

@@ -136,7 +136,7 @@ def get_settings() -> Settings:
         instagram_session_path=instagram_session_path,
         fixed_image_path=fixed_image_path,
         accounts_file=accounts_file,
-        max_posts_per_account=_env_int("MAX_POSTS_PER_ACCOUNT", 24),
+        max_posts_per_account=_env_int("MAX_POSTS_PER_ACCOUNT", 100),
         width=_env_int("VIDEO_WIDTH", 1080),
         height=_env_int("VIDEO_HEIGHT", 1920),
         fps=_env_int("VIDEO_FPS", 30),
