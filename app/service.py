@@ -253,9 +253,9 @@ class VideoCreationService:
     def _pick_account_with_plan(
         self, usernames: list[str], request: VideoRequest
     ):
-        # Try accounts progressively. Fresh accounts are favored, but recent
-        # accounts are still mixed with randomness so the picker never behaves
-        # like a chronological queue.
+        # Try accounts progressively. Account reuse is allowed because the
+        # image memory is the strict guard, so the account order uses only a
+        # soft recentness penalty plus randomness instead of a queue.
         ordered = self._ordered_accounts_for_pick(usernames, request.video_type)
         max_attempts = self._max_account_attempts(len(ordered))
         tried: list[str] = []
@@ -315,9 +315,10 @@ class VideoCreationService:
         def account_score(username: str) -> float:
             recent_index = recent_position.get(username.lower())
             if recent_index is None:
-                return 3.0 + random.random()
+                return random.random() + 0.15
             age_score = recent_index / age_denominator
-            return (age_score * 0.55) + random.random()
+            recent_penalty = 0.28 * (1.0 - age_score)
+            return random.random() - recent_penalty
 
         ordered = sorted(shuffled, key=account_score, reverse=True)
         LOGGER.info(

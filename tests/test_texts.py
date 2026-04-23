@@ -38,6 +38,19 @@ def test_type_1_es_has_seven_slides_and_dropradar_in_february(state_dir):
     assert package.slides_by_role[SlideRole.MARCH].startswith("Marzo")
 
 
+def test_type_1_hooks_are_short_and_example_like(state_dir):
+    generator = _make_generator(state_dir)
+    exact_count = 0
+    for _ in range(30):
+        package = generator.generate(VideoType.TYPE_1, Language.ES)
+        hook = package.slides_by_role[SlideRole.HOOK]
+        if hook.startswith(("Exactamente cuanto", "Exactamente cuánto")):
+            exact_count += 1
+        assert len(hook) <= 95
+        assert "Dropshipping" in hook
+    assert exact_count >= 24
+
+
 def test_type_1_amounts_are_coherent(state_dir):
     generator = _make_generator(state_dir)
     for _ in range(20):
@@ -58,6 +71,17 @@ def test_type_2_es_has_five_slides_and_no_forbidden_punctuation(state_dir):
         for token in FORBIDDEN_TYPE_2_TOKENS:
             assert token not in slide
     assert "Dropradar" in package.slides_by_role[SlideRole.TIP3]
+
+
+def test_type_2_tips_are_single_paragraph_and_hooks_are_short(state_dir):
+    generator = _make_generator(state_dir)
+    package = generator.generate(VideoType.TYPE_2, Language.ES)
+
+    assert len(package.slides_by_role[SlideRole.HOOK]) <= 85
+    for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
+        slide = package.slides_by_role[role]
+        assert "\n" not in slide
+        assert slide.startswith(f"{role.value[-1]}.")
 
 
 def test_type_2_en_passes_punctuation_rule(state_dir):
@@ -110,6 +134,19 @@ def test_consecutive_generations_differ(state_dir):
     )
     second = generator.generate(VideoType.TYPE_1, Language.ES)
     assert second.signature != first.signature
+
+
+@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
+def test_type_1_and_2_have_many_script_variants(state_dir, video_type):
+    generator = _make_generator(state_dir)
+    signatures: set[str] = set()
+    for _ in range(12):
+        package = generator.generate(video_type, Language.ES)
+        generator.state.set_last_signature(video_type, Language.ES, package.signature)
+        generator.state.remember_signature(video_type, Language.ES, package.signature)
+        signatures.add(package.signature)
+
+    assert len(signatures) >= 10
 
 
 def test_type_3_has_tool_stack_without_hosting(state_dir):

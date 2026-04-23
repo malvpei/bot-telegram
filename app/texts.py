@@ -79,44 +79,60 @@ class ScriptGenerator:
 
     def _build_type_1_es(self) -> ScriptPackage:
         hook_options = {
-            "h1": "Me metí en Dropshipping creyendo que iba a sacar dinero en dos semanas y lo que pasó mes a mes casi nadie lo cuenta",
-            "h2": "Probé Dropshipping durante 6 meses y estas son las cifras de dinero reales que casi me hacen rendirme por el camino",
-            "h3": "Entré a Dropshipping convencido de que era dinero fácil y cada mes siguiente me fue bajando los humos de una manera rara",
-            "h4": "Hice Dropshipping medio año sin saber nada y la línea de dinero real fue muy distinta a la que venden por internet",
-            "h5": "Si crees que con Dropshipping vas a sacar dinero rápido mira cómo fue mes a mes mi cuenta antes de hablar",
-            "h6": "6 meses reales intentando hacer dinero con Dropshipping y la foto que más me dolió no fue ninguna de las de cero",
+            "h1": "Exactamente cuánto dinero gané con Dropshipping en 6 meses empezando desde cero",
+            "h2": "Exactamente cuánto facturé con Dropshipping en 6 meses desde 0€",
+            "h3": "Exactamente cuánto dinero hice con Dropshipping mes a mes siendo principiante",
+            "h4": "Exactamente cuánto dinero gané con Dropshipping después de casi rendirme",
+            "h5": "Exactamente cuánto dinero facturé haciendo Dropshipping sin saber lo que hacía",
+            "h6": "Exactamente cuánto dinero me dejó Dropshipping en mis primeros 6 meses",
+            "h7": "Exactamente cuánto dinero gané con Dropshipping antes de entender los datos",
+            "h8": "Exactamente cuánto dinero facturé con Dropshipping durante mis primeros meses",
+            "h9": "Exactamente cuánto dinero gané con Dropshipping cuando dejé de elegir productos a ojo",
+            "h10": "Exactamente cuánto dinero hice con Dropshipping de octubre a marzo",
         }
         october = {
             "o1": "Octubre - 0€\nEmpecé con muchas ganas pero me quedé en parálisis por análisis pensando tanto cada paso que al final no lancé nada de verdad",
             "o2": "Octubre - 0€\nArranqué motivado aunque perdí demasiado tiempo con el logo y los colores sintiendo que trabajaba muchísimo mientras no avanzaba",
             "o3": "Octubre - 0€\nTenía todo montado en mi cabeza pero me daba miedo poner anuncios y perder dinero así que me bloqueé yo solo sin empezar",
             "o4": "Octubre - 0€\nMe metí con muchísimas ganas dudando de cada decisión y acabé con una tienda a medias y cero ventas después de semanas",
+            "o5": "Octubre - 0€\nLancé mi primera tienda motivado, metí algo de dinero en anuncios y tuve visitas, pero nadie compró y perdí casi todo el presupuesto",
+            "o6": "Octubre - 0€\nPensaba que tener la tienda publicada ya era avanzar, hasta que vi tráfico entrando y ni una sola persona pasando por caja",
         }
         november = {
             "n1": "Noviembre - 0€\nSeguí en cero intentando vender solo con contenido orgánico mientras veía a otros facturar y yo atascado en el mismo punto",
             "n2": "Noviembre - 0€\nQuise moverlo sin gastar mis ahorros pero el miedo a invertir me frenó y pasó otro mes entero sin que cambiara nada",
             "n3": "Noviembre - 0€\nLo peor fue ver a otros sacar ventas mientras yo seguía a cero y esa comparación constante me dejó bastante rallado la verdad",
             "n4": "Noviembre - 0€\nProbé un par de productos al azar sin que pegara ninguno y entendí que ir a ciegas no me iba a funcionar nunca",
+            "n5": "Noviembre - 0€\nCambie fotos, textos y precios mil veces, pero el problema real era que seguía probando productos sin ningún criterio claro",
+            "n6": "Noviembre - 0€\nMe convencí de que el fallo era el anuncio, luego la web y luego el precio, pero en realidad no sabía qué estaba vendiendo",
         }
         december = {
             "d1": "Diciembre - {amount}€\nLlegó la primera venta gracias al empujón de Navidad y pensé que ya había descubierto el secreto del ecommerce yo solo",
             "d2": "Diciembre - {amount}€\nEntró una venta pequeña por la locura navideña y me vine arriba creyendo que a partir de ahí todo sería igual de fácil",
             "d3": "Diciembre - {amount}€\nPor fin cayó la primera venta en Navidad y sentí que lo había pillado aunque me monté una película mucho más grande de la cuenta",
+            "d4": "Diciembre - {amount}€\nLa primera venta me dio una motivación brutal, pero también me hizo confiarme demasiado rápido sin entender por qué había pasado",
+            "d5": "Diciembre - {amount}€\nVendí algo por fin y durante dos días pensé que ya estaba dentro, hasta que miré los números reales y se me bajó la emoción",
         }
         january = {
             "j1": "Enero - 0€\nSe acabaron las fiestas y las ventas murieron por completo así que pagar Shopify para no facturar me dejó sin motivación real",
             "j2": "Enero - 0€\nVolví a cero en cuanto pasó Navidad y estuve a punto de dejarlo todo para buscar un trabajo normal y olvidarme del tema",
             "j3": "Enero - 0€\nEl golpe fue duro porque después de Navidad no entró nada y me frustraba seguir pagando la tienda sin ver ningún resultado",
+            "j4": "Enero - 0€\nMe di cuenta de que una venta suelta no significaba tener un negocio y ese mes fue el que más cerca estuve de cerrarlo todo",
+            "j5": "Enero - 0€\nSeguía entrando a mirar estadísticas cada rato, pero la tienda estaba muerta y yo ya no sabía qué tocar para arreglarla",
         }
         february = {
             "f1": "Febrero - {amount}€\nVi a un dropshipper usando Dropradar y me di una última oportunidad eligiendo productos por datos reales y no por intuición",
             "f2": "Febrero - {amount}€\nDescubrí Dropradar por otro chaval al que seguía y con una última bala guiada por métricas por fin empezaron a entrar ventas",
             "f3": "Febrero - {amount}€\nProbé Dropradar después de ver que otros sacaban productos con datos y al dejar de escoger por gusto personal la tienda arrancó",
+            "f4": "Febrero - {amount}€\nEmpecé a usar Dropradar para mirar productos con señales reales y por primera vez sentí que no estaba apostando a ciegas",
+            "f5": "Febrero - {amount}€\nDejé de elegir lo que a mí me gustaba, miré Dropradar con calma y las primeras ventas empezaron a tener sentido",
         }
         march = {
             "m1": "Marzo - {amount}€\nNo me hice millonario ni me compré un Ferrari pero por fin tenía ingresos estables y dejé de ir totalmente a ciegas cada semana",
             "m2": "Marzo - {amount}€\nNada de jets ni mansiones porque la diferencia real fue empezar a usar métricas de verdad y dejar de adivinar cada decisión",
             "m3": "Marzo - {amount}€\nNo vivo con lujos pero ya tenía ventas sólidas cada mes y aprendí que los datos mandan muchísimo más que la intuición",
+            "m4": "Marzo - {amount}€\nNo fue una locura de dinero, pero ya podía explicar qué estaba funcionando y repetirlo sin sentir que todo dependía de suerte",
+            "m5": "Marzo - {amount}€\nLa diferencia no fue hacerme rico, fue dejar de improvisar y tener un sistema que por fin me devolvía ventas con sentido",
         }
         return self._compose_type_1(
             language=Language.ES,
@@ -132,44 +148,60 @@ class ScriptGenerator:
 
     def _build_type_1_en(self) -> ScriptPackage:
         hook_options = {
-            "h1": "I jumped into Dropshipping thinking I would see money in two weeks and the next months told a story nobody really shares online",
-            "h2": "I ran Dropshipping for 6 months and these are the real money numbers that almost pushed me to quit the whole thing",
-            "h3": "I started Dropshipping convinced it was fast money and every next month slowly killed that idea in a pretty uncomfortable way",
-            "h4": "I did Dropshipping for half a year with zero experience and the real money curve looked nothing like the YouTube version",
-            "h5": "If you think Dropshipping turns into money fast look at what actually happened in my account month by month first",
-            "h6": "6 honest months trying to make money with Dropshipping and the photo that hurt the most was not any of the zero ones",
+            "h1": "Exactly how much money I made with Dropshipping in my first 6 months",
+            "h2": "Exactly how much I billed with Dropshipping starting from $0",
+            "h3": "Exactly how much money Dropshipping made me month by month",
+            "h4": "Exactly how much money I made with Dropshipping after almost quitting",
+            "h5": "Exactly how much money I billed doing Dropshipping with zero experience",
+            "h6": "Exactly how much money I kept from my first Dropshipping months",
+            "h7": "Exactly how much money I really made with Dropshipping before data",
+            "h8": "Exactly how much money I billed with Dropshipping in 6 months",
+            "h9": "Exactly how much money I made with Dropshipping after I stopped guessing products",
+            "h10": "Exactly how much money Dropshipping made me from October to March",
         }
         october = {
             "o1": "October - $0\nI started excited but got stuck in analysis paralysis overthinking every step and never really launching anything real",
             "o2": "October - $0\nI was motivated yet wasted way too much time on the logo and colors feeling busy while nothing actually moved",
             "o3": "October - $0\nEverything looked ready in my head but I was too scared to run ads and lose money so I just kept delaying the launch",
             "o4": "October - $0\nI jumped in with energy but doubted every decision and ended up with a half built store and zero sales after weeks",
+            "o5": "October - $0\nI launched the first store motivated, put some money into ads and got visitors, but nobody bought and most of the budget disappeared",
+            "o6": "October - $0\nI thought publishing the store meant progress until I saw traffic coming in and not one person going through checkout",
         }
         november = {
             "n1": "November - $0\nI stayed at zero trying to force organic sales while watching other people making money and feeling stuck in the same spot",
             "n2": "November - $0\nI wanted to avoid risking my savings so fear kept me frozen and another month passed with the exact same numbers",
             "n3": "November - $0\nThe worst part was seeing everyone else getting sales while I had nothing and that comparison really got into my head",
             "n4": "November - $0\nI tested a couple of random products without a single one landing and realized winging it was never going to work",
+            "n5": "November - $0\nI changed photos, copy and prices again and again, but the real problem was still testing products without a clear reason",
+            "n6": "November - $0\nFirst I blamed the ad, then the store and then the price, but honestly I did not know what I was really selling",
         }
         december = {
             "d1": "December - ${amount}\nMy first sale came in thanks to the Christmas push and I thought I had finally cracked ecommerce by myself",
             "d2": "December - ${amount}\nA small Christmas sale hit and I got carried away believing it would stay that easy from there on out",
             "d3": "December - ${amount}\nThat first sale during Christmas made me think I had figured it out and I got way too confident way too quickly",
+            "d4": "December - ${amount}\nThe first sale gave me a crazy amount of motivation, but it also made me trust myself before I understood why it happened",
+            "d5": "December - ${amount}\nI finally sold something and for two days thought I was in, until I checked the real numbers and calmed down fast",
         }
         january = {
             "j1": "January - $0\nThe holidays ended and sales completely died so paying Shopify for nothing was killing my motivation every single week",
             "j2": "January - $0\nAs soon as Christmas was over I went right back to zero and was close to quitting for a normal job and forgetting everything",
             "j3": "January - $0\nReality hit hard because after the holidays nothing came in and I hated paying for a store with no results at all",
+            "j4": "January - $0\nI realized one random sale did not mean I had a business, and that was the month I got closest to shutting it all down",
+            "j5": "January - $0\nI kept checking analytics every few hours, but the store was dead and I had no idea what to change next",
         }
         february = {
             "f1": "February - ${amount}\nI saw another dropshipper using Dropradar and gave myself one last shot picking products from real data and not gut",
             "f2": "February - ${amount}\nI found Dropradar through someone I followed and with one last try guided by metrics sales finally started to move",
             "f3": "February - ${amount}\nI tested Dropradar after seeing others rely on data and once I stopped choosing products by taste the store woke up",
+            "f4": "February - ${amount}\nI started using Dropradar to check products with real signals and for once it did not feel like blind betting",
+            "f5": "February - ${amount}\nI stopped picking what I personally liked, studied Dropradar calmly and the first sales finally made sense",
         }
         march = {
             "m1": "March - ${amount}\nI did not become a millionaire and did not buy a Ferrari but I finally had stable income and stopped guessing every single week",
             "m2": "March - ${amount}\nNo jets or mansions because the real change was using solid metrics instead of pure intuition in every single decision",
             "m3": "March - ${amount}\nI am not living some crazy luxury life but the income finally felt stable and I learned data beats guessing every time",
+            "m4": "March - ${amount}\nIt was not insane money, but I could finally explain what was working and repeat it without feeling like it was luck",
+            "m5": "March - ${amount}\nThe difference was not getting rich, it was having a system that finally turned tests into sales I could understand",
         }
         return self._compose_type_1(
             language=Language.EN,
@@ -264,71 +296,107 @@ class ScriptGenerator:
 
     def _build_type_2_es(self) -> ScriptPackage:
         hook_options = {
-            "h1": "Antes de meterle dinero a Dropshipping mira estas 4 cosas o vas a aprender a base de perder efectivo como hice yo",
-            "h2": "Si quieres que Dropshipping te deje dinero de verdad estas 4 cosas pesan muchísimo más de lo que parece desde fuera",
-            "h3": "Habría pagado dinero por leer esto antes de abrir mi primera tienda de Dropshipping porque me habría ahorrado meses enteros",
-            "h4": "Estas 4 cosas deciden si Dropshipping se convierte en dinero real o si solo te roba tiempo y ganas cada semana",
-            "h5": "Si vas en serio con Dropshipping y quieres dinero online la siguiente foto resume lo que nadie te explica al principio",
-            "h6": "4 cosas que separan el Dropshipping que te hace ganar dinero del que te arruina antes de empezar a escalar",
+            "h1": "4 errores que te hacen perder dinero en Dropshipping sin darte cuenta",
+            "h2": "Antes de meter dinero a Dropshipping revisa estas 4 cosas",
+            "h3": "Si Dropshipping no te deja dinero, mira la siguiente foto",
+            "h4": "4 cosas que deciden si Dropshipping te da dinero o te lo quita",
+            "h5": "Esto me habría ahorrado dinero antes de abrir mi tienda de Dropshipping",
+            "h6": "Si quieres ganar dinero con Dropshipping, empieza por estas 4 cosas",
+            "h7": "La mayoría pierde dinero en Dropshipping por saltarse esto",
+            "h8": "4 bases simples antes de gastar más dinero en Dropshipping",
         }
         tip1 = {
-            "t1": "1. Haz cuentas reales antes de vender\nMucha gente se lanza sin contar comisiones ni devoluciones y luego no entiende por qué no queda dinero a fin de mes",
-            "t2": "1. Los márgenes no se improvisan\nRestar el coste del producto al precio de venta miente casi siempre porque pasarela e impuestos se comen gran parte del beneficio",
-            "t3": "1. Números claros desde el día uno\nSi no cuentas todos los gastos reales el margen que ves en la hoja de cálculo es ficción pura y se nota en la cuenta",
-            "t4": "1. La calculadora manda más que la intuición\nSi no sabes cuánto te queda limpio después de anuncios y envíos estás vendiendo a ciegas aunque tengas pedidos cada día",
+            "t1": "1. Haz cuentas reales antes de vender, mucha gente se lanza sin contar comisiones, devoluciones y anuncios, luego no entiende por qué entra dinero pero no queda beneficio",
+            "t2": "1. Los márgenes no se improvisan, restar el coste del producto al precio de venta casi siempre miente porque pasarela, envíos e impuestos se comen parte del resultado",
+            "t3": "1. Números claros desde el día uno, si no cuentas todos los gastos reales el margen que ves en la hoja de cálculo es ficción pura y se nota en la cuenta",
+            "t4": "1. La calculadora manda más que la intuición, si no sabes cuánto te queda limpio después de anuncios y envíos estás vendiendo a ciegas aunque tengas pedidos",
+            "t5": "1. No confundas facturar con ganar, una tienda puede vender cada día y aun así perder dinero si el coste de adquisición se come todo el margen",
+            "t6": "1. Revisa el beneficio limpio antes de escalar, porque subir presupuesto sin saber tus números convierte una tienda prometedora en una fuga de dinero",
+            "t7": "1. El margen real decide si puedes respirar, calcula producto, envío, pasarela, impuestos, devoluciones y anuncios antes de celebrar cualquier venta",
+            "t8": "1. Si tus números no aguantan, el producto no sirve, da igual lo bonito que sea el anuncio si cada pedido te deja menos dinero del que parece",
         }
         tip2 = {
-            "t1": "2. Una tienda barata nunca vende caro\nTu web decide en segundos si el cliente confía lo suficiente para pagar o se va directamente a buscar en otro sitio",
-            "t2": "2. La primera impresión lo es todo\nAunque tu producto sea bueno una web descuidada tira la venta antes de que llegues siquiera a contarla en los datos",
-            "t3": "2. El diseño construye confianza en silencio\nLa gente juzga tu marca en segundos y cada detalle visual le está diciendo al cliente si puede fiarse de ti o no",
-            "t4": "2. Tu tienda es la cara de la marca\nSi cada detalle transmite descuido el cliente piensa que el producto también lo es y pierdes la venta sin enterarte",
+            "t1": "2. Una tienda barata nunca vende caro, tu web decide en segundos si el cliente confía lo suficiente para pagar o se va a buscar otra opción",
+            "t2": "2. La primera impresión lo cambia todo, aunque tu producto sea bueno una web descuidada tira la venta antes de que llegues a verla en los datos",
+            "t3": "2. El diseño construye confianza en silencio, cada detalle visual le está diciendo al cliente si puede fiarse de ti o si debe cerrar la pestaña",
+            "t4": "2. Tu tienda es la cara de la marca, si todo transmite descuido el cliente piensa que el producto también lo está y se marcha sin avisar",
+            "t5": "2. La confianza se gana antes del carrito, una web clara, rápida y honesta hace más por tus ventas que cambiar el color del botón veinte veces",
+            "t6": "2. No vendas desde una tienda que parece improvisada, si tú no cuidarías los detalles antes de pagar, tu cliente tampoco lo hará",
+            "t7": "2. El cliente compra seguridad además del producto, por eso fotos, textos, políticas y tiempos de envío tienen que parecer reales desde el primer vistazo",
+            "t8": "2. Una web confusa mata productos buenos, si el comprador duda de quién eres o cuándo llega el pedido, la venta se cae aunque el anuncio funcione",
         }
         tip3 = {
-            "t1": "3. Encuentra productos rentables\nBuscar artículos a ciegas quema mucho tiempo y Dropradar te da una forma limpia de ver productos con potencial real antes de probarlos",
-            "t2": "3. Deja de elegir productos por intuición\nLa suerte no escala y Dropradar filtra oportunidades por datos para que solo pruebes lo que tiene opciones reales de vender",
-            "t3": "3. Atajo a productos que mueven\nDropradar te muestra qué se está vendiendo ahora mismo y por qué funciona sin que tengas que adivinar cada semana un producto nuevo",
-            "t4": "3. Menos pruebas al azar\nDropradar filtra lo que tiene sentido probar según datos reales así evitas quemar presupuesto con productos que nadie estaba buscando",
+            "t1": "3. Encontrar un producto ganador es vital para conseguir ganancias, Dropradar te ayuda a ver oportunidades con datos reales antes de quemar presupuesto probando al azar",
+            "t2": "3. Deja de elegir productos por intuición, la suerte no escala y Dropradar filtra oportunidades por datos para que pruebes cosas con opciones reales",
+            "t3": "3. El producto marca la diferencia, Dropradar te muestra qué se está vendiendo ahora mismo y por qué funciona sin obligarte a adivinar cada semana",
+            "t4": "3. Menos pruebas al azar significa menos dinero perdido, Dropradar filtra productos con señales reales para que no dependas solo de un presentimiento",
+            "t5": "3. Vender algo que nadie quiere es imposible, Dropradar te da pistas de demanda, competencia y tendencia antes de meter dinero en anuncios",
+            "t6": "3. Un producto ganador no se elige porque te guste, se valida con datos y Dropradar te ayuda a separar caprichos de oportunidades reales",
+            "t7": "3. La diferencia suele estar en lo que eliges vender, Dropradar te ahorra horas de mirar productos sin saber cuáles merecen una prueba seria",
+            "t8": "3. Si pruebas productos sin señales estás apostando, Dropradar convierte esa búsqueda en una decisión más clara antes de arriesgar tu presupuesto",
         }
         tip4 = {
-            "t1": "4. No desaparezcas después de la venta\nUn cliente al que no contestas se convierte rápido en una disputa y en una comisión perdida que duele bastante más que la venta",
-            "t2": "4. El postventa protege tu negocio\nLos problemas casi nunca vienen del envío sino del silencio después de la compra cuando el cliente se siente solo y sin respuesta",
-            "t3": "4. El soporte es parte de lo que vendes\nResponder rápido y con empatía es la herramienta de retención más barata y más efectiva que vas a tener en toda la tienda",
-            "t4": "4. Cuida a quien ya te compró\nUn cliente bien atendido te da reseñas y vuelve a comprar mientras que uno ignorado te deja mala fama con una sola reclamación",
+            "t1": "4. No desaparezcas después de la venta, un cliente sin respuesta se convierte rápido en disputa y esa comisión perdida duele más que contestar a tiempo",
+            "t2": "4. El postventa protege tu negocio, muchos problemas no vienen del envío sino del silencio cuando el cliente ya pagó y se siente abandonado",
+            "t3": "4. El soporte también vende, responder rápido y con empatía es una de las formas más baratas de evitar reclamaciones y ganar confianza",
+            "t4": "4. Cuida a quien ya te compró, un cliente bien atendido deja reseñas y vuelve, uno ignorado puede manchar tu tienda con una sola queja",
+            "t5": "4. La venta no termina en el pago, termina cuando el cliente recibe el pedido y siente que detrás de la tienda hay alguien real",
+            "t6": "4. Contestar tarde sale caro, cada duda ignorada aumenta el riesgo de reembolso, disputa y mala reseña justo cuando necesitas confianza",
+            "t7": "4. Prepara respuestas antes de necesitarlas, envíos, devoluciones y cambios deben estar claros para no improvisar cuando llegue el primer problema",
+            "t8": "4. Un buen soporte salva margen, porque evitar una disputa a tiempo puede valer más que conseguir otra venta con un anuncio nuevo",
         }
         return self._compose_type_2(Language.ES, hook_options, tip1, tip2, tip3, tip4)
 
     def _build_type_2_en(self) -> ScriptPackage:
         hook_options = {
-            "h1": "Before putting money into Dropshipping look at these 4 things or you will learn by losing cash just like I did at first",
-            "h2": "If you want Dropshipping to actually make money these 4 things weigh way more than people admit online and in courses",
-            "h3": "I would have paid money to read this before opening my first Dropshipping store because it saved me months later on",
-            "h4": "These 4 things decide if Dropshipping turns into real money or just drains your time and energy every single week",
-            "h5": "If you are serious about Dropshipping and online money the next photo is the part almost nobody explains to beginners",
-            "h6": "4 things that separate the Dropshipping that makes money from the one that burns you out before you can even scale",
+            "h1": "4 mistakes that make you lose money in Dropshipping without noticing",
+            "h2": "Before putting money into Dropshipping check these 4 things",
+            "h3": "If Dropshipping is not making you money, watch the next photo",
+            "h4": "4 things that decide if Dropshipping makes money or burns it",
+            "h5": "This would have saved me money before my first Dropshipping store",
+            "h6": "If you want money from Dropshipping, start with these 4 basics",
+            "h7": "Most people lose money in Dropshipping because they skip this",
+            "h8": "4 simple checks before spending more money on Dropshipping",
         }
         tip1 = {
-            "t1": "1. Know your real numbers\nToo many sellers skip fees and refunds in their math and later wonder why nothing is left at the end of every month",
-            "t2": "1. Margins are never obvious\nStaring at the product cost on the supplier page lies almost every time once taxes and platform cuts eat part of the profit",
-            "t3": "1. Run the numbers from day one\nIf you miss the hidden costs the profit you think you see on your spreadsheet is pure fiction and the bank account proves it",
-            "t4": "1. The calculator beats the feeling\nIf you do not know what you keep after ads and shipping you are selling blind even when orders come in every single day",
+            "t1": "1. Know your real numbers before selling, too many people ignore fees, refunds and ads, then wonder why money comes in but profit disappears",
+            "t2": "1. Margins are never obvious, product cost minus selling price usually lies once payment fees, shipping and taxes start eating the result",
+            "t3": "1. Run the numbers from day one, if you miss hidden costs the profit on your spreadsheet is pure fiction and the bank account proves it",
+            "t4": "1. The calculator beats the feeling, if you do not know what you keep after ads and shipping you are selling blind even with orders coming in",
+            "t5": "1. Do not confuse revenue with profit, a store can sell every day and still lose money if acquisition cost eats the whole margin",
+            "t6": "1. Check clean profit before scaling, because raising budget without knowing your numbers can turn a promising store into a money leak",
+            "t7": "1. Real margin decides if you can breathe, count product, shipping, gateway fees, taxes, refunds and ads before celebrating any order",
+            "t8": "1. If the numbers do not survive, the product is not enough, no ad can save a sale that leaves less money than it looks",
         }
         tip2 = {
-            "t1": "2. A cheap looking store will never sell premium\nYour site decides in seconds whether a visitor trusts you enough to buy or just leaves to check somewhere else",
-            "t2": "2. First impressions decide the sale\nEven a solid product dies on a messy storefront and you lose the order before you can even count it in your analytics",
-            "t3": "2. Design builds trust quietly\nPeople size up your brand in seconds and every visual detail is telling the buyer whether to trust you or move on to the next tab",
-            "t4": "2. Your store is the face of your brand\nIf every detail feels rushed the customer assumes the product is rushed too and the sale is lost without you noticing",
+            "t1": "2. A cheap looking store will never sell premium, your site decides in seconds whether a visitor trusts you enough to buy or leaves",
+            "t2": "2. First impressions change everything, even a solid product dies on a messy storefront before you can count the lost order in analytics",
+            "t3": "2. Design builds trust quietly, every visual detail tells the buyer whether to trust you or close the tab and keep scrolling",
+            "t4": "2. Your store is the face of your brand, if everything feels rushed the customer assumes the product is rushed too and leaves",
+            "t5": "2. Trust is earned before the cart, a clear, fast and honest website does more than changing the button color twenty times",
+            "t6": "2. Do not sell from a store that feels improvised, if you would not trust it before paying, your customer probably will not either",
+            "t7": "2. The buyer is purchasing safety too, so photos, copy, policies and shipping times need to feel real from the first look",
+            "t8": "2. A confusing website kills good products, if the buyer doubts who you are or when the order arrives, the sale falls apart",
         }
         tip3 = {
-            "t1": "3. Find profitable products\nRandom hunting burns time fast and Dropradar gives you a cleaner way to spot items with real potential before testing anything",
-            "t2": "3. Stop picking products on gut feeling\nLuck does not scale and Dropradar filters opportunities by real data so you only test things that can actually sell",
-            "t3": "3. Shortcut to items that move\nDropradar shows you what is selling right now and why it works so you never have to guess a winner again every single week",
-            "t4": "3. Fewer random tests\nDropradar filters what is worth testing based on real data so you avoid burning budget on products nobody was actually searching for",
+            "t1": "3. Finding a winning product is vital for profit, Dropradar helps you spot opportunities with real data before burning budget on random tests",
+            "t2": "3. Stop picking products on gut feeling, luck does not scale and Dropradar filters opportunities by data so you test things with real potential",
+            "t3": "3. The product usually makes the difference, Dropradar shows what is selling now and why it works so you are not guessing every week",
+            "t4": "3. Fewer random tests means less money lost, Dropradar filters products with real signals so your budget is not based on a feeling",
+            "t5": "3. Selling something nobody wants is almost impossible, Dropradar gives demand, competition and trend clues before you put money into ads",
+            "t6": "3. A winning product is not chosen because you like it, Dropradar helps separate personal taste from opportunities that deserve a test",
+            "t7": "3. The difference is often what you choose to sell, Dropradar saves hours of scrolling by showing which products deserve serious attention",
+            "t8": "3. If you test products without signals you are gambling, Dropradar turns research into a clearer decision before risking your budget",
         }
         tip4 = {
-            "t1": "4. Do not vanish after the sale\nAn ignored customer turns into a chargeback much faster than you think and that hit costs more than the sale itself",
-            "t2": "4. After sales care protects the business\nMost disputes do not come from shipping but from silence once the customer has paid and feels alone",
-            "t3": "4. Support is part of what you sell\nReplying quickly and with empathy is the cheapest and most effective retention tool you will ever have in this business",
-            "t4": "4. Take care of the buyer you already have\nA well treated customer leaves reviews and comes back while an ignored one leaves bad reputation in a single complaint",
+            "t1": "4. Do not vanish after the sale, an ignored customer turns into a dispute fast and that hit costs more than replying on time",
+            "t2": "4. After sales care protects the business, many problems come from silence after payment when the buyer already feels alone",
+            "t3": "4. Support is part of what you sell, quick and human replies are one of the cheapest ways to avoid claims and build trust",
+            "t4": "4. Take care of the buyer you already have, a supported customer leaves reviews and returns while an ignored one can damage the store",
+            "t5": "4. The sale does not end at payment, it ends when the customer receives the order and feels there is a real person behind the store",
+            "t6": "4. Late replies get expensive, every ignored question raises the risk of refunds, disputes and bad reviews right when you need trust",
+            "t7": "4. Prepare answers before you need them, shipping, refunds and exchanges should be clear before the first real problem lands",
+            "t8": "4. Good support protects margin, because stopping one dispute on time can be worth more than chasing another sale with a new ad",
         }
         return self._compose_type_2(Language.EN, hook_options, tip1, tip2, tip3, tip4)
 
@@ -387,6 +455,10 @@ class ScriptGenerator:
                     raise ValueError(
                         f"Tipo 2 ({role.value}): el texto contiene el carácter prohibido '{token}'."
                     )
+            if role != SlideRole.HOOK and "\n" in slide:
+                raise ValueError(
+                    f"Tipo 2 ({role.value}): el consejo debe ir en un solo párrafo."
+                )
         if "Dropradar" not in slides_by_role.get(SlideRole.TIP3, ""):
             raise ValueError("Tipo 2: el consejo 3 debe mencionar Dropradar.")
         if "Dropshipping" not in slides_by_role.get(SlideRole.HOOK, ""):
@@ -533,6 +605,11 @@ class ScriptGenerator:
                     "El salto no vino del producto perfecto ni de una tienda impecable a la primera, vino de aceptar algo bastante incómodo, que mi gusto personal no era una estrategia. Durante meses elegí productos porque a mí me gustaban, porque los veía bonitos o porque alguien los mencionaba en un reel, y el resultado era el que todos conocemos en silencio, mucho esfuerzo, poca venta y cero aprendizaje claro. Cuando por fin empecé a comparar datos, mirar demanda real, creativos, tendencia y señales de venta, todo se volvió menos emocional y más ordenado. Tomé decisiones con menos ego y los números empezaron a moverse en una dirección que, por primera vez, podía explicar con cabeza. Para mí esa fue la diferencia real entre adivinar y construir un proceso que se puede repetir mes a mes. No soy un caso extraordinario, soy un caso medianamente constante, y creo que ese es el tipo de historia que más le sirve a alguien que está pensando en empezar, porque evita la parte más cara del proceso, que es perder meses confundiendo gusto personal con estrategia real.",
                     ["#emprendimiento", "#dropshipping", "#productoganador", "#ecommerce", "#dropradar"],
                 ),
+                "es5": (
+                    "Cuanto facture realmente con dropshipping",
+                    "Este carrusel resume una parte que casi nunca se cuenta con calma, los meses donde abres la tienda, te ilusionas con cada visita y aun así no entra dinero suficiente para justificar todo el esfuerzo. Al principio yo confundía movimiento con progreso, tocar la web, cambiar textos, mirar productos y revisar estadísticas cada rato me hacía sentir ocupado, pero no me acercaba a una decisión mejor. La diferencia llegó cuando dejé de buscar el producto perfecto por intuición y empecé a mirar datos con más humildad, demanda, anuncios que ya estaban funcionando, margen y señales reales de compra. Dropradar no convirtió el proceso en magia, pero sí me dio una forma más ordenada de filtrar antes de gastar. Eso cambió mi cabeza más que mis números al principio, porque cada prueba dejó de ser una apuesta emocional y empezó a ser una decisión que podía entender. Si estás en esa fase rara de trabajar mucho y facturar poco, quizá no te falta motivación, quizá te falta un criterio más limpio para elegir qué probar.",
+                    ["#dropshipping", "#facturacion", "#ecommerce", "#productresearch", "#dropradar"],
+                ),
             }
         if video_type == VideoType.TYPE_2:
             return {
@@ -556,6 +633,11 @@ class ScriptGenerator:
                     "Si llevas un tiempo probando productos al azar, cambia el enfoque antes de seguir quemando presupuesto sin aprender nada. El dropshipping se vuelve mucho más claro cuando entiendes qué revisar primero, números reales, percepción de marca, demanda real en el mercado y experiencia del cliente después del cobro. No es cuestión de tener la tienda más bonita ni el producto más viral, es cuestión de entender qué hace que una tienda funcione en el día a día, más allá del anuncio inicial que te trajo la primera venta. Cuando cada decisión parte de un criterio en vez de una corazonada, todo se vuelve más ordenado y los fallos dejan de ser golpes inesperados para convertirse en información útil que puedes usar al mes siguiente. Este video no es teoría bonita ni motivación vacía, es una guía rápida para evitar los errores que más caros se pagan al principio. Si una de las cuatro partes te pilla dudando, probablemente ese sea el lugar exacto por el que empezar esta semana, antes de tocar presupuestos o cambiar de producto una vez más sin tener la base revisada.",
                     ["#ecommerce", "#dropshippingespana", "#emprendedores", "#ventasonline", "#dropradar"],
                 ),
+                "es5": (
+                    "Antes de gastar mas en tu tienda",
+                    "Antes de meter más dinero en anuncios, revisa si la base de la tienda tiene sentido de verdad. Muchas veces el problema no es que falte presupuesto, es que estás empujando tráfico hacia una estructura que todavía no está preparada para convertir. Si el margen real no aguanta comisiones, devoluciones y coste de adquisición, cada venta puede parecer buena en pantalla y seguir siendo mala para tu bolsillo. Si la web no transmite confianza, el cliente se va antes de leer tu oferta. Si eliges productos por intuición, cada prueba se parece demasiado a una apuesta. Y si después del pago no hay soporte claro, cualquier duda puede terminar en reembolso o disputa. Estas cuatro partes no son espectaculares, pero son las que hacen que una tienda sobreviva cuando empieza a llegar tráfico real. Guárdalo como una revisión rápida para no seguir arreglando solo el anuncio cuando la fuga quizá está mucho antes.",
+                    ["#dropshippingtips", "#tiendaonline", "#marketingdigital", "#ecommerce", "#dropradar"],
+                ),
             }
         return {
             "es1": (
@@ -577,6 +659,11 @@ class ScriptGenerator:
                 "La ruta simple para tu primera tienda",
                 "Si llevas semanas aplazando el paso porque no sabes qué herramientas usar, empieza por esta combinación y prueba rápido sin seguir buscando la fórmula perfecta. Una tienda sencilla pero bien montada, productos elegidos con datos en vez de corazonadas, guiones claros para tu contenido, pagos listos desde el día uno, edición ágil y un canal orgánico donde practicar cada día puede darte suficiente feedback del mercado para saber si vas por buen camino o si conviene ajustar el enfoque. La clave al principio no es optimizar absolutamente todo, es llegar a ver reacciones reales lo antes posible, incluso si son pequeñas. Una vez tienes esas primeras señales, ya sabes qué parte conviene pulir primero, producto, contenido, precio o estructura, y cada mejora tiene más sentido porque parte de información real. Antes de eso, casi todo son suposiciones que te hacen perder semanas. Guarda este stack y úsalo como hoja de ruta en vez de saltar de video en video buscando la fórmula mágica que, realmente, no existe al nivel que la venden.",
                 ["#dropshipping", "#negociosonline", "#tiktokshop", "#marketingorganico", "#dropradar"],
+            ),
+            "es5": (
+                "El stack limpio para empezar",
+                "Si quieres empezar dropshipping sin llenar tu navegador de herramientas que no entiendes, usa una base simple y céntrate en validar. Primero necesitas una tienda que puedas enseñar sin vergüenza, después una forma de elegir productos con datos y no solo por gusto personal, luego guiones que puedas convertir en contenido rápido, pagos preparados para no improvisar cuando llegue el primer pedido, una herramienta de edición que no te frene y un canal orgánico donde publicar con constancia. Lo importante no es tener el sistema más caro, es tener un flujo que puedas repetir durante varias semanas sin bloquearte. Cuando cada herramienta cumple un papel claro, dejas de saltar de app en app buscando una ventaja secreta y empiezas a aprender del mercado real. Guarda esta lista y vuelve a ella cada vez que sientas que estás complicando demasiado algo que todavía necesita pruebas simples.",
+                ["#dropshipping2026", "#herramientas", "#shopify", "#capcut", "#dropradar"],
             ),
         }
 
@@ -606,6 +693,11 @@ class ScriptGenerator:
                     "The product was only part of it, and that took me longer to accept than I would like to admit out loud. The real unlock was understanding that personal taste is not a strategy and that every time I chose a product because I liked it, I was rolling a dice with my own money without even noticing. Once I stepped back from that ego and started picking with cleaner data around demand, creatives, competition and real sales signals, the whole thing shifted. Dropshipping started feeling less like gambling and more like a process I could actually improve over time, my wins were easier to repeat and my losses finally made sense. I was not smarter than before, I just had a better way of asking questions about a product before spending real money on it. You do not need to become obsessed with analytics to see a difference, you just need enough structure to stop trusting pure gut feeling alone. If you keep hitting walls without knowing why, this carousel might give you the order of decisions I wish I had found earlier.",
                     ["#ecommerce", "#dropshippingbusiness", "#digitalbusiness", "#shopifytips", "#dropradar"],
                 ),
+                "en5": (
+                    "How much I really billed dropshipping",
+                    "This carousel is about the part that rarely looks clean while you are living it, opening the store, getting excited about every visitor and still not making enough money to justify the hours. At first I confused movement with progress. Changing the site, rewriting copy, scrolling products and checking analytics made me feel busy, but it did not make my decisions any better. The shift came when I stopped chasing products by instinct and started looking at cleaner signals, demand, working ads, margin and real buying intent. Dropradar did not make the process magic, but it gave me a calmer way to filter before spending. That changed my mindset before it changed the numbers, because every test stopped feeling like an emotional bet and became something I could explain. If you are working hard but billing very little, the missing piece might not be motivation. It might be a better reason for choosing what to test next.",
+                    ["#dropshipping", "#ecommercejourney", "#productresearch", "#onlineincome", "#dropradar"],
+                ),
             }
         if video_type == VideoType.TYPE_2:
             return {
@@ -629,6 +721,11 @@ class ScriptGenerator:
                     "If you have been testing random products for a while, change the approach before burning more budget without learning anything that you can actually reuse later. Dropshipping becomes clearer once you know what to check first, real numbers, perceived trust, actual demand in the market and the customer experience after checkout. It is not about having the prettiest store or the most viral product, it is about understanding what makes a store work day after day, beyond the hype of a single ad or a single lucky week. When every decision comes from a reason instead of a feeling, the losses become information instead of random hits and you stop reacting to every noise on social media. You stop reacting and start improving. This is a short practical guide for avoiding the beginner mistakes that end up costing the most. If one of the four points here catches you hesitating, that is probably the exact place worth starting this week before touching anything else in the store or in the creatives this week.",
                     ["#dropshipping", "#ecommercebusiness", "#entrepreneurtips", "#onlinestore", "#dropradar"],
                 ),
+                "en5": (
+                    "Check this before spending more",
+                    "Before putting more money into ads, check whether the base of the store actually makes sense. A lot of the time the problem is not a lack of budget, it is sending traffic into a setup that is not ready to convert. If the real margin cannot survive fees, refunds and acquisition cost, every order can look good on the dashboard and still be bad for your pocket. If the website does not build trust, the buyer leaves before the offer has a chance. If the product was chosen on instinct, every test becomes too close to a gamble. And if support is unclear after payment, a simple question can become a refund or dispute. These four areas are not flashy, but they are what help a store survive when real traffic arrives. Save this as a quick review before blaming only the creative again.",
+                    ["#dropshippingtips", "#shopifystore", "#ecommerce", "#digitalmarketing", "#dropradar"],
+                ),
             }
         return {
             "en1": (
@@ -650,6 +747,11 @@ class ScriptGenerator:
                 "The simple route to your first store",
                 "If you keep delaying the first step because you do not know which tools to use, start with this setup and test fast instead of spending more weeks looking for the perfect formula in videos. A simple but clean store, products chosen with data instead of pure instinct, clear scripts for your content, payments ready from day one, quick editing and an organic channel where you can practice every day can give you enough feedback from the market to know whether you are moving in the right direction or something needs a real change. At the beginning the goal is not to optimize absolutely everything, it is to see real reactions as soon as possible, even if they are small. Once you have those early signals, you will know which part deserves attention first, product, content, price or structure, and every improvement will sit on top of information you actually trust. Save this stack and use it as a roadmap for the first weeks instead of jumping from video to video looking for magic that is not really there at the level the videos promise.",
                 ["#dropshipping", "#onlinebusiness", "#tiktokmarketing", "#organicmarketing", "#dropradar"],
+            ),
+            "en5": (
+                "A clean stack to start",
+                "If you want to start dropshipping without filling your browser with tools you barely understand, keep the base simple and focus on validation. First you need a store you can show without feeling embarrassed, then a product research flow based on data instead of personal taste, then scripts you can turn into content quickly, payments ready before the first order arrives, an editing tool that does not slow you down and an organic channel where you can practice consistently. The point is not having the most expensive system, it is having a workflow you can repeat for several weeks without freezing. When every tool has one clear job, you stop jumping from app to app looking for a secret advantage and start learning from the real market. Save this list and come back to it whenever you feel like you are making the first steps harder than they need to be.",
+                ["#dropshipping2026", "#ecommercetools", "#shopify", "#capcut", "#dropradar"],
             ),
         }
 
