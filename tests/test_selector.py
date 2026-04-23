@@ -101,7 +101,7 @@ def _make_candidate(
     )
 
 
-def test_reservation_keys_block_every_image_from_same_post(temp_workspace):
+def test_memory_does_not_block_every_image_from_same_post(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "alpha"
     account_dir.mkdir()
@@ -114,8 +114,8 @@ def test_reservation_keys_block_every_image_from_same_post(temp_workspace):
     used_keys = selector.reservation_keys_for([first])
     state.mark_media_used([first.source_id], "job-1")
 
-    assert "post:alpha:POST1" in used_keys
-    assert selector._is_candidate_used(second)
+    assert "post:alpha:POST1" not in used_keys
+    assert not selector._is_candidate_used(second)
 
 
 def test_type_1_plan_aligns_fixed_slide_and_roles(temp_workspace):

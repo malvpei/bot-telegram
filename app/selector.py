@@ -1138,8 +1138,6 @@ class ImageSelector:
         for media in media_items:
             for key in (
                 media.source_id,
-                self._post_reservation_key(media),
-                self._permalink_reservation_key(media),
                 *media.content_fingerprints,
                 media.content_fingerprint,
             ):
@@ -1148,18 +1146,6 @@ class ImageSelector:
                 seen.add(key)
                 keys.append(key)
         return keys
-
-    def _post_reservation_key(self, media: MediaCandidate) -> str | None:
-        post_key = self._post_key(media)
-        if not post_key or post_key == media.source_id:
-            return None
-        return f"post:{post_key}"
-
-    def _permalink_reservation_key(self, media: MediaCandidate) -> str | None:
-        permalink = (media.permalink or "").strip().rstrip("/")
-        if not permalink or permalink.startswith("fixed://"):
-            return None
-        return f"permalink:{permalink.lower()}"
 
     def _first_image_is_valid(self, media: MediaCandidate) -> bool:
         if media.metrics is None:

@@ -55,6 +55,18 @@ class PlanWhenGoodSelector:
         )
 
 
+class PlanForEveryAccountSelector:
+    def create_plan(self, catalog, video_type, language):
+        account = next(iter(catalog))
+        return VideoPlan(
+            chosen_account=account,
+            video_type=video_type,
+            language=language,
+            slides=[],
+            used_media_ids=[f"{account}:1"],
+        )
+
+
 class ExtraImageSelector:
     def pick_extra_image(self, candidates, video_type):
         return candidates[0]
@@ -220,6 +232,37 @@ def test_picker_keeps_searching_beyond_first_failed_accounts(monkeypatch):
         assert plan.chosen_account == "good"
         assert tried == ["bad1", "bad2", "bad3", "good"]
         assert service.collector.seen == tried
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_picker_samples_multiple_viable_accounts_before_selecting(monkeypatch):
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    monkeypatch.setattr("app.service.random.random", lambda: 0.0)
+    monkeypatch.setattr("app.service.random.choice", lambda values: values[-1])
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), account_pick_attempts=0)
+        service.state = StateStore(root / "state")
+        service.collector = FakeCollector()
+        service.selector = PlanForEveryAccountSelector()
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        plan, tried = service._pick_account_with_plan(
+            ["one", "two", "three", "four", "five", "six"],
+            request,
+        )
+
+        assert tried == ["one", "two", "three", "four", "five"]
+        assert plan.chosen_account == "five"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

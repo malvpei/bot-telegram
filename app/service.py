@@ -20,6 +20,7 @@ from app.texts import ScriptGenerator
 
 
 LOGGER = logging.getLogger(__name__)
+VIABLE_ACCOUNT_POOL_TARGET = 5
 
 
 def _merge_preserving_order(existing: list[str], new_items: list[str]) -> list[str]:
@@ -269,19 +270,20 @@ class VideoCreationService:
     def _pick_account_with_plan(
         self, usernames: list[str], request: VideoRequest
     ):
-        # Try accounts progressively. Account reuse is allowed because the
-        # image memory is the strict guard, so the account order uses only a
-        # soft recentness penalty plus randomness instead of a queue.
+        # Try accounts progressively. Account reuse is allowed because image
+        # memory is the strict guard, but we still build a small viable pool
+        # before choosing so the first "good enough" account does not dominate.
         ordered = self._ordered_accounts_for_pick(usernames, request.video_type)
         max_attempts = self._max_account_attempts(len(ordered))
+        target_viable = min(VIABLE_ACCOUNT_POOL_TARGET, max_attempts)
         tried: list[str] = []
         errors: list[str] = []
-        catalog: dict[str, list] = {}
+        viable_plans: list[VideoPlan] = []
         last_plan_error: str | None = None
         for username in ordered[:max_attempts]:
             tried.append(username)
             try:
-                catalog[username] = self.collector.collect_one(username)
+                candidates = self.collector.collect_one(username)
             except InstagramCollectorError as error:
                 LOGGER.warning("@%s descartada (fetch): %s", username, error)
                 errors.append(f"@{username}: {error}")
@@ -289,9 +291,17 @@ class VideoCreationService:
 
             try:
                 plan = self.selector.create_plan(
-                    catalog, request.video_type, request.language
+                    {username: candidates}, request.video_type, request.language
                 )
-                return plan, tried
+                viable_plans.append(plan)
+                LOGGER.info(
+                    "Viable plan candidate @%s (%d/%d)",
+                    plan.chosen_account,
+                    len(viable_plans),
+                    target_viable,
+                )
+                if len(viable_plans) >= target_viable:
+                    break
             except ValueError as error:
                 last_plan_error = str(error)
                 LOGGER.info(
@@ -301,6 +311,14 @@ class VideoCreationService:
                     error,
                 )
                 continue
+        if viable_plans:
+            chosen = random.choice(viable_plans)
+            LOGGER.info(
+                "Selected @%s from %d viable account plan(s)",
+                chosen.chosen_account,
+                len(viable_plans),
+            )
+            return chosen, tried
         if last_plan_error:
             errors.append(last_plan_error)
         raise InstagramCollectorError(
