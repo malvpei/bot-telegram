@@ -1,6 +1,7 @@
 ﻿from __future__ import annotations
 
 import logging
+import os
 import random
 import shutil
 from datetime import datetime, timedelta, timezone
@@ -86,6 +87,9 @@ class VideoCreationService:
                 f"{self.settings.state_dir}. Si este aviso aparece despues de cada "
                 "redeploy, Coolify no esta preservando /app/data."
             )
+        persistence = self.persistence_status()
+        if persistence["warning"]:
+            warnings.append(str(persistence["warning"]))
         if not self.settings.fixed_image_path.exists():
             warnings.append(
                 "Falta la imagen fija obligatoria: "
@@ -105,6 +109,65 @@ class VideoCreationService:
     def create_extra_image(self, request: VideoRequest) -> MediaCandidate:
         with self._job_lock:
             return self._create_extra_image_locked(request)
+
+    def sync_accounts(self, account_inputs: list[str]) -> dict[str, object]:
+        with self._job_lock:
+            usernames = extract_usernames(account_inputs, len(account_inputs) or 1)
+            if not usernames:
+                raise ValueError("No se detectaron cuentas de Instagram válidas.")
+
+            downloaded: dict[str, int] = {}
+            errors: dict[str, str] = {}
+            for username in usernames:
+                try:
+                    downloaded[username] = len(self.collector.collect_one(username))
+                except Exception as error:  # noqa: BLE001
+                    LOGGER.warning("@%s no se pudo sincronizar: %s", username, error)
+                    errors[username] = str(error)
+            return {
+                "requested": len(usernames),
+                "downloaded": downloaded,
+                "errors": errors,
+            }
+
+    def persistence_status(self) -> dict[str, object]:
+        data_dir = self.settings.data_dir
+        state_dir = self.settings.state_dir
+        in_container = _running_in_container()
+        expected_data_dir = Path("/app/data")
+        is_expected_path = data_dir == expected_data_dir
+        is_mount = False
+        mount_check = "not_checked"
+        warning = ""
+
+        if in_container:
+            try:
+                is_mount = data_dir.exists() and data_dir.is_mount()
+                mount_check = "ok"
+            except OSError as error:
+                mount_check = f"error: {error}"
+
+            if not is_expected_path:
+                warning = (
+                    f"DATA_DIR={data_dir} pero en Coolify debe ser /app/data "
+                    "para coincidir con el Persistent Storage."
+                )
+            elif not is_mount:
+                warning = (
+                    "No detecto /app/data como mount del contenedor. En Coolify "
+                    "crea un Persistent Storage en la app con Mount path /app/data."
+                )
+
+        return {
+            "data_dir": str(data_dir),
+            "state_dir": str(state_dir),
+            "in_container": in_container,
+            "expected_data_dir": str(expected_data_dir),
+            "is_expected_path": is_expected_path,
+            "is_mount": is_mount,
+            "mount_check": mount_check,
+            "warning": warning,
+        }
 
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
         usernames = extract_usernames(
@@ -431,3 +494,14 @@ class VideoCreationService:
                 continue
             if mtime < cutoff:
                 shutil.rmtree(child, ignore_errors=True)
+
+
+def _running_in_container() -> bool:
+    if Path("/.dockerenv").exists():
+        return True
+    try:
+        cgroup = Path("/proc/1/cgroup").read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return False
+    lowered = cgroup.lower()
+    return any(token in lowered for token in ("docker", "kubepods", "containerd"))

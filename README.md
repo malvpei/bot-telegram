@@ -4,7 +4,8 @@ Este proyecto monta un bot de Telegram que:
 
 - lee un archivo local `accounts.txt` con las cuentas de Instagram a usar
 - pregunta tipo de video e idioma mediante un wizard corto
-- descarga imágenes recientes (sin reutilizarlas entre videos, salvo `imagen6.png`)
+- descarga una vez una biblioteca local por cuenta y luego selecciona desde disco
+  (sin reutilizar imágenes entre videos, salvo `imagen6.png`)
 - elige automáticamente las fotos según reglas para `tipo 1` o `tipo 2`
 - genera el texto en español o en inglés
 - evita repetir el mismo guion seguido y mantiene un historial de firmas
@@ -12,13 +13,10 @@ Este proyecto monta un bot de Telegram que:
 
 ## Lo que hace el pipeline
 
-- **Tipo 1** — 7 slides, narrativa octubre → marzo con una única cuenta
-  principal. Slide 6 es siempre `imagen6.png` (febrero). El texto de febrero
-  menciona obligatoriamente Dropradar. Si ninguna imagen de la cuenta parece
-  paisaje, se puede coger **una** imagen de paisaje de otra cuenta enviada
-  (se reporta como `fallback`) y solo se permite sustituir los slots
-  narrativos menos críticos (octubre, noviembre o enero); nunca hook,
-  diciembre, febrero, ni marzo.
+- **Tipo 1** — 7 slides, narrativa octubre → marzo con una única cuenta.
+  Slide 6 es siempre `imagen6.png` (febrero). El texto de febrero menciona
+  obligatoriamente Dropradar. Nunca se mezclan imágenes de dos cuentas en el
+  mismo video.
 - **Tipo 2** — 5 slides, hook con cara visible preferente, 4 consejos. Slide
   3 es `imagen6.png` y menciona Dropradar. Los textos se sanean de `;`, `—`,
   `–`, `―` y variantes Unicode similares antes de devolverse. Permite
@@ -118,6 +116,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `DOWNLOAD_RETRIES` | 3 | reintentos por imagen |
 | `DOWNLOAD_BACKOFF_SECONDS` | 1.5 | backoff base exponencial |
 | `OUTPUT_RETENTION_DAYS` | 7 | días que se guardan outputs |
+| `ACCOUNT_CACHE_TTL_HOURS` | 0 | 0 = cache permanente; las cuentas ya descargadas se leen de `data/downloads/<cuenta>` |
 | `ACCOUNT_PICK_ATTEMPTS` | 0 | objetivo inicial heredado; el selector puede seguir probando más cuentas para evitar falsos "sin imágenes" |
 
 ### Instagram y 2FA
@@ -148,14 +147,16 @@ el bot.
 /start        — intro
 /help         — flujo y notas
 /accounts     — lista las cuentas cargadas
+/sync         — descarga una vez la biblioteca local por cuenta
 /create       — lanza el wizard (tipo → idioma → render)
 /wizard       — alias de /create
 /cancel       — cancela el wizard en curso
 ```
 
-Flujo del wizard: eliges **Tipo 1** o **Tipo 2**, después **Español** o
-**English**, y el bot corre el pipeline completo con las cuentas del
-archivo.
+Flujo recomendado: ejecuta **/sync** para poblar `data/downloads/<cuenta>` con
+las imágenes de cada cuenta. Después, en el wizard eliges **Tipo 1**, **Tipo 2**
+o **Tipo 3**, después **Español** o **English**, y el bot elige solo imágenes ya
+guardadas de una única cuenta para ese video.
 
 ## Salida
 
@@ -181,7 +182,7 @@ En Docker el proyecto fija `DATA_DIR=/app/data` y el `Dockerfile` declara
 volumen nombrado `bot_telegram_data` y la memoria sobrevive a redeploys.
 
 En Coolify, usa preferiblemente el despliegue con `docker-compose.yml`, o
-asegurate de crear un Persistent Storage con:
+asegurate de crear un Persistent Storage en la app concreta del proyecto con:
 
 ```text
 Mount path: /app/data
@@ -189,6 +190,10 @@ Mount path: /app/data
 
 Todo lo que debe sobrevivir vive ahi: `state/used_media.json`,
 `state/telegram_owner.json`, `state/jobs_log.json`, `downloads/` y `outputs/`.
+Tras desplegar, ejecuta `/memory`: debe mostrar `DATA_DIR: /app/data` y
+`Persistent Storage: OK (/app/data montado)`. Si aparece `ERROR`, el storage
+no esta montado en esa app de Coolify y el siguiente redeploy puede borrar la
+memoria.
 
 ## Ejecutar
 

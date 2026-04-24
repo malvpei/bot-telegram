@@ -241,14 +241,12 @@ class ImageSelector:
                 replaced = self._inject_landscape(
                     picked,
                     role_scores,
-                    catalog,
+                    {account: available},
                     selected_account=account,
                     replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
                     allow_luxury=False,
                 )
-                if replaced and replaced.source_account != account:
-                    fallback_accounts.append(replaced.source_account)
-                elif not replaced:
+                if not replaced:
                     LOGGER.info(
                         "tipo1 @%s: sin paisaje disponible, sigo con las picks actuales",
                         account,

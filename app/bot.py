@@ -68,6 +68,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("accounts", accounts_command))
+    application.add_handler(CommandHandler("sync", sync_command))
     application.add_handler(CommandHandler("memory", memory_command))
     application.add_handler(wizard_handler)
     application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
@@ -85,6 +86,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "hayas dejado en accounts.txt.\n\n"
         "Comandos:\n"
         "/memory - ver si la memoria persiste tras redeploy\n"
+        "/sync - descargar la biblioteca local de cuentas\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas cargadas\n"
         "/cancel — cancelar el wizard actual"
@@ -101,7 +103,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "1. /create\n"
         "2. elige Tipo 1, Tipo 2 o Tipo 3\n"
         "3. elige Español o English\n"
-        "4. el bot descarga, elige imágenes y envía el video\n\n"
+        "4. el bot elige imágenes ya guardadas y envía el video\n\n"
         "Tipos:\n"
         "1 = historia de 7 imágenes (slide 6 = imagen6.png, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = imagen6.png, tip3)\n"
@@ -109,6 +111,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Las cuentas se leen de accounts.txt (una por línea). Para cambiarlas "
         "edita ese archivo y reinicia el bot (o solo guarda, el archivo se "
         "relee en cada /create).\n\n"
+        "Usa /sync para descargar una vez las imágenes de accounts.txt. "
+        "Despues /create reutiliza esa biblioteca local sin mezclar cuentas.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
     )
@@ -131,6 +135,54 @@ async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.effective_message.reply_text(
         f"Cuentas cargadas ({len(accounts)}):\n{preview}{suffix}"
     )
+
+
+async def sync_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_allowed(update):
+        return
+
+    settings = get_settings()
+    try:
+        accounts = load_accounts(settings.accounts_file)
+    except AccountsFileError as error:
+        await update.effective_message.reply_text(str(error))
+        return
+
+    status_message = await update.effective_message.reply_text(
+        f"Sincronizando {len(accounts)} cuentas. Las que ya tengan carpeta local no se descargan de nuevo."
+    )
+    service: VideoCreationService = context.application.bot_data["service"]
+    try:
+        summary = await asyncio.to_thread(service.sync_accounts, accounts)
+    except Exception as error:
+        LOGGER.exception("Account sync failed")
+        await status_message.edit_text(f"No pude sincronizar cuentas.\n\n{error}")
+        return
+
+    ready = summary["downloaded"]
+    errors = summary["errors"]
+    ready_lines = [
+        f"@{account}: {count} imagenes"
+        for account, count in sorted(ready.items())
+    ]
+    error_lines = [
+        f"@{account}: {message}"
+        for account, message in sorted(errors.items())
+    ]
+
+    text = (
+        f"Sincronizacion completada: {len(ready)}/{summary['requested']} cuentas listas.\n"
+        f"Carpeta: {settings.downloads_dir}\n\n"
+    )
+    if ready_lines:
+        text += "Listas:\n" + "\n".join(ready_lines[:20])
+        if len(ready_lines) > 20:
+            text += f"\n... y {len(ready_lines) - 20} mas"
+    if error_lines:
+        text += "\n\nErrores:\n" + "\n".join(error_lines[:8])
+        if len(error_lines) > 8:
+            text += f"\n... y {len(error_lines) - 8} mas"
+    await status_message.edit_text(text)
 
 
 async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -161,15 +213,29 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     marker_status = "nuevo en este arranque" if marker.get("created_now") else "existente"
     marker_id = str(marker.get("install_id") or "-")[:12]
     created_at = marker.get("created_at") or "-"
+    cache_line = (
+        "permanente"
+        if settings.account_cache_ttl_hours <= 0
+        else f"{settings.account_cache_ttl_hours}h"
+    )
+    service: VideoCreationService | None = context.application.bot_data.get("service")
+    persistence = service.persistence_status() if service is not None else {}
+    if not persistence.get("in_container"):
+        storage_line = "local"
+    elif persistence.get("is_expected_path") and persistence.get("is_mount"):
+        storage_line = "OK (/app/data montado)"
+    else:
+        storage_line = f"ERROR: {persistence.get('warning') or 'storage no verificado'}"
 
     await update.effective_message.reply_text(
         "Memoria del bot\n"
         f"DATA_DIR: {settings.data_dir}\n"
         f"State: {snapshot['state_dir']}\n"
+        f"Persistent Storage: {storage_line}\n"
         f"Marker: {marker_id} ({marker_status}, creado {created_at})\n"
         f"Cuentas cargadas: {accounts_line}\n"
         f"Posts con foto por cuenta: {settings.max_posts_per_account}\n"
-        f"Cache de cuentas: {settings.account_cache_ttl_hours}h\n"
+        f"Cache de cuentas: {cache_line}\n"
         f"Fotos bloqueadas: {snapshot['used_media_count']}\n"
         f"Jobs guardados: {snapshot['jobs_count']}\n"
         f"Cuentas usadas distintas: {snapshot['unique_chosen_accounts']}\n"
@@ -331,7 +397,7 @@ async def _execute_job(
     chat = update.effective_chat
     status_message = await context.bot.send_message(
         chat_id=chat.id,
-        text="Estoy descargando cuentas, seleccionando imágenes y montando el video. Esto puede tardar un poco.",
+        text="Estoy seleccionando imágenes de la biblioteca local y montando el video. Esto puede tardar un poco.",
     )
     service: VideoCreationService = context.application.bot_data["service"]
 

@@ -273,3 +273,36 @@ def test_picker_tries_next_random_account_when_video_cannot_be_made(monkeypatch)
         assert tried == ["bad", "good"]
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_persistence_status_warns_when_container_data_dir_is_not_app_data(monkeypatch):
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = replace(
+        get_settings(),
+        data_dir=Path("/tmp/bot-data"),
+        state_dir=Path("/tmp/bot-data/state"),
+    )
+    monkeypatch.setattr("app.service._running_in_container", lambda: True)
+
+    status = service.persistence_status()
+
+    assert status["in_container"] is True
+    assert status["is_expected_path"] is False
+    assert "DATA_DIR=" in status["warning"]
+
+
+def test_persistence_status_warns_when_app_data_is_not_mounted(monkeypatch):
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = replace(
+        get_settings(),
+        data_dir=Path("/app/data"),
+        state_dir=Path("/app/data/state"),
+    )
+    monkeypatch.setattr("app.service._running_in_container", lambda: True)
+
+    status = service.persistence_status()
+
+    assert status["in_container"] is True
+    assert status["is_expected_path"] is True
+    assert status["is_mount"] is False
+    assert "Persistent Storage" in status["warning"]

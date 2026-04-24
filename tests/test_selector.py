@@ -189,7 +189,7 @@ def test_type_2_rejects_account_without_any_face(temp_workspace):
         selector.create_plan({"gamma": candidates}, VideoType.TYPE_2, Language.ES)
 
 
-def test_type_1_landscape_fallback_does_not_touch_february(temp_workspace):
+def test_type_1_never_uses_landscape_from_another_account(temp_workspace):
     settings, state = temp_workspace
     main_dir = settings.downloads_dir / "main"
     main_dir.mkdir()
@@ -223,10 +223,10 @@ def test_type_1_landscape_fallback_does_not_touch_february(temp_workspace):
     february_slide = next(slide for slide in plan.slides if slide.role == SlideRole.FEBRUARY)
     hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
     assert february_slide.media.source_account == "fixed"
-    # Landscape fallback must never replace the hook; it should land on
-    # October/November/January.
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
     assert hook_slide.media.source_account == "main"
-    assert plan.fallback_accounts == ["backup"]
+    assert all(media.source_account == "main" for media in non_fixed)
+    assert plan.fallback_accounts == []
 
 
 def test_type_2_allows_zero_landscapes_even_if_another_account_has_them(temp_workspace):

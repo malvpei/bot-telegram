@@ -34,6 +34,7 @@ RESERVED_PATHS = {"p", "reel", "reels", "stories", "explore", "tv", "accounts", 
 # Bump when cache payload format/source changes so old caches are ignored.
 CACHE_VERSION = 3
 FEED_RETRY_ATTEMPTS = 3
+LOCAL_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -579,8 +580,9 @@ class InstagramCollector:
 
     def _load_cached_account(self, username: str) -> list[MediaCandidate] | None:
         cache_path = self._cache_path(username)
+        account_dir = self.settings.downloads_dir / username
         if not cache_path.exists():
-            return None
+            return self._load_account_from_folder(username, account_dir)
         ttl_hours = self.settings.account_cache_ttl_hours
         if ttl_hours > 0:
             age = time.time() - cache_path.stat().st_mtime
@@ -593,8 +595,6 @@ class InstagramCollector:
         # Ignore caches saved by the old HTML-embed path; they contain
         # IG logos / suggested-profile avatars mixed with real posts.
         if payload.get("cache_version") != CACHE_VERSION:
-            return None
-        if int(payload.get("max_posts_per_account", 0)) != self.settings.max_posts_per_account:
             return None
         items: list[MediaCandidate] = []
         for raw in payload.get("items", []):
@@ -613,7 +613,49 @@ class InstagramCollector:
                     created_at=raw.get("created_at", ""),
                 )
             )
-        return items if items else None
+        if items:
+            return items[: self.settings.max_posts_per_account]
+        return self._load_account_from_folder(username, account_dir)
+
+    def _load_account_from_folder(
+        self, username: str, account_dir: Path
+    ) -> list[MediaCandidate] | None:
+        if not account_dir.exists():
+            return None
+        paths = [
+            path
+            for path in sorted(account_dir.iterdir(), key=lambda item: item.name.lower())
+            if path.is_file() and path.suffix.lower() in LOCAL_IMAGE_EXTENSIONS
+        ]
+        items: list[MediaCandidate] = []
+        for path in paths[: self.settings.max_posts_per_account]:
+            try:
+                width, height = read_image_size(path)
+            except (UnidentifiedImageError, OSError):
+                LOGGER.warning("Skipping unreadable cached image: %s", path)
+                continue
+            source_id = _source_id_from_local_path(username, path)
+            items.append(
+                MediaCandidate(
+                    source_account=username,
+                    source_id=source_id,
+                    local_path=path,
+                    permalink="",
+                    caption=path.stem,
+                    width=width,
+                    height=height,
+                    created_at="local",
+                )
+            )
+        if not items:
+            return None
+        LOGGER.info(
+            "Using local image folder for @%s (%d item(s), no network fetch)",
+            username,
+            len(items),
+        )
+        self._save_account_cache(username, items)
+        return items
 
     def _save_account_cache(self, username: str, items: list[MediaCandidate]) -> None:
         cache_path = self._cache_path(username)
@@ -973,3 +1015,11 @@ def read_image_size(path: Path) -> tuple[int, int]:
         image.verify()
     with Image.open(path) as image:
         return image.size
+
+
+def _source_id_from_local_path(username: str, path: Path) -> str:
+    stem = path.stem
+    post_id, separator, node_index = stem.rpartition("_")
+    if separator and node_index.isdigit() and post_id:
+        return f"{username}:{post_id}:{node_index}"
+    return f"{username}:local:{stem}"
