@@ -614,21 +614,79 @@ class InstagramCollector:
                 )
             )
         if items:
-            return items[: self.settings.max_posts_per_account]
+            items = self._merge_cached_items_with_local_folder(
+                username, account_dir, items
+            )
+            limited_items = _limit_candidates_by_post(
+                items, self.settings.max_posts_per_account
+            )
+            if len(limited_items) != len(payload.get("items", [])):
+                self._save_account_cache(username, limited_items)
+            return limited_items
         return self._load_account_from_folder(username, account_dir)
 
     def _load_account_from_folder(
         self, username: str, account_dir: Path
     ) -> list[MediaCandidate] | None:
-        if not account_dir.exists():
+        items = self._read_account_folder(username, account_dir)
+        if not items:
             return None
+        LOGGER.info(
+            "Using local image folder for @%s (%d item(s), no network fetch)",
+            username,
+            len(items),
+        )
+        limited_items = _limit_candidates_by_post(
+            items, self.settings.max_posts_per_account
+        )
+        self._save_account_cache(username, limited_items)
+        return limited_items
+
+    def _merge_cached_items_with_local_folder(
+        self,
+        username: str,
+        account_dir: Path,
+        cached_items: list[MediaCandidate],
+    ) -> list[MediaCandidate]:
+        folder_items = self._read_account_folder(username, account_dir)
+        if not folder_items:
+            return cached_items
+
+        cached_by_id = {item.source_id: item for item in cached_items}
+        merged: list[MediaCandidate] = []
+        seen: set[str] = set()
+        for folder_item in folder_items:
+            item = cached_by_id.get(folder_item.source_id, folder_item)
+            if item.source_id in seen:
+                continue
+            seen.add(item.source_id)
+            merged.append(item)
+        for item in cached_items:
+            if item.source_id in seen:
+                continue
+            seen.add(item.source_id)
+            merged.append(item)
+        if len(merged) > len(cached_items):
+            LOGGER.info(
+                "Repaired cached catalog for @%s from local folder: %d -> %d items",
+                username,
+                len(cached_items),
+                len(merged),
+            )
+        return merged
+
+    def _read_account_folder(
+        self, username: str, account_dir: Path
+    ) -> list[MediaCandidate]:
+        if not account_dir.exists():
+            return []
         paths = [
             path
             for path in sorted(account_dir.iterdir(), key=lambda item: item.name.lower())
             if path.is_file() and path.suffix.lower() in LOCAL_IMAGE_EXTENSIONS
         ]
         items: list[MediaCandidate] = []
-        for path in paths[: self.settings.max_posts_per_account]:
+        for path in paths:
             try:
                 width, height = read_image_size(path)
             except (UnidentifiedImageError, OSError):
@@ -648,13 +706,7 @@ class InstagramCollector:
                 )
             )
         if not items:
-            return None
-        LOGGER.info(
-            "Using local image folder for @%s (%d item(s), no network fetch)",
-            username,
-            len(items),
-        )
-        self._save_account_cache(username, items)
+            return []
         return items
 
     def _save_account_cache(self, username: str, items: list[MediaCandidate]) -> None:
@@ -1015,6 +1067,32 @@ def read_image_size(path: Path) -> tuple[int, int]:
         image.verify()
     with Image.open(path) as image:
         return image.size
+
+
+def _limit_candidates_by_post(
+    items: list[MediaCandidate], max_posts: int
+) -> list[MediaCandidate]:
+    if max_posts <= 0:
+        return list(items)
+
+    limited: list[MediaCandidate] = []
+    seen_posts: set[str] = set()
+    for item in items:
+        post_key = _post_key_from_source_id(item.source_id)
+        if post_key not in seen_posts and len(seen_posts) >= max_posts:
+            continue
+        seen_posts.add(post_key)
+        limited.append(item)
+    return limited
+
+
+def _post_key_from_source_id(source_id: str) -> str:
+    parts = source_id.split(":")
+    if len(parts) >= 3 and parts[1] == "local":
+        return f"{parts[0]}:{parts[1]}:{parts[2]}"
+    if len(parts) >= 2:
+        return f"{parts[0]}:{parts[1]}"
+    return source_id
 
 
 def _source_id_from_local_path(username: str, path: Path) -> str:
