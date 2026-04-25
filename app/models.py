@@ -147,6 +147,7 @@ class ScriptPackage:
     signature: str
     plain_text: str
     social_copy: SocialCopy
+    choice_key: str | None = None
 
 
 @dataclass

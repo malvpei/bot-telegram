@@ -78,6 +78,27 @@ class ScriptGenerator:
     # ------------------------------------------------------------------
 
     def _build_type_1_es(self) -> ScriptPackage:
+        variants = {
+            "a": {
+                SlideRole.HOOK: "Exactamente cuánto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejé...",
+                SlideRole.OCTOBER: "Octubre - 0€\nLancé mi primera tienda supermotivado. Puse algo de dinero en anuncios, tuve un montón de vistas, pero nadie compró. Fue un buen golpe de realidad y perdí mi presupuesto.",
+                SlideRole.NOVEMBER: "Noviembre - 0€\nPausé los anuncios de golpe para no perder más dinero. Me pasé todo el mes tocando el diseño de la tienda e intentando conseguir más visitas orgánicas. Igualmente, seguía en 0 ventas.",
+                SlideRole.DECEMBER: "Diciembre - 0€\nLa campaña navideña pasó de largo. Veía a todo el mundo facturando y yo seguía atascado, sobrepensando qué producto lanzar por miedo a equivocarme otra vez.",
+                SlideRole.JANUARY: "Enero - 0€\nNi siquiera abría Shopify. Estaba frustrado de pagar la cuota mensual para nada, estuve a un solo clic de cancelar mi suscripción. Sentía que todo esto era una pérdida de tiempo.",
+                SlideRole.FEBRUARY: "Febrero - 800€\nVi a un dropshipper que sigo recomendando Dropradar y decidí hacer el último intento. Elegí un producto basándome estrictamente en sus métricas y, para mi sorpresa, empezaron a entrar ventas rentables.",
+                SlideRole.MARCH: "Marzo - 2700€\nPor fin tengo ventas de forma constante. Estuve a punto de rendirme antes de aprender que lo que importa es la constancia y saber actuar sobre métricas y datos reales.",
+            },
+            "b": {
+                SlideRole.HOOK: "Exactamente cuánto facturé en mis primeros 6 meses en Dropshipping y por qué casi lo dejé...",
+                SlideRole.OCTOBER: "Octubre - 0€\nEmpecé con muchas ganas, pero sin tener ni idea. Me pasé el mes montando la web y buscando productos que me parecieran buenos, pero no conseguí ni una sola venta.",
+                SlideRole.NOVEMBER: "Noviembre - 0€\nMe frustraba ver que pasaban las semanas y no avanzaba. Seguía retocando la tienda y mirando tutoriales, pero me daba miedo empezar con anuncios y perder dinero, así que me quedé estancado.",
+                SlideRole.DECEMBER: "Diciembre - 0€\nVeía a todo el mundo facturando por Navidad y yo seguía igual. Me sentía incapaz de encontrar un producto que funcionara y la presión de ver que otros lo conseguían me estaba quemando.",
+                SlideRole.JANUARY: "Enero - 0€\nEstaba totalmente desmotivado. Pagar la cuota de Shopify sin vender nada me parecía tirar el dinero y estuve a un paso de cerrar la cuenta y olvidarme de todo.",
+                SlideRole.FEBRUARY: "Febrero - 680€\nVi a un dropshipper que sigo usando Dropradar y decidí darle una última oportunidad. Elegí un producto basándome en sus datos y métricas y, por primera vez, empecé a vender de verdad.",
+                SlideRole.MARCH: "Marzo - 3100€\nNo soy millonario, pero por fin tengo un negocio que funciona. Me alegro de no haberme rendido en enero; la clave era la constancia y dejar de adivinar qué producto iba a funcionar.",
+            },
+        }
+        return self._compose_type_1_fixed(language=Language.ES, variants=variants)
         hook_options = {
             "h1": "Exactamente cuánto dinero gané con Dropshipping en 6 meses empezando desde cero",
             "h2": "Exactamente cuánto facturé con Dropshipping en 6 meses desde 0€",
@@ -147,6 +168,27 @@ class ScriptGenerator:
         )
 
     def _build_type_1_en(self) -> ScriptPackage:
+        variants = {
+            "a": {
+                SlideRole.HOOK: "Exactly how much I made doing Dropshipping in these 6 months and why I almost quit...",
+                SlideRole.OCTOBER: "October - $0\nI launched my first store feeling super motivated. I put some money into ads, got a lot of views, but nobody bought. It was a real reality check and I lost my budget.",
+                SlideRole.NOVEMBER: "November - $0\nI paused the ads right away so I would not lose more money. I spent the whole month tweaking the store design and trying to get more organic traffic. Even so, I was still at 0 sales.",
+                SlideRole.DECEMBER: "December - $0\nThe Christmas season passed me by. I watched everyone else making money while I stayed stuck, overthinking which product to launch because I was scared of getting it wrong again.",
+                SlideRole.JANUARY: "January - $0\nI was not even opening Shopify anymore. I was frustrated about paying the monthly fee for nothing, and I was one click away from canceling my subscription. It felt like all of this was a waste of time.",
+                SlideRole.FEBRUARY: "February - $800\nI saw a dropshipper I follow recommending Dropradar, and I decided to give it one last try. I picked a product strictly based on its metrics and, to my surprise, profitable sales started coming in.",
+                SlideRole.MARCH: "March - $2700\nI finally have sales coming in consistently. I was close to giving up before learning that what really matters is consistency and knowing how to act on real metrics and data.",
+            },
+            "b": {
+                SlideRole.HOOK: "Exactly how much I made in revenue in my first 6 months of Dropshipping and why I almost quit...",
+                SlideRole.OCTOBER: "October - $0\nI started with a lot of excitement, but without really knowing anything. I spent the whole month building the website and looking for products that seemed good to me, but I did not get a single sale.",
+                SlideRole.NOVEMBER: "November - $0\nIt frustrated me to see the weeks go by without making progress. I kept tweaking the store and watching tutorials, but I was scared to start ads and lose money, so I stayed stuck.",
+                SlideRole.DECEMBER: "December - $0\nI watched everyone making money at Christmas while I stayed exactly the same. I felt unable to find a product that worked, and the pressure of seeing others succeed was burning me out.",
+                SlideRole.JANUARY: "January - $0\nI was completely unmotivated. Paying the Shopify fee without selling anything felt like throwing money away, and I was one step away from closing the account and forgetting about everything.",
+                SlideRole.FEBRUARY: "February - $680\nI saw a dropshipper I follow using Dropradar, and I decided to give it one last chance. I picked a product based on its data and metrics and, for the first time, I started selling for real.",
+                SlideRole.MARCH: "March - $3100\nI am not a millionaire, but I finally have a business that works. I am glad I did not give up in January; the key was consistency and stopping the guessing game about which product would work.",
+            },
+        }
+        return self._compose_type_1_fixed(language=Language.EN, variants=variants)
         hook_options = {
             "h1": "Exactly how much money I made with Dropshipping in my first 6 months",
             "h2": "Exactly how much I billed with Dropshipping starting from $0",
@@ -290,162 +332,120 @@ class ScriptGenerator:
             social_copy=social_copy,
         )
 
-    # ------------------------------------------------------------------
-    # Type 2 — "4 things I wish I knew" tips
-    # ------------------------------------------------------------------
-
-    def _build_type_2_es(self) -> ScriptPackage:
-        hook_options = {
-            "h1": "4 errores que te hacen perder dinero en Dropshipping sin darte cuenta",
-            "h2": "Antes de meter dinero a Dropshipping revisa estas 4 cosas",
-            "h3": "Si Dropshipping no te deja dinero, mira la siguiente foto",
-            "h4": "4 cosas que deciden si Dropshipping te da dinero o te lo quita",
-            "h5": "Esto me habría ahorrado dinero antes de abrir mi tienda de Dropshipping",
-            "h6": "Si quieres ganar dinero con Dropshipping, empieza por estas 4 cosas",
-            "h7": "La mayoría pierde dinero en Dropshipping por saltarse esto",
-            "h8": "4 bases simples antes de gastar más dinero en Dropshipping",
-        }
-        tip1 = {
-            "t1": "1. Haz cuentas reales antes de vender, mucha gente se lanza sin contar comisiones, devoluciones y anuncios, luego no entiende por qué entra dinero pero no queda beneficio",
-            "t2": "1. Los márgenes no se improvisan, restar el coste del producto al precio de venta casi siempre miente porque pasarela, envíos e impuestos se comen parte del resultado",
-            "t3": "1. Números claros desde el día uno, si no cuentas todos los gastos reales el margen que ves en la hoja de cálculo es ficción pura y se nota en la cuenta",
-            "t4": "1. La calculadora manda más que la intuición, si no sabes cuánto te queda limpio después de anuncios y envíos estás vendiendo a ciegas aunque tengas pedidos",
-            "t5": "1. No confundas facturar con ganar, una tienda puede vender cada día y aun así perder dinero si el coste de adquisición se come todo el margen",
-            "t6": "1. Revisa el beneficio limpio antes de escalar, porque subir presupuesto sin saber tus números convierte una tienda prometedora en una fuga de dinero",
-            "t7": "1. El margen real decide si puedes respirar, calcula producto, envío, pasarela, impuestos, devoluciones y anuncios antes de celebrar cualquier venta",
-            "t8": "1. Si tus números no aguantan, el producto no sirve, da igual lo bonito que sea el anuncio si cada pedido te deja menos dinero del que parece",
-        }
-        tip2 = {
-            "t1": "2. Una tienda barata nunca vende caro, tu web decide en segundos si el cliente confía lo suficiente para pagar o se va a buscar otra opción",
-            "t2": "2. La primera impresión lo cambia todo, aunque tu producto sea bueno una web descuidada tira la venta antes de que llegues a verla en los datos",
-            "t3": "2. El diseño construye confianza en silencio, cada detalle visual le está diciendo al cliente si puede fiarse de ti o si debe cerrar la pestaña",
-            "t4": "2. Tu tienda es la cara de la marca, si todo transmite descuido el cliente piensa que el producto también lo está y se marcha sin avisar",
-            "t5": "2. La confianza se gana antes del carrito, una web clara, rápida y honesta hace más por tus ventas que cambiar el color del botón veinte veces",
-            "t6": "2. No vendas desde una tienda que parece improvisada, si tú no cuidarías los detalles antes de pagar, tu cliente tampoco lo hará",
-            "t7": "2. El cliente compra seguridad además del producto, por eso fotos, textos, políticas y tiempos de envío tienen que parecer reales desde el primer vistazo",
-            "t8": "2. Una web confusa mata productos buenos, si el comprador duda de quién eres o cuándo llega el pedido, la venta se cae aunque el anuncio funcione",
-        }
-        tip3 = {
-            "t1": "3. Encontrar un producto ganador es vital para conseguir ganancias, Dropradar te ayuda a ver oportunidades con datos reales antes de quemar presupuesto probando al azar",
-            "t2": "3. Deja de elegir productos por intuición, la suerte no escala y Dropradar filtra oportunidades por datos para que pruebes cosas con opciones reales",
-            "t3": "3. El producto marca la diferencia, Dropradar te muestra qué se está vendiendo ahora mismo y por qué funciona sin obligarte a adivinar cada semana",
-            "t4": "3. Menos pruebas al azar significa menos dinero perdido, Dropradar filtra productos con señales reales para que no dependas solo de un presentimiento",
-            "t5": "3. Vender algo que nadie quiere es imposible, Dropradar te da pistas de demanda, competencia y tendencia antes de meter dinero en anuncios",
-            "t6": "3. Un producto ganador no se elige porque te guste, se valida con datos y Dropradar te ayuda a separar caprichos de oportunidades reales",
-            "t7": "3. La diferencia suele estar en lo que eliges vender, Dropradar te ahorra horas de mirar productos sin saber cuáles merecen una prueba seria",
-            "t8": "3. Si pruebas productos sin señales estás apostando, Dropradar convierte esa búsqueda en una decisión más clara antes de arriesgar tu presupuesto",
-        }
-        tip4 = {
-            "t1": "4. No desaparezcas después de la venta, un cliente sin respuesta se convierte rápido en disputa y esa comisión perdida duele más que contestar a tiempo",
-            "t2": "4. El postventa protege tu negocio, muchos problemas no vienen del envío sino del silencio cuando el cliente ya pagó y se siente abandonado",
-            "t3": "4. El soporte también vende, responder rápido y con empatía es una de las formas más baratas de evitar reclamaciones y ganar confianza",
-            "t4": "4. Cuida a quien ya te compró, un cliente bien atendido deja reseñas y vuelve, uno ignorado puede manchar tu tienda con una sola queja",
-            "t5": "4. La venta no termina en el pago, termina cuando el cliente recibe el pedido y siente que detrás de la tienda hay alguien real",
-            "t6": "4. Contestar tarde sale caro, cada duda ignorada aumenta el riesgo de reembolso, disputa y mala reseña justo cuando necesitas confianza",
-            "t7": "4. Prepara respuestas antes de necesitarlas, envíos, devoluciones y cambios deben estar claros para no improvisar cuando llegue el primer problema",
-            "t8": "4. Un buen soporte salva margen, porque evitar una disputa a tiempo puede valer más que conseguir otra venta con un anuncio nuevo",
-        }
-        return self._compose_type_2(Language.ES, hook_options, tip1, tip2, tip3, tip4)
-
-    def _build_type_2_en(self) -> ScriptPackage:
-        hook_options = {
-            "h1": "4 mistakes that make you lose money in Dropshipping without noticing",
-            "h2": "Before putting money into Dropshipping check these 4 things",
-            "h3": "If Dropshipping is not making you money, watch the next photo",
-            "h4": "4 things that decide if Dropshipping makes money or burns it",
-            "h5": "This would have saved me money before my first Dropshipping store",
-            "h6": "If you want money from Dropshipping, start with these 4 basics",
-            "h7": "Most people lose money in Dropshipping because they skip this",
-            "h8": "4 simple checks before spending more money on Dropshipping",
-        }
-        tip1 = {
-            "t1": "1. Know your real numbers before selling, too many people ignore fees, refunds and ads, then wonder why money comes in but profit disappears",
-            "t2": "1. Margins are never obvious, product cost minus selling price usually lies once payment fees, shipping and taxes start eating the result",
-            "t3": "1. Run the numbers from day one, if you miss hidden costs the profit on your spreadsheet is pure fiction and the bank account proves it",
-            "t4": "1. The calculator beats the feeling, if you do not know what you keep after ads and shipping you are selling blind even with orders coming in",
-            "t5": "1. Do not confuse revenue with profit, a store can sell every day and still lose money if acquisition cost eats the whole margin",
-            "t6": "1. Check clean profit before scaling, because raising budget without knowing your numbers can turn a promising store into a money leak",
-            "t7": "1. Real margin decides if you can breathe, count product, shipping, gateway fees, taxes, refunds and ads before celebrating any order",
-            "t8": "1. If the numbers do not survive, the product is not enough, no ad can save a sale that leaves less money than it looks",
-        }
-        tip2 = {
-            "t1": "2. A cheap looking store will never sell premium, your site decides in seconds whether a visitor trusts you enough to buy or leaves",
-            "t2": "2. First impressions change everything, even a solid product dies on a messy storefront before you can count the lost order in analytics",
-            "t3": "2. Design builds trust quietly, every visual detail tells the buyer whether to trust you or close the tab and keep scrolling",
-            "t4": "2. Your store is the face of your brand, if everything feels rushed the customer assumes the product is rushed too and leaves",
-            "t5": "2. Trust is earned before the cart, a clear, fast and honest website does more than changing the button color twenty times",
-            "t6": "2. Do not sell from a store that feels improvised, if you would not trust it before paying, your customer probably will not either",
-            "t7": "2. The buyer is purchasing safety too, so photos, copy, policies and shipping times need to feel real from the first look",
-            "t8": "2. A confusing website kills good products, if the buyer doubts who you are or when the order arrives, the sale falls apart",
-        }
-        tip3 = {
-            "t1": "3. Finding a winning product is vital for profit, Dropradar helps you spot opportunities with real data before burning budget on random tests",
-            "t2": "3. Stop picking products on gut feeling, luck does not scale and Dropradar filters opportunities by data so you test things with real potential",
-            "t3": "3. The product usually makes the difference, Dropradar shows what is selling now and why it works so you are not guessing every week",
-            "t4": "3. Fewer random tests means less money lost, Dropradar filters products with real signals so your budget is not based on a feeling",
-            "t5": "3. Selling something nobody wants is almost impossible, Dropradar gives demand, competition and trend clues before you put money into ads",
-            "t6": "3. A winning product is not chosen because you like it, Dropradar helps separate personal taste from opportunities that deserve a test",
-            "t7": "3. The difference is often what you choose to sell, Dropradar saves hours of scrolling by showing which products deserve serious attention",
-            "t8": "3. If you test products without signals you are gambling, Dropradar turns research into a clearer decision before risking your budget",
-        }
-        tip4 = {
-            "t1": "4. Do not vanish after the sale, an ignored customer turns into a dispute fast and that hit costs more than replying on time",
-            "t2": "4. After sales care protects the business, many problems come from silence after payment when the buyer already feels alone",
-            "t3": "4. Support is part of what you sell, quick and human replies are one of the cheapest ways to avoid claims and build trust",
-            "t4": "4. Take care of the buyer you already have, a supported customer leaves reviews and returns while an ignored one can damage the store",
-            "t5": "4. The sale does not end at payment, it ends when the customer receives the order and feels there is a real person behind the store",
-            "t6": "4. Late replies get expensive, every ignored question raises the risk of refunds, disputes and bad reviews right when you need trust",
-            "t7": "4. Prepare answers before you need them, shipping, refunds and exchanges should be clear before the first real problem lands",
-            "t8": "4. Good support protects margin, because stopping one dispute on time can be worth more than chasing another sale with a new ad",
-        }
-        return self._compose_type_2(Language.EN, hook_options, tip1, tip2, tip3, tip4)
-
-    def _compose_type_2(
+    def _compose_type_1_fixed(
         self,
+        *,
         language: Language,
-        hook_options: dict[str, str],
-        tip1: dict[str, str],
-        tip2: dict[str, str],
-        tip3: dict[str, str],
-        tip4: dict[str, str],
+        variants: dict[str, dict[SlideRole, str]],
     ) -> ScriptPackage:
-        hook_key = random.choice(list(hook_options))
-        keys = {
-            SlideRole.TIP1: random.choice(list(tip1)),
-            SlideRole.TIP2: random.choice(list(tip2)),
-            SlideRole.TIP3: random.choice(list(tip3)),
-            SlideRole.TIP4: random.choice(list(tip4)),
-        }
+        choice_key = self._next_type_1_choice(language, variants)
+        slides_by_role = dict(variants[choice_key])
+        ordered = [slides_by_role[role] for role in TYPE_1_ROLES]
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_1, language)
+        signature = _hash_signature([choice_key, *ordered, social_key])
 
-        slides_by_role: dict[SlideRole, str] = {
-            SlideRole.HOOK: hook_options[hook_key],
-            SlideRole.TIP1: tip1[keys[SlideRole.TIP1]],
-            SlideRole.TIP2: tip2[keys[SlideRole.TIP2]],
-            SlideRole.TIP3: tip3[keys[SlideRole.TIP3]],
-            SlideRole.TIP4: tip4[keys[SlideRole.TIP4]],
-        }
+        if "Dropradar" not in slides_by_role[SlideRole.FEBRUARY]:
+            raise RuntimeError("Tipo 1: el slide de febrero perdió la mención a Dropradar.")
+        if "Dropshipping" not in slides_by_role[SlideRole.HOOK]:
+            raise RuntimeError("Tipo 1: el hook debe mencionar Dropshipping.")
 
-        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_2, language)
-        signature = _hash_signature(
-            [
-                hook_key,
-                keys[SlideRole.TIP1],
-                keys[SlideRole.TIP2],
-                keys[SlideRole.TIP3],
-                keys[SlideRole.TIP4],
-                social_key,
-            ]
-        )
-
-        ordered = [slides_by_role[role] for role in TYPE_2_ROLES]
-        self._assert_type_2_rules(slides_by_role)
         return ScriptPackage(
             slides_by_role=slides_by_role,
             ordered_slides=ordered,
             signature=signature,
             plain_text="\n\n".join(ordered),
             social_copy=social_copy,
+            choice_key=choice_key,
         )
+
+    def _next_type_1_choice(
+        self,
+        language: Language,
+        variants: dict[str, dict[SlideRole, str]],
+    ) -> str:
+        ordered_keys = list(variants)
+        if not ordered_keys:
+            raise RuntimeError("Tipo 1: no hay variantes configuradas.")
+        last_choice = self.state.get_last_text_choice(VideoType.TYPE_1, language)
+        if last_choice not in ordered_keys:
+            return ordered_keys[0]
+        next_index = (ordered_keys.index(last_choice) + 1) % len(ordered_keys)
+        return ordered_keys[next_index]
+
+    # ------------------------------------------------------------------
+    # Type 2 — "4 things I wish I knew" tips
+    # ------------------------------------------------------------------
+
+    def _build_type_2_es(self) -> ScriptPackage:
+        variants = {
+            "a": {
+                SlideRole.HOOK: "Habría pagado por saber estas 4 cosas cuando empecé con Dropshipping",
+                SlideRole.TIP1: "1. Valida con poco presupuesto\nNo trates la publicidad como una apuesta. Invierte pequeñas sumas para testear qué anuncios funcionan y escala solo cuando los datos confirmen la rentabilidad.",
+                SlideRole.TIP2: "2. Cuida al cliente tras el pago\nLa venta no termina cuando recibes el dinero. Un soporte rápido y amable evita reclamaciones bancarias y asegura la continuidad de tu cuenta.",
+                SlideRole.TIP3: "3. Prioriza nichos sobre productos virales\nEvita la competencia saturada buscando soluciones para audiencias específicas. Usa Dropradar para validar productos con potencial y tener ventaja sobre tu competencia.",
+                SlideRole.TIP4: "4. Proyecta profesionalidad y transparencia\nLa venta no termina cuando recibes el dinero. Un soporte rápido y amable evita reclamaciones bancarias y asegura la continuidad de tu cuenta.",
+            },
+            "b": {
+                SlideRole.HOOK: "Errores que veo en pequeños Dropshippers que están empezando",
+                SlideRole.TIP1: '1. Ten una tienda con aspecto "barato"\nSi tu web parece una plantilla de hace diez años, nadie confiará en ti. Añade reseñas, ofrece ofertas, sé sincero con los tiempos de envío e intenta reducirlos para conseguir ventas reales.',
+                SlideRole.TIP2: "2. Trata los anuncios como una tragaperras\nNo lances dinero a Facebook o TikTok esperando un milagro. Empieza con poco, prueba diferentes enfoques y usa el contenido orgánico para ver qué funciona antes de invertir fuerte.",
+                SlideRole.TIP3: "3. Vende lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
+                SlideRole.TIP4: "4. Descuidar el trato con el comprador\nConseguir el pago es solo la mitad del trabajo. Si no ayudas al cliente tras la compra, tu reputación y tu cuenta bancaria lo pagarán. Una comunicación rápida evita devoluciones y protege tu negocio.",
+            },
+        }
+        return self._compose_type_2_fixed(Language.ES, variants)
+
+    def _build_type_2_en(self) -> ScriptPackage:
+        variants = {
+            "a": {
+                SlideRole.HOOK: "I would have paid to know these 4 things when I started Dropshipping",
+                SlideRole.TIP1: "1. Validate with a small budget\nDo not treat advertising like a bet. Invest small amounts to test which ads work and scale only when the data confirms profitability.",
+                SlideRole.TIP2: "2. Take care of the customer after payment\nThe sale does not end when you receive the money. Fast, friendly support prevents bank claims and protects the continuity of your account.",
+                SlideRole.TIP3: "3. Prioritize niches over viral products\nAvoid saturated competition by looking for solutions for specific audiences. Use Dropradar to validate products with potential and gain an advantage over your competition.",
+                SlideRole.TIP4: "4. Project professionalism and transparency\nThe sale does not end when you receive the money. Fast, friendly support prevents bank claims and protects the continuity of your account.",
+            },
+            "b": {
+                SlideRole.HOOK: "Mistakes I see small Dropshippers making when they are starting out",
+                SlideRole.TIP1: "1. Having a cheap looking store\nIf your website looks like a template from ten years ago, nobody will trust you. Add reviews, offer deals, be honest about shipping times and try to reduce them to get real sales.",
+                SlideRole.TIP2: "2. Treating ads like a slot machine\nDo not throw money at Facebook or TikTok hoping for a miracle. Start small, test different angles and use organic content to see what works before investing heavily.",
+                SlideRole.TIP3: "3. Selling the same thing as everyone else\nViral products have too much competition and no margin. Look for niches that solve real problems and lean on tools like Dropradar to find profitable products.",
+                SlideRole.TIP4: "4. Neglecting the buyer experience\nGetting the payment is only half the job. If you do not help the customer after purchase, your reputation and your bank account will pay for it. Fast communication prevents refunds and protects your business.",
+            },
+        }
+        return self._compose_type_2_fixed(Language.EN, variants)
+
+    def _compose_type_2_fixed(
+        self,
+        language: Language,
+        variants: dict[str, dict[SlideRole, str]],
+    ) -> ScriptPackage:
+        choice_key = self._next_type_2_choice(language, variants)
+        slides_by_role = dict(variants[choice_key])
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_2, language)
+        ordered = [slides_by_role[role] for role in TYPE_2_ROLES]
+        self._assert_type_2_rules(slides_by_role)
+        return ScriptPackage(
+            slides_by_role=slides_by_role,
+            ordered_slides=ordered,
+            signature=_hash_signature([choice_key, *ordered, social_key]),
+            plain_text="\n\n".join(ordered),
+            social_copy=social_copy,
+            choice_key=choice_key,
+        )
+
+    def _next_type_2_choice(
+        self,
+        language: Language,
+        variants: dict[str, dict[SlideRole, str]],
+    ) -> str:
+        ordered_keys = list(variants)
+        if not ordered_keys:
+            raise RuntimeError("Tipo 2: no hay variantes configuradas.")
+        last_choice = self.state.get_last_text_choice(VideoType.TYPE_2, language)
+        if last_choice not in ordered_keys:
+            return ordered_keys[0]
+        next_index = (ordered_keys.index(last_choice) + 1) % len(ordered_keys)
+        return ordered_keys[next_index]
 
     @staticmethod
     def _assert_type_2_rules(slides_by_role: dict[SlideRole, str]) -> None:
@@ -455,14 +455,15 @@ class ScriptGenerator:
                     raise ValueError(
                         f"Tipo 2 ({role.value}): el texto contiene el carácter prohibido '{token}'."
                     )
-            if role != SlideRole.HOOK and "\n" in slide:
+            if role != SlideRole.HOOK and "\n" not in slide:
                 raise ValueError(
-                    f"Tipo 2 ({role.value}): el consejo debe ir en un solo párrafo."
+                    f"Tipo 2 ({role.value}): el consejo debe separar título y texto."
                 )
         if "Dropradar" not in slides_by_role.get(SlideRole.TIP3, ""):
             raise ValueError("Tipo 2: el consejo 3 debe mencionar Dropradar.")
-        if "Dropshipping" not in slides_by_role.get(SlideRole.HOOK, ""):
-            raise ValueError("Tipo 2: el hook debe mencionar Dropshipping.")
+        hook = slides_by_role.get(SlideRole.HOOK, "")
+        if "Dropshipping" not in hook and "Dropshippers" not in hook:
+            raise ValueError("Tipo 2: el hook debe mencionar Dropshipping o Dropshippers.")
 
     # ------------------------------------------------------------------
     # Type 3 — one hook photo + fixed tool stack

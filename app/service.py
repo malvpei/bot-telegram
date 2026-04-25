@@ -200,6 +200,12 @@ class VideoCreationService:
             self.state.set_last_signature(
                 request.video_type, request.language, script_package.signature
             )
+            if script_package.choice_key:
+                self.state.set_last_text_choice(
+                    request.video_type,
+                    request.language,
+                    script_package.choice_key,
+                )
             self.state.remember_signature(
                 request.video_type,
                 request.language,

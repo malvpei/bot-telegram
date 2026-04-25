@@ -31,6 +31,7 @@ class StateStore:
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self._used_media_path = self.state_dir / "used_media.json"
         self._recent_scripts_path = self.state_dir / "recent_scripts.json"
+        self._recent_text_choices_path = self.state_dir / "recent_text_choices.json"
         self._script_history_path = self.state_dir / "script_history.json"
         self._jobs_log_path = self.state_dir / "jobs_log.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
@@ -166,6 +167,27 @@ class StateStore:
             recent = self._read_json(self._recent_scripts_path, {})
             recent[self._bucket_key(video_type, language)] = signature
             self._write_json(self._recent_scripts_path, recent)
+
+    def get_last_text_choice(
+        self,
+        video_type: VideoType,
+        language: Language,
+    ) -> str | None:
+        with self._exclusive():
+            recent = self._read_json(self._recent_text_choices_path, {})
+        value = recent.get(self._bucket_key(video_type, language))
+        return value if isinstance(value, str) else None
+
+    def set_last_text_choice(
+        self,
+        video_type: VideoType,
+        language: Language,
+        choice_key: str,
+    ) -> None:
+        with self._exclusive():
+            recent = self._read_json(self._recent_text_choices_path, {})
+            recent[self._bucket_key(video_type, language)] = choice_key
+            self._write_json(self._recent_text_choices_path, recent)
 
     def get_known_signatures(self, video_type: VideoType, language: Language) -> set[str]:
         with self._exclusive():

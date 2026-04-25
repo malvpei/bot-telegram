@@ -62,6 +62,52 @@ def test_type_1_amounts_are_coherent(state_dir):
         assert march_amount > feb_amount
 
 
+def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
+    generator = _make_generator(state_dir)
+
+    first = generator.generate(VideoType.TYPE_1, Language.ES)
+    assert first.choice_key == "a"
+    assert (
+        first.slides_by_role[SlideRole.HOOK]
+        == "Exactamente cuánto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejé..."
+    )
+    assert "Febrero - 800€" in first.slides_by_role[SlideRole.FEBRUARY]
+    assert "Marzo - 2700€" in first.slides_by_role[SlideRole.MARCH]
+
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, first.choice_key)
+    second = generator.generate(VideoType.TYPE_1, Language.ES)
+    assert second.choice_key == "b"
+    assert (
+        second.slides_by_role[SlideRole.HOOK]
+        == "Exactamente cuánto facturé en mis primeros 6 meses en Dropshipping y por qué casi lo dejé..."
+    )
+    assert "Febrero - 680€" in second.slides_by_role[SlideRole.FEBRUARY]
+    assert "Marzo - 3100€" in second.slides_by_role[SlideRole.MARCH]
+
+
+def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
+    generator = _make_generator(state_dir)
+
+    first = generator.generate(VideoType.TYPE_1, Language.EN)
+    assert first.choice_key == "a"
+    assert (
+        first.slides_by_role[SlideRole.HOOK]
+        == "Exactly how much I made doing Dropshipping in these 6 months and why I almost quit..."
+    )
+    assert "February - $800" in first.slides_by_role[SlideRole.FEBRUARY]
+    assert "March - $2700" in first.slides_by_role[SlideRole.MARCH]
+
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.EN, first.choice_key)
+    second = generator.generate(VideoType.TYPE_1, Language.EN)
+    assert second.choice_key == "b"
+    assert (
+        second.slides_by_role[SlideRole.HOOK]
+        == "Exactly how much I made in revenue in my first 6 months of Dropshipping and why I almost quit..."
+    )
+    assert "February - $680" in second.slides_by_role[SlideRole.FEBRUARY]
+    assert "March - $3100" in second.slides_by_role[SlideRole.MARCH]
+
+
 def test_type_2_es_has_five_slides_and_no_forbidden_punctuation(state_dir):
     generator = _make_generator(state_dir)
     package = generator.generate(VideoType.TYPE_2, Language.ES)
@@ -73,15 +119,70 @@ def test_type_2_es_has_five_slides_and_no_forbidden_punctuation(state_dir):
     assert "Dropradar" in package.slides_by_role[SlideRole.TIP3]
 
 
-def test_type_2_tips_are_single_paragraph_and_hooks_are_short(state_dir):
+def test_type_2_tips_separate_title_and_body_and_hooks_are_fixed(state_dir):
     generator = _make_generator(state_dir)
     package = generator.generate(VideoType.TYPE_2, Language.ES)
 
-    assert len(package.slides_by_role[SlideRole.HOOK]) <= 85
+    assert package.slides_by_role[SlideRole.HOOK] in {
+        "Habría pagado por saber estas 4 cosas cuando empecé con Dropshipping",
+        "Errores que veo en pequeños Dropshippers que están empezando",
+    }
     for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
         slide = package.slides_by_role[role]
-        assert "\n" not in slide
+        title, body = slide.split("\n", 1)
+        assert title
+        assert body
         assert slide.startswith(f"{role.value[-1]}.")
+
+
+def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
+    generator = _make_generator(state_dir)
+
+    first = generator.generate(VideoType.TYPE_2, Language.ES)
+    assert first.choice_key == "a"
+    assert (
+        first.slides_by_role[SlideRole.HOOK]
+        == "Habría pagado por saber estas 4 cosas cuando empecé con Dropshipping"
+    )
+    assert first.slides_by_role[SlideRole.TIP1].startswith(
+        "1. Valida con poco presupuesto\n"
+    )
+
+    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.ES, first.choice_key)
+    second = generator.generate(VideoType.TYPE_2, Language.ES)
+    assert second.choice_key == "b"
+    assert (
+        second.slides_by_role[SlideRole.HOOK]
+        == "Errores que veo en pequeños Dropshippers que están empezando"
+    )
+    assert second.slides_by_role[SlideRole.TIP4].startswith(
+        "4. Descuidar el trato con el comprador\n"
+    )
+
+
+def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
+    generator = _make_generator(state_dir)
+
+    first = generator.generate(VideoType.TYPE_2, Language.EN)
+    assert first.choice_key == "a"
+    assert (
+        first.slides_by_role[SlideRole.HOOK]
+        == "I would have paid to know these 4 things when I started Dropshipping"
+    )
+    assert first.slides_by_role[SlideRole.TIP1].startswith(
+        "1. Validate with a small budget\n"
+    )
+
+    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, first.choice_key)
+    second = generator.generate(VideoType.TYPE_2, Language.EN)
+    assert second.choice_key == "b"
+    assert (
+        second.slides_by_role[SlideRole.HOOK]
+        == "Mistakes I see small Dropshippers making when they are starting out"
+    )
+    assert second.slides_by_role[SlideRole.TIP4].startswith(
+        "4. Neglecting the buyer experience\n"
+    )
 
 
 def test_type_2_en_passes_punctuation_rule(state_dir):
@@ -121,6 +222,20 @@ def test_type_1_and_2_hooks_mention_money_and_dropshipping(
         package = generator.generate(video_type, language)
         hook = package.slides_by_role[SlideRole.HOOK].lower()
         assert "dropshipping" in hook
+        if video_type == VideoType.TYPE_1 and language == Language.ES:
+            assert any(term in hook for term in ("gané", "facturé"))
+            continue
+        if video_type == VideoType.TYPE_1 and language == Language.EN:
+            assert any(term in hook for term in ("made", "revenue"))
+            continue
+        if video_type == VideoType.TYPE_2:
+            assert hook in {
+                "habría pagado por saber estas 4 cosas cuando empecé con dropshipping",
+                "errores que veo en pequeños dropshippers que están empezando",
+                "i would have paid to know these 4 things when i started dropshipping",
+                "mistakes i see small dropshippers making when they are starting out",
+            }
+            continue
         assert any(term in hook for term in money_terms)
 
 
