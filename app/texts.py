@@ -470,69 +470,37 @@ class ScriptGenerator:
 
     def _build_type_3_es(self) -> ScriptPackage:
         hooks = {
-            "h1": "Como empezar Dropshipping en 2026\nsin perderte entre mil herramientas",
-            "h2": "Asi se hace Dropshipping en 2026\ncon lo minimo para arrancar",
-            "h3": "Empieza Dropshipping en 2026\nnunca fue tan facil como ahora",
-            "h4": "Monta tu primera tienda de Dropshipping en 2026\npaso a paso sin rodeos",
-            "h5": "Guia express para arrancar Dropshipping en 2026\ny dejar de posponerlo",
-            "h6": "Dropshipping en 2026\nestas son las herramientas que realmente necesitas",
+            "h1": "Como empezar en Dropshipping en 2026",
+            "h2": "Como hacer Dropshipping en 2026",
+            "h3": "Empieza",
         }
+        payment_tool = random.choice(("PayPal", "Stripe"))
+        marketing_tool = random.choice(("Instagram", "TikTok"))
         tools = {
-            SlideRole.TOOL_STORE: "1. Tienda\nCrea tu tienda online\nUsa Shopify",
-            SlideRole.TOOL_PRODUCT_SEARCH: "2. Productos\nEncuentra productos ganadores\nUsa Dropradar",
-            SlideRole.TOOL_SCRIPTS: "3. Guiones\nEscribe guiones rapidos\nUsa ChatGPT",
-            SlideRole.TOOL_PAYMENTS: random.choice(
-                (
-                    "4. Pagos\nCobra tus pedidos\nUsa PayPal",
-                    "4. Pagos\nCobra de forma segura\nUsa Stripe",
-                )
-            ),
-            SlideRole.TOOL_EDITING: random.choice(
-                (
-                    "5. Edicion\nCrea visuales limpios\nUsa Canva",
-                    "5. Edicion\nEdita videos rapido\nUsa CapCut",
-                )
-            ),
-            SlideRole.TOOL_MARKETING: random.choice(
-                (
-                    "6. Marketing\nCrea comunidad\nUsa Instagram",
-                    "6. Marketing\nPublica videos cortos\nUsa TikTok",
-                )
-            ),
+            SlideRole.TOOL_STORE: "1. Tienda\nConstruye tu tienda por solo 1€ - Usa Shopify",
+            SlideRole.TOOL_PRODUCT_SEARCH: "2. Busqueda de productos\nEncuentra productos ganadores - Usa Dropradar",
+            SlideRole.TOOL_SCRIPTS: "3. Guiones\nSigue guiones para tus videos - Usa ChatGPT",
+            SlideRole.TOOL_PAYMENTS: f"4. Pagos\nGestiona tus pagos de forma segura - Usa {payment_tool}",
+            SlideRole.TOOL_EDITING: "5. Edicion\nEdita tus videos para mas calidad - Usa CapCut",
+            SlideRole.TOOL_MARKETING: f"6. Marketing\nPromocionate organicamente - Usa {marketing_tool}",
         }
         return self._compose_type_3(Language.ES, hooks, tools)
 
     def _build_type_3_en(self) -> ScriptPackage:
         hooks = {
-            "h1": "How to start Dropshipping in 2026\nwithout getting lost between tools",
-            "h2": "This is how Dropshipping works in 2026\nwith the minimum to get moving",
-            "h3": "Start Dropshipping in 2026\nit has never been this easy to begin",
-            "h4": "Build your first Dropshipping store in 2026\nstep by step with no fluff",
-            "h5": "Quick guide to start Dropshipping in 2026\nand finally stop delaying it",
-            "h6": "Dropshipping in 2026\nthese are the tools you actually need to begin",
+            "h1": "How to start Dropshipping in 2026",
+            "h2": "How to do Dropshipping in 2026",
+            "h3": "Start",
         }
+        payment_tool = random.choice(("PayPal", "Stripe"))
+        marketing_tool = random.choice(("Instagram", "TikTok"))
         tools = {
-            SlideRole.TOOL_STORE: "1. Store\nBuild your online store\nUse Shopify",
-            SlideRole.TOOL_PRODUCT_SEARCH: "2. Products\nFind winning products\nUse Dropradar",
-            SlideRole.TOOL_SCRIPTS: "3. Scripts\nWrite quick scripts\nUse ChatGPT",
-            SlideRole.TOOL_PAYMENTS: random.choice(
-                (
-                    "4. Payments\nTake customer payments\nUse PayPal",
-                    "4. Payments\nTake secure payments\nUse Stripe",
-                )
-            ),
-            SlideRole.TOOL_EDITING: random.choice(
-                (
-                    "5. Editing\nCreate clean visuals\nUse Canva",
-                    "5. Editing\nEdit videos fast\nUse CapCut",
-                )
-            ),
-            SlideRole.TOOL_MARKETING: random.choice(
-                (
-                    "6. Marketing\nBuild a community\nUse Instagram",
-                    "6. Marketing\nPost short videos\nUse TikTok",
-                )
-            ),
+            SlideRole.TOOL_STORE: "1. Store\nBuild your store for only $1 - Use Shopify",
+            SlideRole.TOOL_PRODUCT_SEARCH: "2. Product Search\nFind winning products - Use Dropradar",
+            SlideRole.TOOL_SCRIPTS: "3. Scripts\nFollow scripts for your videos - Use ChatGPT",
+            SlideRole.TOOL_PAYMENTS: f"4. Payments\nManage your payments securely - Use {payment_tool}",
+            SlideRole.TOOL_EDITING: "5. Editing\nEdit your videos for better quality - Use CapCut",
+            SlideRole.TOOL_MARKETING: f"6. Marketing\nPromote your product organically - Use {marketing_tool}",
         }
         return self._compose_type_3(Language.EN, hooks, tools)
 
@@ -868,8 +836,8 @@ class ScriptGenerator:
         full_text = "\n".join(slides_by_role.values()).lower()
         if "hosting" in full_text or "hostinger" in full_text:
             raise ValueError("Tipo 3: hosting no debe aparecer.")
-        if "dropshipping" not in slides_by_role.get(SlideRole.HOOK, "").lower():
-            raise ValueError("Tipo 3: el hook debe mencionar Dropshipping.")
+        if not slides_by_role.get(SlideRole.HOOK, "").strip():
+            raise ValueError("Tipo 3: el hook no puede ir vacio.")
         ScriptGenerator._assert_one_tool(
             slides_by_role,
             SlideRole.TOOL_PAYMENTS,
@@ -879,7 +847,7 @@ class ScriptGenerator:
         ScriptGenerator._assert_one_tool(
             slides_by_role,
             SlideRole.TOOL_EDITING,
-            ("canva", "capcut"),
+            ("capcut",),
             "edicion",
         )
         ScriptGenerator._assert_one_tool(

@@ -155,16 +155,23 @@ def test_type_3_has_tool_stack_without_hosting(state_dir):
 
     assert len(package.ordered_slides) == len(TYPE_3_ROLES)
     full_text = package.plain_text.lower()
-    assert "dropshipping" in package.slides_by_role[SlideRole.HOOK].lower()
     assert "hosting" not in full_text
     assert "hostinger" not in full_text
+    assert package.slides_by_role[SlideRole.TOOL_STORE] == (
+        "1. Tienda\nConstruye tu tienda por solo 1€ - Usa Shopify"
+    )
+    assert package.slides_by_role[SlideRole.TOOL_PRODUCT_SEARCH] == (
+        "2. Busqueda de productos\nEncuentra productos ganadores - Usa Dropradar"
+    )
+    assert package.slides_by_role[SlideRole.TOOL_SCRIPTS] == (
+        "3. Guiones\nSigue guiones para tus videos - Usa ChatGPT"
+    )
     assert _contains_exactly_one(
         package.slides_by_role[SlideRole.TOOL_PAYMENTS],
         ("paypal", "stripe"),
     )
-    assert _contains_exactly_one(
-        package.slides_by_role[SlideRole.TOOL_EDITING],
-        ("canva", "capcut"),
+    assert package.slides_by_role[SlideRole.TOOL_EDITING] == (
+        "5. Edicion\nEdita tus videos para mas calidad - Usa CapCut"
     )
     assert _contains_exactly_one(
         package.slides_by_role[SlideRole.TOOL_MARKETING],
@@ -172,21 +179,23 @@ def test_type_3_has_tool_stack_without_hosting(state_dir):
     )
 
 
-def test_type_3_can_use_paypal_canva_and_instagram(state_dir, monkeypatch):
+def test_type_3_can_use_paypal_and_instagram(state_dir, monkeypatch):
     monkeypatch.setattr(texts_module.random, "choice", lambda seq: list(seq)[0])
     generator = _make_generator(state_dir)
     package = generator.generate(VideoType.TYPE_3, Language.ES)
 
+    assert package.slides_by_role[SlideRole.HOOK] == "Como empezar en Dropshipping en 2026"
     assert "paypal" in package.slides_by_role[SlideRole.TOOL_PAYMENTS].lower()
-    assert "canva" in package.slides_by_role[SlideRole.TOOL_EDITING].lower()
+    assert "capcut" in package.slides_by_role[SlideRole.TOOL_EDITING].lower()
     assert "instagram" in package.slides_by_role[SlideRole.TOOL_MARKETING].lower()
 
 
-def test_type_3_can_use_stripe_capcut_and_tiktok(state_dir, monkeypatch):
+def test_type_3_can_use_stripe_and_tiktok(state_dir, monkeypatch):
     monkeypatch.setattr(texts_module.random, "choice", lambda seq: list(seq)[-1])
     generator = _make_generator(state_dir)
     package = generator.generate(VideoType.TYPE_3, Language.EN)
 
+    assert package.slides_by_role[SlideRole.HOOK] == "Start"
     assert "stripe" in package.slides_by_role[SlideRole.TOOL_PAYMENTS].lower()
     assert "capcut" in package.slides_by_role[SlideRole.TOOL_EDITING].lower()
     assert "tiktok" in package.slides_by_role[SlideRole.TOOL_MARKETING].lower()
