@@ -94,6 +94,20 @@ def test_type_3_icon_fitting_removes_padding_and_uses_common_box():
     assert ys.max() - ys.min() >= 176
 
 
+def test_type_3_icon_fitting_can_reduce_visual_size_inside_common_box():
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    icon = Image.new("RGBA", (500, 500), (0, 0, 0, 255))
+
+    fitted = renderer._fit_type_3_icon(icon, 180, visual_scale=0.94)
+    alpha = np.asarray(fitted)[..., 3]
+    ys, xs = np.where(alpha > 0)
+
+    assert fitted.size == (180, 180)
+    assert 166 <= xs.max() - xs.min() <= 170
+    assert 166 <= ys.max() - ys.min() <= 170
+
+
 def test_type_3_icon_path_follows_selected_tool_text():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)

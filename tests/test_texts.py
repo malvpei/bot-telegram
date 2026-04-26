@@ -333,9 +333,7 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
 
     assert package.social_copy.title
     assert package.social_copy.description
-    assert len(package.social_copy.description) >= 220
-    if video_type in (VideoType.TYPE_1, VideoType.TYPE_2):
-        assert len(package.social_copy.description) >= 340
+    assert 2400 <= len(package.social_copy.description) <= 3200
     assert len(package.social_copy.hashtags) >= 3
     assert all(tag.startswith("#") for tag in package.social_copy.hashtags)
     assert all(" " not in tag for tag in package.social_copy.hashtags)
@@ -348,6 +346,36 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
     assert all("Titulo:" not in message for message in package.social_copy.messages)
     assert all("Descripcion:" not in message for message in package.social_copy.messages)
     assert all("Hashtags:" not in message for message in package.social_copy.messages)
+
+
+@pytest.mark.parametrize(
+    ("video_type", "language"),
+    [
+        (VideoType.TYPE_1, Language.ES),
+        (VideoType.TYPE_2, Language.ES),
+        (VideoType.TYPE_3, Language.ES),
+        (VideoType.TYPE_1, Language.EN),
+        (VideoType.TYPE_2, Language.EN),
+        (VideoType.TYPE_3, Language.EN),
+    ],
+)
+def test_social_copy_has_four_long_rotating_descriptions(state_dir, video_type, language):
+    generator = _make_generator(state_dir)
+    variants = generator._social_copy_variants(video_type, language)
+
+    assert len(variants) == 4
+    assert all(2400 <= len(description) <= 3200 for _, description, _ in variants.values())
+
+    first_key, first_copy = generator._choose_social_copy(video_type, language)
+    generator.state.set_last_social_choice(
+        video_type,
+        language,
+        generator._copy_choice_from_social_key(first_key),
+    )
+    second_key, second_copy = generator._choose_social_copy(video_type, language)
+
+    assert generator._copy_choice_from_social_key(second_key) != generator._copy_choice_from_social_key(first_key)
+    assert second_copy.description != first_copy.description
 
 
 @pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3])

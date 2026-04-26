@@ -20,6 +20,8 @@ from app.state import StateStore
 # Em dash, en dash, fullwidth semicolon, hyphen-minus variants — anything that
 # can render as a long dash or semicolon in the rendered video.
 FORBIDDEN_TYPE_2_TOKENS: tuple[str, ...] = (";", "；", "—", "–", "ー", "―")
+SOCIAL_DESCRIPTION_TARGET_MIN = 2400
+SOCIAL_DESCRIPTION_TARGET_MAX = 3200
 
 
 def _hash_signature(parts: list[str]) -> str:
@@ -330,6 +332,7 @@ class ScriptGenerator:
             signature=signature,
             plain_text="\n\n".join(ordered),
             social_copy=social_copy,
+            social_choice_key=self._copy_choice_from_social_key(social_key),
         )
 
     def _compose_type_1_fixed(
@@ -356,6 +359,7 @@ class ScriptGenerator:
             plain_text="\n\n".join(ordered),
             social_copy=social_copy,
             choice_key=choice_key,
+            social_choice_key=self._copy_choice_from_social_key(social_key),
         )
 
     def _next_type_1_choice(
@@ -431,6 +435,7 @@ class ScriptGenerator:
             plain_text="\n\n".join(ordered),
             social_copy=social_copy,
             choice_key=choice_key,
+            social_choice_key=self._copy_choice_from_social_key(social_key),
         )
 
     def _next_type_2_choice(
@@ -523,6 +528,7 @@ class ScriptGenerator:
             signature=signature,
             plain_text="\n\n".join(ordered),
             social_copy=social_copy,
+            social_choice_key=self._copy_choice_from_social_key(social_key),
         )
 
     def _choose_social_copy(
@@ -531,7 +537,7 @@ class ScriptGenerator:
         language: Language,
     ) -> tuple[str, SocialCopy]:
         variants = self._social_copy_variants(video_type, language)
-        copy_key = random.choice(list(variants))
+        copy_key = self._next_social_copy_choice(video_type, language, variants)
         fallback_title, description, hashtags = variants[copy_key]
         title_variants = self._social_title_variants(video_type, language)
         if title_variants:
@@ -546,14 +552,35 @@ class ScriptGenerator:
             hashtags=hashtags,
         )
 
+    @staticmethod
+    def _copy_choice_from_social_key(social_key: str) -> str:
+        return social_key.split(":", 1)[0]
+
+    def _next_social_copy_choice(
+        self,
+        video_type: VideoType,
+        language: Language,
+        variants: dict[str, tuple[str, str, list[str]]],
+    ) -> str:
+        ordered_keys = list(variants)
+        if not ordered_keys:
+            raise RuntimeError("No hay variantes de copy social configuradas.")
+        last_choice = self.state.get_last_social_choice(video_type, language)
+        if last_choice not in ordered_keys:
+            return ordered_keys[0]
+        next_index = (ordered_keys.index(last_choice) + 1) % len(ordered_keys)
+        return ordered_keys[next_index]
+
     def _social_copy_variants(
         self,
         video_type: VideoType,
         language: Language,
     ) -> dict[str, tuple[str, str, list[str]]]:
         if language == Language.EN:
-            return self._social_copy_variants_en(video_type)
-        return self._social_copy_variants_es(video_type)
+            variants = self._social_copy_variants_en(video_type)
+        else:
+            variants = self._social_copy_variants_es(video_type)
+        return self._prepare_social_copy_variants(video_type, language, variants)
 
     def _social_title_variants(
         self,
@@ -655,6 +682,94 @@ class ScriptGenerator:
             "t11": "Tools I would actually use at the start",
             "t12": "Organize your store before overcomplicating it",
         }
+
+    def _prepare_social_copy_variants(
+        self,
+        video_type: VideoType,
+        language: Language,
+        variants: dict[str, tuple[str, str, list[str]]],
+    ) -> dict[str, tuple[str, str, list[str]]]:
+        expansions = self._social_description_expansions(video_type, language)
+        fallback = self._social_description_fallback(video_type, language)
+        prepared: dict[str, tuple[str, str, list[str]]] = {}
+        for index, (key, (title, description, hashtags)) in enumerate(list(variants.items())[:4]):
+            expanded = f"{description} {expansions[index % len(expansions)]}".strip()
+            while len(expanded) < SOCIAL_DESCRIPTION_TARGET_MIN:
+                expanded = f"{expanded} {fallback}".strip()
+            if len(expanded) > SOCIAL_DESCRIPTION_TARGET_MAX:
+                expanded = expanded[:SOCIAL_DESCRIPTION_TARGET_MAX].rsplit(" ", 1)[0].rstrip(",.") + "."
+            prepared[key] = (title, expanded, hashtags)
+        return prepared
+
+    def _social_description_expansions(
+        self,
+        video_type: VideoType,
+        language: Language,
+    ) -> tuple[str, ...]:
+        if language == Language.EN:
+            return self._social_description_expansions_en(video_type)
+        return self._social_description_expansions_es(video_type)
+
+    def _social_description_expansions_es(self, video_type: VideoType) -> tuple[str, ...]:
+        if video_type == VideoType.TYPE_1:
+            return (
+                "La parte importante no es copiar mis cifras ni esperar que tu primer mes se parezca al mío. Lo importante es entender la secuencia. Primero viene la ilusión, luego aparece el choque con la realidad, después empiezas a distinguir entre estar ocupado y estar tomando mejores decisiones. Si solo miras el resultado final, parece que todo cambió de golpe, pero por dentro fue mucho más lento: revisar por qué un producto no se vendió, mirar si el anuncio atraía curiosos o compradores, comprobar si la tienda generaba confianza y aceptar que algunos tests tenían que cerrarse aunque me hubiera encariñado con la idea. Esa disciplina es menos emocionante que enseñar capturas, pero es la que evita repetir el mismo error durante meses. Si estás en una etapa parecida, usa este contenido como una pausa para ordenar tu propio proceso. Escribe qué estás probando, qué métrica estás mirando y qué decisión vas a tomar si los datos salen mal. Cuando haces eso, incluso una semana floja empieza a darte información útil.",
+                "Lo que más me costó aprender fue dejar de buscar una señal perfecta antes de actuar. Quería garantías, quería que alguien me dijera qué producto lanzar, cuánto invertir y cuándo escalar, pero el ecommerce no funciona con esa claridad desde el primer día. Funciona con hipótesis pequeñas, pruebas controladas y ajustes que se acumulan. Por eso esta historia no va de hacerse rico rápido, va de sobrevivir a la parte confusa sin convertir cada fallo en una prueba de que no sirves. Si un producto no convierte, quizá el ángulo está mal. Si la gente hace clic pero no compra, quizá la tienda no sostiene la promesa del anuncio. Si nadie guarda el contenido, quizá el problema no es el algoritmo sino la oferta. Separar esas piezas me ayudó a respirar y a decidir con más calma. Guarda este post si necesitas recordar que avanzar no siempre se siente como avanzar mientras lo estás viviendo.",
+                "También hay algo que casi nadie dice: los meses malos suelen ser caros porque mezclan emoción con prisa. Cuando estás frustrado, cambias de producto demasiado rápido, tocas la tienda sin una razón clara, compras herramientas nuevas para sentir que estás haciendo algo y terminas más disperso que antes. El cambio real empezó cuando limité las decisiones. Un producto cada vez, una hipótesis clara, una métrica principal y un periodo suficiente para leer resultados. Eso no hace que todo funcione, pero reduce el caos y te permite distinguir un mal producto de una mala ejecución. En dropshipping, esa diferencia vale mucho. Si hoy estás probando sin estructura, no necesitas motivarte más: necesitas bajar el ruido, definir el criterio y dejar que los datos te digan qué parte corregir primero.",
+                "No tomes este carrusel como una promesa, tómalo como un mapa de errores comunes. La mayoría de principiantes abandona porque interpreta el silencio del mercado como un juicio personal, cuando muchas veces solo es feedback mal leído. Nadie compra porque el producto no queda claro, porque la oferta no justifica el precio, porque la web genera dudas o porque el contenido atrae a gente que mira pero no tiene intención de pagar. Cuando empiezas a nombrar el problema con precisión, dejas de sentir que todo está roto a la vez. Ahí aparece el progreso real: no en acertar siempre, sino en saber qué cambiar después de cada intento. Esa es la mentalidad que me habría ahorrado más tiempo al principio.",
+            )
+        if video_type == VideoType.TYPE_2:
+            return (
+                "La razón por la que estos cuatro puntos importan tanto es que funcionan como una prueba de presión antes de meter tráfico. Una tienda puede verse bonita en una captura y aun así romperse cuando llegan compradores reales: el margen se queda corto, la promesa del anuncio no coincide con la página, las dudas de envío aparecen demasiado tarde y el soporte se improvisa cuando ya hay dinero de por medio. Revisar esto antes no es perder tiempo, es comprar claridad. Si detectas un problema en cualquiera de las cuatro áreas, no lo tapes con más presupuesto. Corrígelo, vuelve a mirar la experiencia como si fueras cliente y pregúntate si tú comprarías sin conocer la marca. Esa pregunta incomoda, pero suele enseñar más que otra tarde mirando videos de tácticas.",
+                "Piensa en esta checklist como un filtro para tomar mejores decisiones, no como una lista decorativa. Si el margen real no aguanta, cualquier venta puede convertirse en un problema. Si la tienda no inspira confianza, el tráfico solo hará más visible la debilidad. Si el producto no resuelve un dolor concreto, el anuncio tendrá que exagerar para llamar la atención. Y si el soporte no está preparado, la primera duda del cliente puede transformarse en una devolución. Lo bueno es que estas áreas se pueden trabajar antes de gastar fuerte. Puedes recalcular precios, mejorar pruebas sociales, comparar productos con datos y preparar respuestas básicas. No es glamuroso, pero es exactamente lo que separa una prueba seria de una apuesta.",
+                "Muchos principiantes creen que el problema siempre está en el anuncio porque es la parte más visible. Pero un anuncio solo trae gente; no arregla márgenes, no construye confianza por ti y no convierte un producto débil en una oferta sólida. Antes de culpar al creativo, mira el recorrido completo. Qué ve la persona al entrar, qué dudas aparecen, qué promesa le hiciste, cuánto tarda en entender el beneficio y qué pasa después del pago. Cuando haces esa revisión, encuentras fugas que estaban escondidas a plena vista. A veces el ajuste no es cambiar todo, sino ordenar lo básico para que el tráfico tenga una oportunidad real de convertirse.",
+                "La ventaja de revisar estos puntos es que te obliga a pensar como negocio y no solo como creador de anuncios. Un negocio necesita margen, confianza, demanda y una experiencia mínima que no destruya lo que vendiste. Si falta una pieza, lo notarás tarde o temprano, normalmente cuando ya has gastado tiempo o dinero. Por eso conviene parar antes de escalar y hacer una auditoría honesta. No busques perfección; busca que nada importante esté roto. Una tienda simple pero clara suele ser más fuerte que una tienda cargada de trucos que no responde a las preguntas básicas del comprador.",
+            )
+        return (
+            "La clave de este stack no es que cada herramienta sea la única opción posible, sino que cada una cumple un trabajo concreto dentro del flujo. Shopify te da la base para vender, Dropradar te ayuda a investigar con datos, ChatGPT acelera guiones y ángulos, PayPal o Stripe reducen fricción en el cobro, CapCut mantiene la producción de contenido ligera e Instagram o TikTok te dan un lugar donde practicar la respuesta del mercado. Cuando entiendes el papel de cada herramienta, dejas de coleccionar apps y empiezas a construir una rutina. Esa rutina es lo que importa al principio: publicar, medir, ajustar y volver a probar sin convertir cada decisión en una semana de dudas.",
+            "Empezar con pocas herramientas también protege tu atención. Al principio es muy fácil pensar que el siguiente plugin, plantilla o software va a resolver la falta de ventas, pero casi siempre el bloqueo está en otro sitio: no has validado bien el producto, no publicas contenido suficiente, no sabes qué dato mirar o cambias de idea antes de terminar una prueba. Un stack simple te obliga a mirar lo esencial. Qué vendes, por qué alguien lo compraría, cómo lo explicas, cómo cobras y cómo generas tráfico. Si esas preguntas no están claras, añadir más herramientas solo hace que el problema parezca más profesional, pero no más resuelto.",
+            "Usa esta lista como punto de partida, no como jaula. Puedes cambiar una herramienta por otra si ya tienes experiencia, pero evita romper el orden. Primero una tienda funcional, luego producto, luego contenido, después pagos, edición y distribución. Ese orden mantiene el proyecto en movimiento porque cada pieza prepara la siguiente. Si intentas optimizar todo antes de publicar, vas a sentir que trabajas mucho sin recibir feedback real. En cambio, si montas una base suficiente y sales a probar, el mercado empieza a responder. Algunas respuestas serán incómodas, pero al menos sabrás qué ajustar con datos y no solo con intuición.",
+            "El error más común es confundir empezar simple con empezar descuidado. Simple significa que cada pieza tiene una función clara y que puedes repetir el proceso sin depender de una configuración enorme. Descuidado significa lanzar sin entender márgenes, sin revisar la tienda, sin preparar contenido y sin medir nada. Este stack busca lo primero. Te da una estructura ligera para moverte rápido, pero también te recuerda que cada herramienta necesita uso real. No sirve tener Shopify si no mejoras la oferta, ni Dropradar si ignoras los datos, ni ChatGPT si no publicas, ni CapCut si nunca pruebas formatos distintos. La herramienta solo vale cuando entra en una rutina.",
+        )
+
+    def _social_description_expansions_en(self, video_type: VideoType) -> tuple[str, ...]:
+        if video_type == VideoType.TYPE_1:
+            return (
+                "The important part is not copying my numbers or expecting your first month to look like mine. The important part is understanding the sequence. First comes motivation, then the reality check, and then the slow skill of separating busy work from better decisions. If you only look at the final result, it seems like everything changed at once, but inside the process it was much slower: checking why a product did not sell, asking whether the ad attracted viewers or buyers, seeing if the store created trust and accepting that some tests had to be closed even when I liked the idea. That discipline is less exciting than showing screenshots, but it keeps you from repeating the same mistake for months. If you are in a similar stage, use this as a pause to organize your own process. Write down what you are testing, which metric matters and what you will change if the data comes back weak.",
+                "What took me the longest to learn was to stop waiting for a perfect signal before acting. I wanted guarantees, I wanted someone to tell me which product to launch, how much to spend and when to scale, but ecommerce does not start with that kind of clarity. It starts with small hypotheses, controlled tests and adjustments that compound. This story is not about getting rich quickly, it is about surviving the confusing part without treating every failed test as proof that you are not built for it. If a product does not convert, maybe the angle is wrong. If people click but do not buy, maybe the store does not support the promise. If nobody saves the content, maybe the problem is not the algorithm but the offer. Separating those pieces made the work calmer and more useful.",
+                "There is also a part almost nobody says clearly: bad months become expensive when emotion and urgency mix together. When you are frustrated, you switch products too fast, edit the store without a clear reason, buy new tools to feel productive and end up more scattered than before. The real change started when I limited the decisions. One product at a time, one clear hypothesis, one main metric and enough time to read the result. That does not make everything work, but it reduces the chaos and helps you tell the difference between a bad product and weak execution. In dropshipping, that difference matters a lot. If you are testing without structure, you may not need more motivation. You may need less noise and a clearer reason for the next move.",
+                "Do not read this carousel as a promise. Read it as a map of common mistakes. Most beginners quit because they treat silence from the market like a personal verdict, when it is often just feedback they have not learned to read yet. People may not buy because the product is unclear, because the offer does not justify the price, because the store creates doubt or because the content attracts people who watch but never intended to pay. When you name the problem more precisely, the whole project stops feeling broken at once. That is where real progress begins: not in always being right, but in knowing what to change after each attempt.",
+            )
+        if video_type == VideoType.TYPE_2:
+            return (
+                "These four points matter because they work like a pressure test before you send traffic. A store can look good in a screenshot and still break when real buyers arrive: the margin is too thin, the ad promise does not match the page, shipping doubts appear too late and support is improvised after money has already changed hands. Reviewing this first is not wasted time, it is clarity. If one of the four areas is weak, do not hide it under a bigger budget. Fix it, look at the experience like a customer and ask whether you would buy from the brand without knowing who is behind it. That question is uncomfortable, but it usually teaches more than another afternoon watching tactics.",
+                "Treat this checklist as a filter for better decisions, not as a decorative list. If the real margin does not hold, every sale can become a problem. If the store does not create trust, traffic only makes the weakness more visible. If the product does not solve a concrete problem, the ad has to exaggerate to get attention. And if support is not prepared, the first customer question can become a refund. The good news is that these areas can be improved before spending heavily. You can recalculate prices, improve social proof, compare products with data and prepare basic answers. It is not glamorous, but it is exactly what separates a serious test from a guess.",
+                "Many beginners assume the problem is always the ad because that is the most visible part. But an ad only brings people in; it does not fix margins, create trust for you or turn a weak product into a strong offer. Before blaming the creative, look at the whole path. What does the buyer see first, which doubts appear, what promise did you make, how quickly is the benefit clear and what happens after payment? When you review the full journey, you find leaks that were hiding in plain sight. Sometimes the answer is not changing everything. Sometimes it is making the basics solid enough for traffic to have a real chance.",
+                "The value of these checks is that they force you to think like a business, not only like someone making ads. A business needs margin, trust, demand and a minimum customer experience that does not destroy the sale after checkout. If one piece is missing, you will feel it sooner or later, usually after spending time or money. That is why it helps to pause before scaling and run an honest audit. Do not look for perfection; look for nothing important being obviously broken. A simple store with a clear offer is often stronger than a store full of tricks that cannot answer the buyer's basic questions.",
+            )
+        return (
+            "The value of this stack is not that every tool is the only possible option, but that each one has a clear job inside the workflow. Shopify gives you the selling base, Dropradar helps with product research, ChatGPT speeds up scripts and angles, PayPal or Stripe reduce payment friction, CapCut keeps content production light and Instagram or TikTok give you a place to practice market response. When you understand the role of each tool, you stop collecting apps and start building a routine. That routine is what matters at the beginning: publish, measure, adjust and test again without turning every decision into another week of doubt.",
+            "Starting with fewer tools also protects your attention. It is easy to believe the next plugin, template or software will solve the lack of sales, but the real block is usually somewhere else: the product was not validated, you are not posting enough content, you do not know which metric to watch or you change ideas before finishing a test. A simple stack forces you to look at the essentials. What are you selling, why would someone buy it, how do you explain it, how do you take payment and how do you get traffic? If those questions are unclear, adding more tools only makes the problem look more professional, not more solved.",
+            "Use this list as a starting point, not as a cage. You can swap one tool for another if you already know what you are doing, but avoid breaking the order. First a functional store, then product research, then content, then payments, editing and distribution. That order keeps the project moving because each piece prepares the next one. If you try to optimize everything before publishing, you can work for weeks without real feedback. If you build a good enough base and start testing, the market starts answering. Some answers will be uncomfortable, but at least you will know what to adjust with data instead of pure instinct.",
+            "The most common mistake is confusing simple with careless. Simple means every piece has a clear function and you can repeat the process without depending on a huge setup. Careless means launching without understanding margins, without reviewing the store, without preparing content and without measuring anything. This stack is aiming for the first version. It gives you a light structure to move fast, while reminding you that every tool needs real use. Shopify means little if you never improve the offer, Dropradar means little if you ignore the data, ChatGPT means little if you do not publish and CapCut means little if you never test new formats.",
+        )
+
+    def _social_description_fallback(
+        self,
+        video_type: VideoType,
+        language: Language,
+    ) -> str:
+        if language == Language.EN:
+            if video_type == VideoType.TYPE_1:
+                return "Keep the focus on the process, not on the fantasy of a perfect result. One clear test, one useful metric and one honest adjustment can teach more than another week of random changes."
+            if video_type == VideoType.TYPE_2:
+                return "Use it as a quick audit before spending more. The goal is not to make the store perfect, but to remove the obvious leaks before traffic makes them expensive."
+            return "Keep the setup simple enough to repeat. The tools only matter when they help you publish, measure and improve with less friction every week."
+        if video_type == VideoType.TYPE_1:
+            return "Quédate con el proceso, no con la fantasía de un resultado perfecto. Una prueba clara, una métrica útil y un ajuste honesto enseñan más que otra semana de cambios aleatorios."
+        if video_type == VideoType.TYPE_2:
+            return "Úsalo como auditoría rápida antes de gastar más. La meta no es tener una tienda perfecta, sino quitar las fugas evidentes antes de que el tráfico las vuelva caras."
+        return "Mantén el sistema lo bastante simple como para repetirlo. Las herramientas importan cuando te ayudan a publicar, medir y mejorar con menos fricción cada semana."
 
     def _social_copy_variants_es(
         self,

@@ -206,6 +206,12 @@ class VideoCreationService:
                     request.language,
                     script_package.choice_key,
                 )
+            if script_package.social_choice_key:
+                self.state.set_last_social_choice(
+                    request.video_type,
+                    request.language,
+                    script_package.social_choice_key,
+                )
             self.state.remember_signature(
                 request.video_type,
                 request.language,

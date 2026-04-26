@@ -58,6 +58,13 @@ TYPE_3_ICON_ALIASES: dict[str, tuple[str, ...]] = {
     "instagram": ("instagram", "istagram"),
     "tiktok": ("tiktok", "tikok"),
 }
+TYPE_3_ICON_VISUAL_SCALE: dict[str, float] = {
+    "canva": 0.94,
+    "capcut": 0.94,
+    "chatgpt": 0.94,
+    "instagram": 0.94,
+    "tiktok": 0.94,
+}
 
 
 class VideoRenderer:
@@ -292,6 +299,7 @@ class VideoRenderer:
         y0: int,
         icon_size: int,
     ) -> None:
+        tool_key = self._type_3_tool_key(role, text)
         icon_path = self._type_3_icon_path(role, text)
         if icon_path is None:
             draw = ImageDraw.Draw(image)
@@ -299,15 +307,25 @@ class VideoRenderer:
             return
         with Image.open(icon_path) as raw_icon:
             icon = raw_icon.convert("RGBA")
-        icon = self._fit_type_3_icon(icon, icon_size)
+        icon = self._fit_type_3_icon(
+            icon,
+            icon_size,
+            visual_scale=TYPE_3_ICON_VISUAL_SCALE.get(tool_key, 1.0),
+        )
         x = (width - icon_size) // 2
         image.alpha_composite(icon, (x, y0))
 
-    def _fit_type_3_icon(self, icon: Image.Image, box_size: int) -> Image.Image:
+    def _fit_type_3_icon(
+        self,
+        icon: Image.Image,
+        box_size: int,
+        *,
+        visual_scale: float = 1.0,
+    ) -> Image.Image:
         alpha_bbox = icon.getbbox()
         if alpha_bbox is not None:
             icon = icon.crop(alpha_bbox)
-        scale = min(box_size / icon.width, box_size / icon.height)
+        scale = min(box_size / icon.width, box_size / icon.height) * visual_scale
         icon = icon.resize(
             (
                 max(1, int(round(icon.width * scale))),

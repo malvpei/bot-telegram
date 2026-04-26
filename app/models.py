@@ -148,6 +148,7 @@ class ScriptPackage:
     plain_text: str
     social_copy: SocialCopy
     choice_key: str | None = None
+    social_choice_key: str | None = None
 
 
 @dataclass
