@@ -13,6 +13,7 @@ from PIL import Image
 
 from app.config import get_settings
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
+from app.media_pool import MediaPoolService
 from app.models import GenerationResult, MediaCandidate, VideoPlan, VideoRequest, VideoType
 from app.render import VideoRenderer
 from app.selector import ImageSelector
@@ -56,6 +57,12 @@ class VideoCreationService:
         )
         self.collector = InstagramCollector(self.settings)
         self.selector = ImageSelector(self.settings, self.state)
+        self.pool = MediaPoolService(
+            self.settings,
+            self.state,
+            self.collector,
+            self.selector,
+        )
         self.script_generator = ScriptGenerator(self.state)
         self.renderer = VideoRenderer(self.settings)
         # instaloader holds session/cookies that aren't safe to share across
@@ -129,6 +136,16 @@ class VideoCreationService:
                 "downloaded": downloaded,
                 "errors": errors,
             }
+
+    def refill_pool(self, account_inputs: list[str]) -> dict[str, object]:
+        with self._job_lock:
+            usernames = extract_usernames(account_inputs, len(account_inputs) or 1)
+            if not usernames:
+                raise ValueError("No se detectaron cuentas de Instagram válidas.")
+            return self.pool.refill(usernames)
+
+    def pool_status(self) -> dict[str, object]:
+        return self.pool.stock_counts()
 
     def persistence_status(self) -> dict[str, object]:
         data_dir = self.settings.data_dir
@@ -247,6 +264,16 @@ class VideoCreationService:
             language=request.language,
             fallback_accounts=plan.fallback_accounts,
             slides=list(plan.slides),
+            pool_remaining=(
+                int(self.pool.stock_counts()["by_type"].get(request.video_type.value, 0))
+                if hasattr(self, "pool")
+                else 0
+            ),
+            pool_low_stock=(
+                self.pool.is_low_stock(request.video_type)
+                if hasattr(self, "pool")
+                else False
+            ),
         )
 
     def _create_extra_image_locked(self, request: VideoRequest) -> MediaCandidate:
@@ -256,14 +283,17 @@ class VideoCreationService:
         if not usernames:
             raise ValueError("No se detectó la cuenta de Instagram para repetir.")
         account = usernames[0]
-        candidates = self.collector.collect_one(account)
 
         conflicts: list[str] = []
         media: MediaCandidate | None = None
         media_ids: list[str] = []
         job_id = self._build_job_id()
         for attempt in range(1, 4):
-            media = self.selector.pick_extra_image(candidates, request.video_type)
+            if hasattr(self, "pool"):
+                media = self.pool.pick_extra_image(account, request.video_type)
+            else:
+                candidates = self.collector.collect_one(account)
+                media = self.selector.pick_extra_image(candidates, request.video_type)
             media_ids = self.selector.reservation_keys_for([media])
             already_used = self.state.reserve_media(media_ids, job_id)
             if not already_used:
@@ -328,10 +358,20 @@ class VideoCreationService:
         conflicts: list[str] = []
         all_tried: list[str] = []
         for attempt in range(1, 4):
-            plan, tried = self._pick_account_with_plan(usernames, request)
+            if hasattr(self, "pool"):
+                plan, tried = self.pool.select_plan(
+                    usernames,
+                    request.video_type,
+                    request.language,
+                    skip_accounts=request.skip_accounts,
+                )
+            else:
+                plan, tried = self._pick_account_with_plan(usernames, request)
             all_tried = _merge_preserving_order(all_tried, tried)
             already_used = self.state.reserve_media(plan.used_media_ids, job_id)
             if not already_used:
+                if hasattr(self, "pool"):
+                    self.pool.note_account_used(plan.chosen_account, request.video_type)
                 return plan, all_tried
             conflicts.extend(already_used)
             LOGGER.warning(

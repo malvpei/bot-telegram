@@ -778,7 +778,18 @@ class ImageSelector:
         digest = hashlib.sha256()
         digest.update(str(image.size).encode("ascii"))
         digest.update(image.tobytes())
-        return [f"sha256:{digest.hexdigest()}"]
+        return [f"sha256:{digest.hexdigest()}", self._dhash(image)]
+
+    def _dhash(self, image: Image.Image) -> str:
+        small = image.convert("L").resize((9, 8), Image.Resampling.LANCZOS)
+        pixels = list(small.getdata())
+        value = 0
+        for row in range(8):
+            for col in range(8):
+                left = pixels[row * 9 + col]
+                right = pixels[row * 9 + col + 1]
+                value = (value << 1) | int(left > right)
+        return f"dhash:{value:016x}"
 
     def _looks_like_heic(self, path) -> bool:
         try:

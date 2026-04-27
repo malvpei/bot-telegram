@@ -224,12 +224,13 @@ class InstagramCollector:
             )
         return catalog
 
-    def collect_one(self, username: str) -> list[MediaCandidate]:
+    def collect_one(self, username: str, *, use_cache: bool = True) -> list[MediaCandidate]:
         """Fetch a single account. Used by the random-account picker."""
-        cached = self._load_cached_account(username)
-        if cached is not None:
-            LOGGER.info("Using cached images for @%s (%d items)", username, len(cached))
-            return cached
+        if use_cache:
+            cached = self._load_cached_account(username)
+            if cached is not None:
+                LOGGER.info("Using cached images for @%s (%d items)", username, len(cached))
+                return cached
 
         if not self.settings.instagram_username:
             items = self._collect_account_anonymous(username)

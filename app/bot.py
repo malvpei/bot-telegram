@@ -24,6 +24,7 @@ from app.state import StateStore
 
 TYPE_STATE, LANGUAGE_STATE = range(2)
 REGENERATE_ACCEPT = "regen:accept"
+REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
 
 LOGGER = logging.getLogger(__name__)
@@ -69,6 +70,8 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("accounts", accounts_command))
     application.add_handler(CommandHandler("sync", sync_command))
+    application.add_handler(CommandHandler("download_pool", download_pool_command))
+    application.add_handler(CommandHandler("pool", pool_command))
     application.add_handler(CommandHandler("memory", memory_command))
     application.add_handler(wizard_handler)
     application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
@@ -87,6 +90,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Comandos:\n"
         "/memory - ver si la memoria persiste tras redeploy\n"
         "/sync - descargar la biblioteca local de cuentas\n"
+        "/download_pool - rellenar el pool rapido de fotos\n"
+        "/pool - ver stock del pool\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas cargadas\n"
         "/cancel — cancelar el wizard actual"
@@ -111,8 +116,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Las cuentas se leen de accounts.txt (una por línea). Para cambiarlas "
         "edita ese archivo y reinicia el bot (o solo guarda, el archivo se "
         "relee en cada /create).\n\n"
-        "Usa /sync para descargar una vez las imágenes de accounts.txt. "
-        "Despues /create reutiliza esa biblioteca local sin mezclar cuentas.\n\n"
+        "Usa /download_pool para precargar un lote de fotos aptas. "
+        "Despues /create elige desde ese pool local sin descargar en caliente.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
     )
@@ -183,6 +188,40 @@ async def sync_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         if len(error_lines) > 8:
             text += f"\n... y {len(error_lines) - 8} mas"
     await status_message.edit_text(text)
+
+
+async def download_pool_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_allowed(update):
+        return
+
+    settings = get_settings()
+    try:
+        accounts = load_accounts(settings.accounts_file)
+    except AccountsFileError as error:
+        await update.effective_message.reply_text(str(error))
+        return
+
+    status_message = await update.effective_message.reply_text(
+        f"Rellenando pool hasta {settings.pool_target_images} fotos disponibles. "
+        "Voy cuenta por cuenta y pongo cooldown despues de revisar cada una."
+    )
+    service: VideoCreationService = context.application.bot_data["service"]
+    try:
+        summary = await asyncio.to_thread(service.refill_pool, accounts)
+    except Exception as error:
+        LOGGER.exception("Pool refill failed")
+        await status_message.edit_text(f"No pude rellenar el pool.\n\n{error}")
+        return
+
+    await status_message.edit_text(_format_pool_refill_summary(summary))
+
+
+async def pool_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_allowed(update):
+        return
+    service: VideoCreationService = context.application.bot_data["service"]
+    summary = await asyncio.to_thread(service.pool_status)
+    await update.effective_message.reply_text(_format_pool_status(summary))
 
 
 async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -369,12 +408,20 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     try:
+        account_inputs = list(repeat_request.get("requested_accounts") or [])
+        if not account_inputs:
+            account_inputs = [repeat_request["chosen_account"]]
         request = VideoRequest(
             chat_id=update.effective_chat.id,
             user_id=update.effective_user.id,
             video_type=VideoType(repeat_request["video_type"]),
             language=Language(repeat_request["language"]),
-            account_inputs=[repeat_request["chosen_account"]],
+            account_inputs=account_inputs,
+            skip_accounts=(
+                [repeat_request["chosen_account"]]
+                if query.data == REGENERATE_SKIP_ACCOUNT
+                else []
+            ),
         )
     except (KeyError, ValueError):
         context.user_data.pop("repeat_request", None)
@@ -383,10 +430,23 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         return
 
-    await query.edit_message_text(
-        f"Buscando una imagen distinta de @{request.account_inputs[0]}."
-    )
-    await _execute_extra_image(update, context, request)
+    if query.data == REGENERATE_SKIP_ACCOUNT:
+        await query.edit_message_text(
+            f"Paso @{repeat_request['chosen_account']} y busco la siguiente cuenta del pool."
+        )
+        await _execute_job(update, context, request)
+    else:
+        await query.edit_message_text(
+            f"Buscando una imagen distinta de @{repeat_request['chosen_account']}."
+        )
+        extra_request = VideoRequest(
+            chat_id=request.chat_id,
+            user_id=request.user_id,
+            video_type=request.video_type,
+            language=request.language,
+            account_inputs=[repeat_request["chosen_account"]],
+        )
+        await _execute_extra_image(update, context, extra_request)
 
 
 async def _execute_job(
@@ -425,10 +485,20 @@ async def _execute_job(
         await _send_slides_text_then_image(context, chat.id, result.slides)
         context.user_data["repeat_request"] = {
             "chosen_account": result.chosen_account,
+            "requested_accounts": request.account_inputs,
             "video_type": result.video_type.value,
             "language": result.language.value,
         }
         await _ask_for_another_same_account(context, chat.id, result.chosen_account)
+        if result.pool_low_stock:
+            await context.bot.send_message(
+                chat_id=chat.id,
+                text=(
+                    "Aviso: el pool se esta quedando bajo "
+                    f"({result.pool_remaining} fotos aptas para tipo {result.video_type.value}). "
+                    "Ejecuta /download_pool cuando quieras rellenarlo."
+                ),
+            )
     except TelegramError as error:
         LOGGER.exception("Telegram refused the send")
         await context.bot.send_message(
@@ -462,6 +532,7 @@ async def _execute_extra_image(
             await context.bot.send_photo(chat_id=chat.id, photo=handle)
         context.user_data["repeat_request"] = {
             "chosen_account": media.source_account,
+            "requested_accounts": request.account_inputs,
             "video_type": request.video_type.value,
             "language": request.language.value,
         }
@@ -499,6 +570,7 @@ async def _ask_for_another_same_account(context, chat_id: int, account: str) -> 
         [
             [
                 InlineKeyboardButton("Aceptar", callback_data=REGENERATE_ACCEPT),
+                InlineKeyboardButton("Pasar cuenta", callback_data=REGENERATE_SKIP_ACCOUNT),
                 InlineKeyboardButton("Cancelar", callback_data=REGENERATE_CANCEL),
             ]
         ]
@@ -523,6 +595,55 @@ def _split_title_body(text: str) -> tuple[str, str]:
 def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop("accounts_snapshot", None)
     context.user_data.pop("video_type", None)
+
+
+def _format_pool_status(summary: dict) -> str:
+    by_type = summary.get("by_type", {})
+    by_account = summary.get("by_account", {})
+    account_lines = [
+        f"@{account}: {count}"
+        for account, count in sorted(by_account.items(), key=lambda item: (-item[1], item[0]))[:12]
+    ]
+    text = (
+        "Pool de fotos\n"
+        f"Total disponible: {summary.get('total', 0)}\n"
+        f"Tipo 1: {by_type.get('1', 0)}\n"
+        f"Tipo 2: {by_type.get('2', 0)}\n"
+        f"Tipo 3: {by_type.get('3', 0)}"
+    )
+    if account_lines:
+        text += "\n\nPor cuenta:\n" + "\n".join(account_lines)
+    return text
+
+
+def _format_pool_refill_summary(summary: dict) -> str:
+    after = summary.get("after", {})
+    added_by_account = summary.get("added_by_account", {})
+    errors = summary.get("errors", {})
+    skipped = summary.get("skipped_cooldown", [])
+    lines = [
+        "Pool actualizado",
+        f"Objetivo: {summary.get('target')}",
+        f"Antes: {summary.get('before', {}).get('total', 0)}",
+        f"Ahora: {after.get('total', 0)}",
+        f"Nuevas: {summary.get('added', 0)}",
+    ]
+    if added_by_account:
+        lines.append("")
+        lines.append("Cuentas revisadas:")
+        for account, count in sorted(added_by_account.items()):
+            valid = summary.get("valid_by_account", {}).get(account, count)
+            lines.append(f"@{account}: {count} nuevas ({valid} aptas)")
+    if skipped:
+        lines.append("")
+        lines.append("En cooldown:")
+        lines.extend(f"@{account}" for account in skipped[:10])
+    if errors:
+        lines.append("")
+        lines.append("Errores:")
+        for account, message in sorted(errors.items())[:8]:
+            lines.append(f"@{account}: {message}")
+    return "\n".join(lines)
 
 
 async def _ensure_allowed(update: Update) -> bool:

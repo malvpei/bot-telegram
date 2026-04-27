@@ -25,6 +25,7 @@ from app.models import Language, VideoType
 _LOCK_TIMEOUT_SECONDS = 30.0
 _ATOMIC_REPLACE_RETRIES = 5
 _ATOMIC_REPLACE_BACKOFF_SECONDS = 0.05
+_PERCEPTUAL_HASH_DISTANCE = 6
 class StateStore:
     def __init__(self, state_dir: Path, history_max_per_bucket: int = 200) -> None:
         self.state_dir = state_dir
@@ -35,6 +36,8 @@ class StateStore:
         self._recent_social_choices_path = self.state_dir / "recent_social_choices.json"
         self._script_history_path = self.state_dir / "script_history.json"
         self._jobs_log_path = self.state_dir / "jobs_log.json"
+        self._media_pool_path = self.state_dir / "media_pool.json"
+        self._account_cooldowns_path = self.state_dir / "account_cooldowns.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
         self._persistence_marker_path = self.state_dir / "persistence_marker.json"
         self._lock_path = self.state_dir / ".state.lock"
@@ -242,6 +245,54 @@ class StateStore:
             jobs.append(payload)
             self._write_json(self._jobs_log_path, jobs)
 
+    def read_media_pool(self) -> dict[str, Any]:
+        with self._exclusive():
+            pool = self._read_json(self._media_pool_path, {})
+        if not isinstance(pool, dict):
+            pool = {}
+        items = pool.get("items")
+        if not isinstance(items, list):
+            pool["items"] = []
+        cursors = pool.get("cursor_by_type")
+        if not isinstance(cursors, dict):
+            pool["cursor_by_type"] = {}
+        return pool
+
+    def write_media_pool(self, pool: dict[str, Any]) -> None:
+        with self._exclusive():
+            self._write_json(self._media_pool_path, pool)
+
+    def read_account_cooldowns(self) -> dict[str, Any]:
+        with self._exclusive():
+            cooldowns = self._read_json(self._account_cooldowns_path, {})
+        return cooldowns if isinstance(cooldowns, dict) else {}
+
+    def set_account_cooldown(
+        self,
+        account: str,
+        *,
+        cooldown_until: str,
+        scraped_at: str,
+        added_count: int,
+        valid_count: int,
+        total_count: int,
+    ) -> None:
+        account_key = account.strip().lower()
+        if not account_key:
+            return
+        with self._exclusive():
+            cooldowns = self._read_json(self._account_cooldowns_path, {})
+            if not isinstance(cooldowns, dict):
+                cooldowns = {}
+            cooldowns[account_key] = {
+                "cooldown_until": cooldown_until,
+                "scraped_at": scraped_at,
+                "added_count": added_count,
+                "valid_count": valid_count,
+                "total_count": total_count,
+            }
+            self._write_json(self._account_cooldowns_path, cooldowns)
+
     def ensure_persistence_marker(self) -> dict[str, Any]:
         with self._exclusive():
             marker = self._read_json(self._persistence_marker_path, {})
@@ -391,4 +442,18 @@ class StateStore:
     def _media_id_is_used(media_id: str, used: dict[str, Any]) -> bool:
         if media_id in used:
             return True
+        if media_id.startswith("dhash:"):
+            try:
+                current = int(media_id.split(":", maxsplit=1)[1], 16)
+            except (IndexError, ValueError):
+                return False
+            for used_id in used:
+                if not isinstance(used_id, str) or not used_id.startswith("dhash:"):
+                    continue
+                try:
+                    other = int(used_id.split(":", maxsplit=1)[1], 16)
+                except (IndexError, ValueError):
+                    continue
+                if (current ^ other).bit_count() <= _PERCEPTUAL_HASH_DISTANCE:
+                    return True
         return False

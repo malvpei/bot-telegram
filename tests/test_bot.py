@@ -8,6 +8,7 @@ from PIL import Image
 from app.bot import (
     REGENERATE_ACCEPT,
     REGENERATE_CANCEL,
+    REGENERATE_SKIP_ACCOUNT,
     _ask_for_another_same_account,
     _clear_wizard_state,
     _send_slides_text_then_image,
@@ -93,9 +94,10 @@ def test_repeat_prompt_has_accept_and_cancel_buttons():
         )
     ]
     buttons = context.bot.reply_markup.inline_keyboard[0]
-    assert [button.text for button in buttons] == ["Aceptar", "Cancelar"]
+    assert [button.text for button in buttons] == ["Aceptar", "Pasar cuenta", "Cancelar"]
     assert [button.callback_data for button in buttons] == [
         REGENERATE_ACCEPT,
+        REGENERATE_SKIP_ACCOUNT,
         REGENERATE_CANCEL,
     ]
 

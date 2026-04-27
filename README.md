@@ -65,7 +65,7 @@ assets/
 data/
   downloads/             — cache de imágenes por cuenta
   outputs/<job_id>/      — .mp4 y script.txt por job
-  state/                 — JSON de used_media, firmas, log de jobs, sesión IG
+  state/                 — JSON de used_media, pool, cooldowns, jobs, sesión IG
 ```
 
 ## Instalación
@@ -108,6 +108,9 @@ Todas las variables viven en `.env`. Las interesantes:
 | `ACCOUNTS_FILE` | `accounts.txt` | archivo con cuentas (una por línea) |
 | `MAX_POSTS_PER_ACCOUNT` | 100 | posts con foto a escanear por cuenta |
 | `MAX_URLS_PER_JOB` | 8 | URLs máximas por job (del archivo) |
+| `POOL_TARGET_IMAGES` | 50 | fotos disponibles que `/download_pool` intenta mantener |
+| `POOL_LOW_STOCK_THRESHOLD` | 12 | aviso cuando el pool baja de este stock |
+| `ACCOUNT_COOLDOWN_DAYS` | 30 | cooldown de cuenta tras revisar sus fotos |
 | `VIDEO_WIDTH/HEIGHT/FPS` | 1080/1920/30 | render vertical |
 | `SLIDE_SECONDS` | 3.8 | duración de cada slide |
 | `TRANSITION_SECONDS` | 0.35 | fade entre slides |
@@ -148,15 +151,19 @@ el bot.
 /help         — flujo y notas
 /accounts     — lista las cuentas cargadas
 /sync         — descarga una vez la biblioteca local por cuenta
+/download_pool — rellena el pool precargado de fotos aptas
+/pool         — muestra el stock del pool por tipo y cuenta
 /create       — lanza el wizard (tipo → idioma → render)
 /wizard       — alias de /create
 /cancel       — cancela el wizard en curso
 ```
 
-Flujo recomendado: ejecuta **/sync** para poblar `data/downloads/<cuenta>` con
-las imágenes de cada cuenta. Después, en el wizard eliges **Tipo 1**, **Tipo 2**
-o **Tipo 3**, después **Español** o **English**, y el bot elige solo imágenes ya
-guardadas de una única cuenta para ese video.
+Flujo recomendado: ejecuta **/download_pool** para poblar un lote de fotos aptas
+en `data/state/media_pool.json`. El comando revisa cuentas una por una, descarga
+las fotos válidas, respeta `used_media.json`, y pone cada cuenta revisada en
+cooldown durante `ACCOUNT_COOLDOWN_DAYS`. Después, **/create** elige desde ese
+pool local, rota cuentas para evitar favoritismo, y permite **Pasar cuenta** si
+quieres forzar la siguiente cuenta disponible.
 
 ## Salida
 
@@ -169,6 +176,8 @@ guardadas de una única cuenta para ese video.
 ## Estado persistente
 
 - `data/state/used_media.json` — reservas de imágenes (nunca se reutilizan)
+- `data/state/media_pool.json` — pool precargado usado por `/create`
+- `data/state/account_cooldowns.json` — cuentas ya revisadas y cooldown
 - `data/state/recent_scripts.json` — última firma generada por (tipo, idioma)
 - `data/state/script_history.json` — historial acotado de firmas
 - `data/state/jobs_log.json` — histórico de jobs

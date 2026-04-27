@@ -77,6 +77,7 @@ class VideoRequest:
     video_type: VideoType
     language: Language
     account_inputs: list[str]
+    skip_accounts: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -172,3 +173,5 @@ class GenerationResult:
     language: Language
     fallback_accounts: list[str]
     slides: list[SlidePlan] = field(default_factory=list)
+    pool_remaining: int = 0
+    pool_low_stock: bool = False
