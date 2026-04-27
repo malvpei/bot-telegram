@@ -92,6 +92,34 @@ def test_pool_select_plan_can_skip_current_account():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_ready_requires_viable_plan_for_each_type():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        image_path = root / "alpha.jpg"
+        Image.new("RGB", (32, 32), (10, 20, 30)).save(image_path)
+        pool = {
+            "version": 1,
+            "cursor_by_type": {},
+            "items": [
+                _pool_item("alpha", f"alpha:POST{index}:0", image_path)
+                for index in range(60)
+            ],
+        }
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        assert service._pool_ready(pool, ["alpha"], 50) is False
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _candidate(root: Path, source_id: str, dhash: str) -> MediaCandidate:
     path = root / (source_id.replace(":", "_") + ".jpg")
     Image.new("RGB", (32, 32), (100, 100, 100)).save(path)

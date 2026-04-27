@@ -623,17 +623,35 @@ def _format_pool_refill_summary(summary: dict) -> str:
     skipped = summary.get("skipped_cooldown", [])
     lines = [
         "Pool actualizado",
-        f"Objetivo: {summary.get('target')}",
+        f"Objetivo minimo: {summary.get('target')}",
         f"Antes: {summary.get('before', {}).get('total', 0)}",
         f"Ahora: {after.get('total', 0)}",
         f"Nuevas: {summary.get('added', 0)}",
+        (
+            "Por tipo: "
+            f"T1={after.get('by_type', {}).get('1', 0)}, "
+            f"T2={after.get('by_type', {}).get('2', 0)}, "
+            f"T3={after.get('by_type', {}).get('3', 0)}"
+        ),
+        (
+            "Planes viables: "
+            f"T1={'si' if summary.get('viable_after', {}).get('1') else 'no'}, "
+            f"T2={'si' if summary.get('viable_after', {}).get('2') else 'no'}, "
+            f"T3={'si' if summary.get('viable_after', {}).get('3') else 'no'}"
+        ),
     ]
     if added_by_account:
         lines.append("")
         lines.append("Cuentas revisadas:")
         for account, count in sorted(added_by_account.items()):
             valid = summary.get("valid_by_account", {}).get(account, count)
-            lines.append(f"@{account}: {count} nuevas ({valid} aptas)")
+            type_counts = summary.get("valid_by_type_by_account", {}).get(account, {})
+            lines.append(
+                f"@{account}: {count} nuevas ({valid} aptas; "
+                f"T1={type_counts.get('1', 0)}, "
+                f"T2={type_counts.get('2', 0)}, "
+                f"T3={type_counts.get('3', 0)})"
+            )
     if skipped:
         lines.append("")
         lines.append("En cooldown:")
@@ -643,6 +661,12 @@ def _format_pool_refill_summary(summary: dict) -> str:
         lines.append("Errores:")
         for account, message in sorted(errors.items())[:8]:
             lines.append(f"@{account}: {message}")
+    if not summary.get("ready"):
+        lines.append("")
+        lines.append(
+            "Aun no hay planes viables para todos los tipos. Ejecuta /download_pool "
+            "otra vez cuando haya cuentas fuera de cooldown o revisa /pool."
+        )
     return "\n".join(lines)
 
 

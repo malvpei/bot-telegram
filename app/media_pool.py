@@ -45,7 +45,7 @@ class MediaPoolService:
         scraped: list[str] = []
 
         for username in usernames:
-            if self._stock_counts(pool)["total"] >= target:
+            if self._pool_ready(pool, usernames, target):
                 break
             cooldown_until = self._cooldown_until(cooldowns, username)
             if cooldown_until is not None and cooldown_until > now:
@@ -81,13 +81,17 @@ class MediaPoolService:
         pool["updated_at"] = datetime.now(timezone.utc).isoformat()
         self.state.write_media_pool(pool)
         after = self._stock_counts(pool)
+        viable_after = self._viable_by_type(pool, usernames)
         return {
             "target": target,
             "before": before,
             "after": after,
+            "viable_after": viable_after,
+            "ready": self._pool_ready(pool, usernames, target),
             "added": sum(added_by_account.values()),
             "added_by_account": added_by_account,
             "valid_by_account": valid_by_account,
+            "valid_by_type_by_account": self._valid_by_type_by_account(pool, added_by_account),
             "scraped": scraped,
             "skipped_cooldown": skipped_cooldown,
             "errors": errors,
@@ -280,6 +284,45 @@ class MediaPoolService:
         index = accounts.index(last_account)
         return accounts[index + 1 :] + accounts[: index + 1]
 
+    def _pool_ready(
+        self,
+        pool: dict[str, Any],
+        usernames: list[str],
+        target: int,
+    ) -> bool:
+        counts = self._stock_counts(pool)
+        if int(counts["total"]) < target:
+            return False
+        viable = self._viable_by_type(pool, usernames)
+        return all(viable.get(video_type.value, False) for video_type in ALL_VIDEO_TYPES)
+
+    def _viable_by_type(
+        self,
+        pool: dict[str, Any],
+        usernames: list[str],
+    ) -> dict[str, bool]:
+        result: dict[str, bool] = {}
+        for video_type in ALL_VIDEO_TYPES:
+            candidates_by_account = self._available_candidates_by_account(
+                pool,
+                video_type=video_type,
+                usernames=usernames,
+                skip_accounts=[],
+            )
+            result[video_type.value] = False
+            for account, candidates in candidates_by_account.items():
+                try:
+                    self.selector.create_plan(
+                        {account: candidates},
+                        video_type,
+                        Language.ES,
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
+                result[video_type.value] = True
+                break
+        return result
+
     def _stock_counts(self, pool: dict[str, Any]) -> dict[str, Any]:
         by_type = {video_type.value: 0 for video_type in ALL_VIDEO_TYPES}
         by_account: dict[str, int] = {}
@@ -304,6 +347,29 @@ class MediaPoolService:
             "by_type": by_type,
             "by_account": dict(sorted(by_account.items())),
         }
+
+    def _valid_by_type_by_account(
+        self,
+        pool: dict[str, Any],
+        touched_accounts: dict[str, int],
+    ) -> dict[str, dict[str, int]]:
+        touched = {account.lower() for account in touched_accounts}
+        result: dict[str, dict[str, int]] = {
+            account: {video_type.value: 0 for video_type in ALL_VIDEO_TYPES}
+            for account in touched_accounts
+        }
+        for item in pool["items"]:
+            account = str(item.get("source_account") or "").lower()
+            if account not in touched:
+                continue
+            result.setdefault(
+                account,
+                {video_type.value: 0 for video_type in ALL_VIDEO_TYPES},
+            )
+            for video_type in item.get("eligible_types", []):
+                if video_type in result[account]:
+                    result[account][video_type] += 1
+        return result
 
     def _candidate_to_item(
         self,
