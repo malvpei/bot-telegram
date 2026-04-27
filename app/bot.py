@@ -639,6 +639,12 @@ def _format_pool_refill_summary(summary: dict) -> str:
             f"T2={'si' if summary.get('viable_after', {}).get('2') else 'no'}, "
             f"T3={'si' if summary.get('viable_after', {}).get('3') else 'no'}"
         ),
+        (
+            "Cuentas listas: "
+            f"T1={len(summary.get('viable_accounts_after', {}).get('1', []))}, "
+            f"T2={len(summary.get('viable_accounts_after', {}).get('2', []))}, "
+            f"T3={len(summary.get('viable_accounts_after', {}).get('3', []))}"
+        ),
     ]
     if added_by_account:
         lines.append("")

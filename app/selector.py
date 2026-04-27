@@ -975,7 +975,10 @@ class ImageSelector:
             score -= 0.15
         if role == SlideRole.HOOK:
             if metrics.faces < 1:
-                score -= 0.55
+                if self._is_high_quality_portrait_without_detected_face(metrics):
+                    score -= 0.18
+                else:
+                    score -= 0.55
             score += (
                 0.10 * metrics.daylight
                 + 0.18 * face_score
@@ -1131,13 +1134,24 @@ class ImageSelector:
     def _first_image_is_valid(self, media: MediaCandidate) -> bool:
         if media.metrics is None:
             return False
-        return (
+        if (
             media.metrics.quality_score >= 0.38
             and media.metrics.daylight >= 0.35
             and (
                 media.metrics.faces >= 1
                 or media.metrics.portrait_focus_score >= 0.18
             )
+        ):
+            return True
+        return self._is_high_quality_portrait_without_detected_face(media.metrics)
+
+    def _is_high_quality_portrait_without_detected_face(self, metrics: ImageMetrics) -> bool:
+        return (
+            metrics.faces == 0
+            and metrics.quality_score >= 0.58
+            and metrics.daylight >= 0.50
+            and metrics.aspect_ratio <= 0.92
+            and not metrics.is_landscape
         )
 
     def _build_fixed_media(self) -> MediaCandidate:

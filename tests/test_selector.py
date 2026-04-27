@@ -502,6 +502,38 @@ def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):
     assert hook_slide.media.source_id == candidates[0].source_id
 
 
+def test_type_1_accepts_clear_vertical_hook_when_face_detector_misses(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "vertical_no_face"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="vertical_no_face", idx=i)
+        for i in range(7)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.82,
+            daylight=0.74,
+            faces=0,
+            is_landscape=False,
+            outdoor=0.25,
+            casual=0.2,
+            luxury=0.05,
+            portrait_focus=0.0,
+        )
+        candidate.metrics.aspect_ratio = 0.72
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"vertical_no_face": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    assert plan.chosen_account == "vertical_no_face"
+
+
 def test_type_3_uses_one_real_hook_and_one_background_for_all_tools(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "type3"

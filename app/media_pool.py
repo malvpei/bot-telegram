@@ -81,12 +81,17 @@ class MediaPoolService:
         pool["updated_at"] = datetime.now(timezone.utc).isoformat()
         self.state.write_media_pool(pool)
         after = self._stock_counts(pool)
-        viable_after = self._viable_by_type(pool, usernames)
+        viable_accounts_after = self._viable_accounts_by_type(pool, usernames)
+        viable_after = {
+            video_type: bool(accounts)
+            for video_type, accounts in viable_accounts_after.items()
+        }
         return {
             "target": target,
             "before": before,
             "after": after,
             "viable_after": viable_after,
+            "viable_accounts_after": viable_accounts_after,
             "ready": self._pool_ready(pool, usernames, target),
             "added": sum(added_by_account.values()),
             "added_by_account": added_by_account,
@@ -293,15 +298,15 @@ class MediaPoolService:
         counts = self._stock_counts(pool)
         if int(counts["total"]) < target:
             return False
-        viable = self._viable_by_type(pool, usernames)
-        return all(viable.get(video_type.value, False) for video_type in ALL_VIDEO_TYPES)
+        viable = self._viable_accounts_by_type(pool, usernames)
+        return all(bool(viable.get(video_type.value)) for video_type in ALL_VIDEO_TYPES)
 
-    def _viable_by_type(
+    def _viable_accounts_by_type(
         self,
         pool: dict[str, Any],
         usernames: list[str],
-    ) -> dict[str, bool]:
-        result: dict[str, bool] = {}
+    ) -> dict[str, list[str]]:
+        result: dict[str, list[str]] = {}
         for video_type in ALL_VIDEO_TYPES:
             candidates_by_account = self._available_candidates_by_account(
                 pool,
@@ -309,7 +314,7 @@ class MediaPoolService:
                 usernames=usernames,
                 skip_accounts=[],
             )
-            result[video_type.value] = False
+            result[video_type.value] = []
             for account, candidates in candidates_by_account.items():
                 try:
                     self.selector.create_plan(
@@ -319,8 +324,7 @@ class MediaPoolService:
                     )
                 except Exception:  # noqa: BLE001
                     continue
-                result[video_type.value] = True
-                break
+                result[video_type.value].append(account)
         return result
 
     def _stock_counts(self, pool: dict[str, Any]) -> dict[str, Any]:
