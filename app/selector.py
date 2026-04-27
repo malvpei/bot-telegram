@@ -216,6 +216,11 @@ class ImageSelector:
                     score_fn=lambda media, current_role=role: self._score_type_1(
                         media, current_role
                     ),
+                    accept_fn=(
+                        self._first_image_is_valid
+                        if role == SlideRole.HOOK
+                        else None
+                    ),
                 )
                 if best is None:
                     break
@@ -879,12 +884,15 @@ class ImageSelector:
         *,
         exclude_ids: set[str],
         score_fn: Callable[[MediaCandidate], float],
+        accept_fn: Callable[[MediaCandidate], bool] | None = None,
     ) -> CandidateScore | None:
         scored: list[CandidateScore] = []
         for media in pool:
             if media.source_id in exclude_ids:
                 continue
             if media.metrics is None:
+                continue
+            if accept_fn is not None and not accept_fn(media):
                 continue
             score = score_fn(media)
             if score <= 0:

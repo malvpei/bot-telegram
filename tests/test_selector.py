@@ -502,6 +502,48 @@ def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):
     assert hook_slide.media.source_id == candidates[0].source_id
 
 
+def test_type_1_hook_candidate_must_pass_quality_gate(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "hook_quality"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="hook_quality", idx=i)
+        for i in range(8)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.72,
+            daylight=0.72,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.25,
+            casual=0.25,
+            luxury=0.05,
+            portrait_focus=0.35,
+        )
+    candidates[0].metrics = _metrics_stub(
+        quality=0.20,
+        daylight=0.20,
+        faces=3,
+        is_landscape=False,
+        outdoor=1.0,
+        casual=1.0,
+        luxury=0.0,
+        portrait_focus=1.0,
+    )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"hook_quality": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
+    assert hook_slide.media.source_id != candidates[0].source_id
+
+
 def test_type_1_accepts_clear_vertical_hook_when_face_detector_misses(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "vertical_no_face"
