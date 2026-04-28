@@ -232,7 +232,7 @@ class VideoRenderer:
     def _draw_type_3_tool_slide(self, image: Image.Image, slide: SlidePlan) -> None:
         width, height = image.size
         icon_box_size = int(width * 0.44)
-        icon_top = int(height * 0.45)
+        icon_top = int(height * 0.46)
         self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
@@ -257,7 +257,7 @@ class VideoRenderer:
         )
         badge_size = int(width * 0.38)
         x0 = (width - badge_size) // 2
-        y0 = int(height * 0.47)
+        y0 = int(height * 0.48)
         x1 = x0 + badge_size
         y1 = y0 + badge_size
         draw.rounded_rectangle(
