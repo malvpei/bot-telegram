@@ -217,7 +217,7 @@ class ImageSelector:
                         media, current_role
                     ),
                     accept_fn=(
-                        self._first_image_is_valid
+                        self._first_type_1_image_is_valid
                         if role == SlideRole.HOOK
                         else None
                     ),
@@ -237,25 +237,19 @@ class ImageSelector:
                 )
                 continue
 
-            if not self._first_image_is_valid(picked[SlideRole.HOOK]):
+            if not self._first_type_1_image_is_valid(picked[SlideRole.HOOK]):
                 LOGGER.info("tipo1 @%s: hook no pasa el umbral de calidad", account)
                 continue
 
             fallback_accounts: list[str] = []
-            if not any(self._is_landscape_media(media) for media in picked.values()):
-                replaced = self._inject_landscape(
-                    picked,
-                    role_scores,
-                    {account: available},
-                    selected_account=account,
-                    replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
-                    allow_luxury=False,
-                )
-                if not replaced:
-                    LOGGER.info(
-                        "tipo1 @%s: sin paisaje disponible, sigo con las picks actuales",
-                        account,
-                    )
+            if not self._enforce_type_1_person_visibility(
+                account,
+                picked,
+                role_scores,
+                available,
+                replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
+            ):
+                continue
 
             slides = self._build_slide_plans(
                 TYPE_1_ROLES,
@@ -511,6 +505,81 @@ class ImageSelector:
     def _is_landscape_dominant_media(self, media: MediaCandidate) -> bool:
         return self._is_type_2_non_user_media(media)
 
+    def _enforce_type_1_person_visibility(
+        self,
+        account: str,
+        picked: dict[SlideRole, MediaCandidate],
+        role_scores: dict[SlideRole, float],
+        available: list[MediaCandidate],
+        *,
+        replaceable_roles: tuple[SlideRole, ...],
+    ) -> bool:
+        allowed_landscape_roles: list[SlideRole] = []
+        roles_to_replace: list[SlideRole] = []
+
+        for role, media in picked.items():
+            if self._is_type_1_person_visible_media(media):
+                continue
+            if role in replaceable_roles and self._is_landscape_media(media):
+                allowed_landscape_roles.append(role)
+                continue
+            roles_to_replace.append(role)
+
+        allowed_landscape_roles.sort(
+            key=lambda role: role_scores.get(role, 0.0),
+            reverse=True,
+        )
+        roles_to_replace.extend(allowed_landscape_roles[1:])
+
+        for role in roles_to_replace:
+            original = picked[role]
+            exclude = self._exclude_ids_by_post(picked, available)
+            replacement = self._pick_best(
+                available,
+                exclude_ids=exclude,
+                score_fn=lambda media, current_role=role: (
+                    self._score_type_1(media, current_role)
+                    if self._is_type_1_person_visible_media(media)
+                    else 0.0
+                ),
+            )
+            if replacement is None:
+                LOGGER.info(
+                    "tipo1 @%s: no pude reemplazar %s por una foto con persona",
+                    account,
+                    original.source_id,
+                )
+                return False
+            picked[role] = replacement.media
+            role_scores[role] = replacement.score
+            LOGGER.info(
+                "tipo1 person visibility: %s -> reemplazo %s por %s",
+                role.value,
+                original.source_id,
+                replacement.media.source_id,
+            )
+
+        remaining_without_person = [
+            role for role, media in picked.items()
+            if not self._is_type_1_person_visible_media(media)
+        ]
+        allowed_remaining = [
+            role
+            for role in remaining_without_person
+            if role in replaceable_roles and self._is_landscape_media(picked[role])
+        ]
+        if (
+            len(remaining_without_person) != len(allowed_remaining)
+            or len(allowed_remaining) > 1
+        ):
+            LOGGER.info(
+                "tipo1 @%s: descartada, %d fotos sin persona visible",
+                account,
+                len(remaining_without_person),
+            )
+            return False
+        return True
+
     def _enforce_type_2_user_visibility(
         self,
         account: str,
@@ -524,11 +593,21 @@ class ImageSelector:
             role for role, media in picked.items()
             if self._is_type_2_non_user_media(media) and role in replaceable_roles
         ]
-        if len(non_user_roles) <= 1:
-            return True
+        allowed_landscape_roles = [
+            role for role in non_user_roles
+            if self._is_landscape_media(picked[role])
+        ]
+        roles_to_replace = [
+            role for role in non_user_roles
+            if role not in allowed_landscape_roles
+        ]
+        allowed_landscape_roles.sort(
+            key=lambda role: role_scores.get(role, 0.0),
+            reverse=True,
+        )
+        roles_to_replace.extend(allowed_landscape_roles[1:])
 
-        non_user_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
-        for role in non_user_roles[1:]:
+        for role in roles_to_replace:
             original = picked[role]
             exclude = self._exclude_ids_by_post(picked, available)
             replacement = self._pick_best(
@@ -559,7 +638,11 @@ class ImageSelector:
             role for role, media in picked.items()
             if self._is_type_2_non_user_media(media) and role in replaceable_roles
         ]
-        if len(remaining) > 1:
+        allowed_remaining = [
+            role for role in remaining
+            if self._is_landscape_media(picked[role])
+        ]
+        if len(remaining) != len(allowed_remaining) or len(allowed_remaining) > 1:
             LOGGER.info(
                 "tipo2 @%s: descartada, %d fotos sin usuario visible",
                 account,
@@ -580,6 +663,14 @@ class ImageSelector:
         if metrics.faces >= 1:
             return True
         return metrics.face_area_ratio > 0 and metrics.portrait_focus_score >= 0.22
+
+    def _is_type_1_person_visible_media(self, media: MediaCandidate) -> bool:
+        if not media.metrics:
+            return False
+        metrics = media.metrics
+        if metrics.faces >= 1:
+            return True
+        return self._is_high_quality_portrait_without_detected_face(metrics)
 
     def _inject_landscape(
         self,
@@ -968,8 +1059,8 @@ class ImageSelector:
             return -1.0
 
         # TYPE_1 es historia personal, la cara del creador es lo que engancha.
-        # Cuantas más caras visibles, mejor; hook sin cara se penaliza duro.
-        face_score = min(metrics.faces, 3) / 3.0
+        # Preferimos una sola persona clara; los grupos distraen del relato.
+        face_score = self._single_person_score(metrics)
         portrait_score = metrics.portrait_focus_score
         score = (
             0.24 * metrics.quality_score
@@ -1007,7 +1098,7 @@ class ImageSelector:
             return 0.0
         # TYPE_2 tiene que vender "me ha ido bien": lifestyle alto, old money
         # y una sensación de éxito del usuario, no solo objetos bonitos.
-        face_score = min(metrics.faces, 2) / 2.0
+        face_score = self._single_person_score(metrics)
         landscape_penalty = 0.22 if self._is_landscape_dominant_media(media) else 0.0
         score = (
             0.22 * metrics.quality_score
@@ -1074,6 +1165,8 @@ class ImageSelector:
 
     def _score_extra_image(self, media: MediaCandidate, video_type: VideoType) -> float:
         if video_type == VideoType.TYPE_1:
+            if not self._is_type_1_person_visible_media(media):
+                return 0.0
             return max(
                 self._score_type_1(media, SlideRole.HOOK),
                 self._score_type_1(media, SlideRole.OCTOBER),
@@ -1153,6 +1246,12 @@ class ImageSelector:
             return True
         return self._is_high_quality_portrait_without_detected_face(media.metrics)
 
+    def _first_type_1_image_is_valid(self, media: MediaCandidate) -> bool:
+        return (
+            self._first_image_is_valid(media)
+            and self._is_type_1_person_visible_media(media)
+        )
+
     def _is_high_quality_portrait_without_detected_face(self, metrics: ImageMetrics) -> bool:
         return (
             metrics.faces == 0
@@ -1161,6 +1260,15 @@ class ImageSelector:
             and metrics.aspect_ratio <= 0.92
             and not metrics.is_landscape
         )
+
+    def _single_person_score(self, metrics: ImageMetrics) -> float:
+        if metrics.faces <= 0:
+            return 0.0
+        if metrics.faces == 1:
+            return 1.0
+        if metrics.faces == 2:
+            return 0.72
+        return 0.45
 
     def _build_fixed_media(self) -> MediaCandidate:
         if not self.settings.fixed_image_path.exists():

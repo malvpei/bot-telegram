@@ -229,6 +229,132 @@ def test_type_1_never_uses_landscape_from_another_account(temp_workspace):
     assert plan.fallback_accounts == []
 
 
+def test_type_1_does_not_force_landscape_when_all_images_have_people(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "all_people"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="all_people", idx=i)
+        for i in range(7)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.82,
+            daylight=0.75,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.2,
+            casual=0.2,
+            luxury=0.05,
+            portrait_focus=0.55,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"all_people": candidates}, VideoType.TYPE_1, Language.ES)
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    assert all(selector._is_type_1_person_visible_media(media) for media in non_fixed)
+    assert not any(media.metrics.is_landscape for media in non_fixed)
+
+
+def test_type_1_allows_at_most_one_landscape_without_person(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "mostly_people"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="mostly_people", idx=i)
+        for i in range(10)
+    ]
+    candidates[0].metrics = _metrics_stub(
+        quality=0.7,
+        daylight=0.7,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.15,
+        casual=0.1,
+        luxury=0.05,
+        portrait_focus=0.55,
+    )
+    for candidate in candidates[1:4]:
+        candidate.metrics = _metrics_stub(
+            quality=0.99,
+            daylight=0.95,
+            faces=0,
+            is_landscape=True,
+            outdoor=1.0,
+            casual=0.0,
+            luxury=0.05,
+            portrait_focus=0.0,
+        )
+    for candidate in candidates[4:]:
+        candidate.metrics = _metrics_stub(
+            quality=0.42,
+            daylight=0.42,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.05,
+            casual=0.05,
+            luxury=0.02,
+            portrait_focus=0.1,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"mostly_people": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    without_person = [
+        media for media in non_fixed
+        if not selector._is_type_1_person_visible_media(media)
+    ]
+    assert len(without_person) <= 1
+    assert all(media.metrics.is_landscape for media in without_person)
+
+
+def test_type_1_extra_image_requires_person_visible(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "extra_people"
+    account_dir.mkdir()
+
+    landscape = _make_candidate(
+        account_dir,
+        username="extra_people",
+        idx=1,
+        landscape=True,
+    )
+    person = _make_candidate(account_dir, username="extra_people", idx=2)
+    landscape.metrics = _metrics_stub(
+        quality=0.99,
+        daylight=0.95,
+        faces=0,
+        is_landscape=True,
+        outdoor=1.0,
+        casual=0.0,
+        luxury=0.05,
+        portrait_focus=0.0,
+    )
+    person.metrics = _metrics_stub(
+        quality=0.55,
+        daylight=0.55,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.1,
+        casual=0.1,
+        luxury=0.05,
+        portrait_focus=0.3,
+    )
+
+    selector = ImageSelector(settings, state)
+    picked = selector.pick_extra_image([landscape, person], VideoType.TYPE_1)
+
+    assert picked.source_id == person.source_id
+
+
 def test_type_2_allows_zero_landscapes_even_if_another_account_has_them(temp_workspace):
     settings, state = temp_workspace
     main_dir = settings.downloads_dir / "lifestyle"
@@ -448,6 +574,11 @@ def test_type_2_replaces_square_non_user_images_until_only_one_remains(temp_work
         1 for media in non_fixed if selector._is_type_2_non_user_media(media)
     )
     assert non_user_count <= 1
+    assert all(
+        media.metrics.is_landscape
+        for media in non_fixed
+        if selector._is_type_2_non_user_media(media)
+    )
 
 
 def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):

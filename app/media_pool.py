@@ -202,6 +202,10 @@ class MediaPoolService:
         eligible: list[str] = []
         if (
             not self.selector._is_extreme_luxury(candidate)
+            and (
+                self.selector._is_type_1_person_visible_media(candidate)
+                or self.selector._is_landscape_media(candidate)
+            )
             and max(
                 self.selector._score_type_1(candidate, role)
                 for role in (
@@ -213,14 +217,20 @@ class MediaPoolService:
             > 0
         ):
             eligible.append(VideoType.TYPE_1.value)
-        if max(
-            self.selector._score_type_2(candidate, role)
-            for role in (
-                SlideRole.HOOK,
-                SlideRole.TIP1,
-                SlideRole.TIP4,
+        if (
+            (
+                self.selector._is_type_2_user_visible_media(candidate)
+                or self.selector._is_landscape_media(candidate)
             )
-        ) > 0:
+            and max(
+                self.selector._score_type_2(candidate, role)
+                for role in (
+                    SlideRole.HOOK,
+                    SlideRole.TIP1,
+                    SlideRole.TIP4,
+                )
+            ) > 0
+        ):
             eligible.append(VideoType.TYPE_2.value)
         if self.selector._score_type_3_hook(candidate) > 0:
             eligible.append(VideoType.TYPE_3.value)
