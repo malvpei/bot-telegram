@@ -162,6 +162,7 @@ class MediaPoolService:
             video_type=video_type,
             usernames=[account],
             skip_accounts=[],
+            include_landscape_exceptions=False,
         )
         candidates = candidates_by_account.get(account, [])
         if not candidates:
@@ -264,6 +265,7 @@ class MediaPoolService:
         video_type: VideoType,
         usernames: list[str],
         skip_accounts: list[str],
+        include_landscape_exceptions: bool = True,
     ) -> dict[str, list[MediaCandidate]]:
         allowed = {username.lower() for username in usernames}
         skipped = {account.lower() for account in skip_accounts}
@@ -281,6 +283,12 @@ class MediaPoolService:
             if self.state.any_media_used(list(self._item_keys(item))):
                 continue
             candidate = self._item_to_candidate(item)
+            if not self._candidate_allowed_for_type(
+                candidate,
+                video_type,
+                include_landscape_exceptions=include_landscape_exceptions,
+            ):
+                continue
             by_account.setdefault(account, []).append(candidate)
         return by_account
 
@@ -405,6 +413,31 @@ class MediaPoolService:
             "eligible_types": list(eligible_types),
             "added_at": datetime.now(timezone.utc).isoformat(),
         }
+
+    def _candidate_allowed_for_type(
+        self,
+        candidate: MediaCandidate,
+        video_type: VideoType,
+        *,
+        include_landscape_exceptions: bool,
+    ) -> bool:
+        if video_type == VideoType.TYPE_1:
+            return (
+                self.selector._is_type_1_person_visible_media(candidate)
+                or (
+                    include_landscape_exceptions
+                    and self.selector._is_landscape_media(candidate)
+                )
+            )
+        if video_type == VideoType.TYPE_2:
+            return (
+                self.selector._is_type_2_user_visible_media(candidate)
+                or (
+                    include_landscape_exceptions
+                    and self.selector._is_landscape_media(candidate)
+                )
+            )
+        return True
 
     def _item_to_candidate(self, item: dict[str, Any]) -> MediaCandidate:
         metrics = item.get("metrics")
