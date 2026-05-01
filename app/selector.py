@@ -127,6 +127,8 @@ class ImageSelector:
         self._face_detector = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         )
+        self._fixed_media_cache: MediaCandidate | None = None
+        self._type_3_backgrounds_cache: tuple[MediaCandidate, ...] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -1271,6 +1273,8 @@ class ImageSelector:
         return 0.45
 
     def _build_fixed_media(self) -> MediaCandidate:
+        if self._fixed_media_cache is not None:
+            return self._fixed_media_cache
         if not self.settings.fixed_image_path.exists():
             raise FileNotFoundError(
                 "No encuentro la imagen fija requerida en "
@@ -1290,9 +1294,12 @@ class ImageSelector:
             created_at="fixed",
         )
         candidate.metrics = self._analyze_image(candidate)
+        self._fixed_media_cache = candidate
         return candidate
 
-    def _type_3_backgrounds(self) -> list[MediaCandidate]:
+    def _type_3_backgrounds(self) -> tuple[MediaCandidate, ...]:
+        if self._type_3_backgrounds_cache is not None:
+            return self._type_3_backgrounds_cache
         backgrounds_dir = self.settings.root_dir / "tipo3" / "fondocolores"
         if not backgrounds_dir.exists():
             backgrounds_dir = self.settings.root_dir / "tipo3" / "colores"
@@ -1335,7 +1342,8 @@ class ImageSelector:
             raise FileNotFoundError(
                 f"No pude abrir ningún fondo válido en {backgrounds_dir}."
             )
-        return backgrounds
+        self._type_3_backgrounds_cache = tuple(backgrounds)
+        return self._type_3_backgrounds_cache
 
     def _keyword_score(self, text: str, keywords: set[str]) -> float:
         lowered = (text or "").lower()

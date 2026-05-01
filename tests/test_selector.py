@@ -752,6 +752,51 @@ def test_type_3_uses_one_real_hook_and_one_background_for_all_tools(temp_workspa
     assert len({slide.media.local_path for slide in plan.slides[1:]}) == 1
 
 
+def test_type_3_backgrounds_are_cached_between_plan_builds(temp_workspace, monkeypatch):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "type3_cache"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="type3_cache", idx=i, caption="old money laptop")
+        for i in range(2)
+    ]
+    for index, candidate in enumerate(candidates):
+        candidate.metrics = _metrics_stub(
+            quality=0.84,
+            daylight=0.76,
+            faces=1 if index == 0 else 0,
+            is_landscape=False,
+            casual=0.05,
+            luxury=0.72,
+            portrait_focus=0.68 if index == 0 else 0.12,
+            affluent=0.82,
+            laptop=1.0 if index == 0 else 0.2,
+            hands=0.4,
+        )
+        candidate.content_fingerprints = [
+            f"sha256:type3-cache-{index}",
+            f"dhash:{index + 1:016x}",
+        ]
+        candidate.content_fingerprint = candidate.content_fingerprints[0]
+
+    selector = ImageSelector(settings, state)
+    original_analyze = selector._analyze_image
+    analyzed_ids: list[str] = []
+
+    def counting_analyze(media: MediaCandidate) -> ImageMetrics:
+        analyzed_ids.append(media.source_id)
+        return original_analyze(media)
+
+    monkeypatch.setattr(selector, "_analyze_image", counting_analyze)
+
+    selector.create_plan({"type3_cache": candidates}, VideoType.TYPE_3, Language.ES)
+    selector.create_plan({"type3_cache": candidates}, VideoType.TYPE_3, Language.ES)
+
+    background_calls = [source_id for source_id in analyzed_ids if source_id.startswith("tipo3_fondo:")]
+    assert len(background_calls) == 3
+
+
 def test_visual_fingerprint_blocks_reusing_same_image(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "fingerprint"
