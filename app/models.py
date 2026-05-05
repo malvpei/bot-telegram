@@ -160,6 +160,8 @@ class VideoPlan:
     slides: list[SlidePlan]
     used_media_ids: list[str] = field(default_factory=list)
     fallback_accounts: list[str] = field(default_factory=list)
+    type_3_background_id: str | None = None
+    type_3_background_candidates: list[str] = field(default_factory=list)
 
 
 @dataclass

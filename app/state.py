@@ -38,6 +38,7 @@ class StateStore:
         self._jobs_log_path = self.state_dir / "jobs_log.json"
         self._media_pool_path = self.state_dir / "media_pool.json"
         self._account_cooldowns_path = self.state_dir / "account_cooldowns.json"
+        self._type_3_background_queue_path = self.state_dir / "type3_background_queue.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
         self._persistence_marker_path = self.state_dir / "persistence_marker.json"
         self._lock_path = self.state_dir / ".state.lock"
@@ -245,6 +246,38 @@ class StateStore:
             jobs.append(payload)
             self._write_json(self._jobs_log_path, jobs)
 
+    def get_next_type_3_background_id(self, background_ids: list[str]) -> str | None:
+        if not background_ids:
+            return None
+        with self._exclusive():
+            queue = self._read_json(self._type_3_background_queue_path, {})
+            normalized = self._normalize_type_3_background_order(queue, background_ids)
+            if queue.get("order") != normalized:
+                self._write_json(
+                    self._type_3_background_queue_path,
+                    {"order": normalized},
+                )
+        return normalized[0] if normalized else None
+
+    def remember_type_3_background_choice(
+        self,
+        background_id: str,
+        background_ids: list[str],
+    ) -> None:
+        if not background_id or not background_ids:
+            return
+        with self._exclusive():
+            queue = self._read_json(self._type_3_background_queue_path, {})
+            normalized = self._normalize_type_3_background_order(queue, background_ids)
+            if background_id not in normalized:
+                return
+            normalized.remove(background_id)
+            normalized.append(background_id)
+            self._write_json(
+                self._type_3_background_queue_path,
+                {"order": normalized},
+            )
+
     def read_media_pool(self) -> dict[str, Any]:
         with self._exclusive():
             pool = self._read_json(self._media_pool_path, {})
@@ -437,6 +470,34 @@ class StateStore:
     @staticmethod
     def _bucket_key(video_type: VideoType, language: Language) -> str:
         return f"{video_type.value}:{language.value}"
+
+    @staticmethod
+    def _normalize_type_3_background_order(
+        queue: Any,
+        background_ids: list[str],
+    ) -> list[str]:
+        available: list[str] = []
+        seen: set[str] = set()
+        for background_id in background_ids:
+            if not isinstance(background_id, str) or not background_id:
+                continue
+            if background_id in seen:
+                continue
+            seen.add(background_id)
+            available.append(background_id)
+
+        saved_order = queue.get("order", []) if isinstance(queue, dict) else []
+        normalized: list[str] = []
+        normalized_seen: set[str] = set()
+        for background_id in saved_order:
+            if background_id in seen and background_id not in normalized_seen:
+                normalized.append(background_id)
+                normalized_seen.add(background_id)
+        for background_id in available:
+            if background_id not in normalized_seen:
+                normalized.append(background_id)
+                normalized_seen.add(background_id)
+        return normalized
 
     @staticmethod
     def _media_id_is_used(media_id: str, used: dict[str, Any]) -> bool:

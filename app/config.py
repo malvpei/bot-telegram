@@ -153,7 +153,7 @@ def get_settings() -> Settings:
         output_retention_days=_env_int("OUTPUT_RETENTION_DAYS", 7),
         account_cache_ttl_hours=_env_int("ACCOUNT_CACHE_TTL_HOURS", 0),
         account_pick_attempts=_env_int("ACCOUNT_PICK_ATTEMPTS", 0),
-        pool_target_images=_env_int("POOL_TARGET_IMAGES", 50),
+        pool_target_images=_env_int("POOL_TARGET_IMAGES", 100),
         pool_low_stock_threshold=_env_int("POOL_LOW_STOCK_THRESHOLD", 12),
         account_cooldown_days=_env_int("ACCOUNT_COOLDOWN_DAYS", 30),
         ig_sessionid=os.getenv("IG_SESSIONID", "").strip(),

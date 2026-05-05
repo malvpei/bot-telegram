@@ -112,6 +112,22 @@ def test_persistence_marker_is_stable(state_dir):
     assert second["install_id"] == first["install_id"]
 
 
+def test_type_3_background_queue_rotates_globally(state_dir):
+    store = StateStore(state_dir)
+    background_ids = ["bg-1", "bg-2", "bg-3"]
+
+    assert store.get_next_type_3_background_id(background_ids) == "bg-1"
+
+    store.remember_type_3_background_choice("bg-1", background_ids)
+    assert store.get_next_type_3_background_id(background_ids) == "bg-2"
+
+    store.remember_type_3_background_choice("bg-2", background_ids)
+    assert store.get_next_type_3_background_id(background_ids) == "bg-3"
+
+    store.remember_type_3_background_choice("bg-3", background_ids)
+    assert store.get_next_type_3_background_id(background_ids) == "bg-1"
+
+
 def test_memory_snapshot_reports_usage_and_account_diversity(state_dir):
     store = StateStore(state_dir)
     store.ensure_persistence_marker()

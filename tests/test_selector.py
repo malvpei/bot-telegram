@@ -797,6 +797,57 @@ def test_type_3_backgrounds_are_cached_between_plan_builds(temp_workspace, monke
     assert len(background_calls) == 3
 
 
+def test_type_3_background_rotation_is_global_across_languages(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "type3_rotation"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(
+            account_dir,
+            username="type3_rotation",
+            idx=i,
+            caption="old money laptop",
+        )
+        for i in range(2)
+    ]
+    for index, candidate in enumerate(candidates):
+        candidate.metrics = _metrics_stub(
+            quality=0.84,
+            daylight=0.76,
+            faces=1 if index == 0 else 0,
+            is_landscape=False,
+            casual=0.05,
+            luxury=0.72,
+            portrait_focus=0.68 if index == 0 else 0.12,
+            affluent=0.82,
+            laptop=1.0 if index == 0 else 0.2,
+            hands=0.4,
+        )
+
+    selector = ImageSelector(settings, state)
+
+    first_plan = selector.create_plan(
+        {"type3_rotation": candidates},
+        VideoType.TYPE_3,
+        Language.EN,
+    )
+    state.remember_type_3_background_choice(
+        first_plan.type_3_background_id or "",
+        first_plan.type_3_background_candidates,
+    )
+
+    second_plan = selector.create_plan(
+        {"type3_rotation": candidates},
+        VideoType.TYPE_3,
+        Language.ES,
+    )
+
+    assert first_plan.type_3_background_id is not None
+    assert second_plan.type_3_background_id is not None
+    assert second_plan.type_3_background_id != first_plan.type_3_background_id
+
+
 def test_visual_fingerprint_blocks_reusing_same_image(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "fingerprint"

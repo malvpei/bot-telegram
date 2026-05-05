@@ -246,6 +246,11 @@ class VideoCreationService:
                     script_path=str(script_path),
                 )
             )
+            if plan.type_3_background_id and plan.type_3_background_candidates:
+                self.state.remember_type_3_background_choice(
+                    plan.type_3_background_id,
+                    plan.type_3_background_candidates,
+                )
         except Exception:
             # If anything blew up after reservation, release the IDs so they
             # remain available for future runs.

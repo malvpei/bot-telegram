@@ -377,6 +377,15 @@ class ImageSelector:
         language: Language,
     ) -> VideoPlan:
         backgrounds = self._type_3_backgrounds()
+        background_ids = [background.source_id for background in backgrounds]
+        selected_background_id = self.state.get_next_type_3_background_id(background_ids)
+        background_by_id = {
+            background.source_id: background for background in backgrounds
+        }
+        background = background_by_id.get(selected_background_id or "")
+        if background is None:
+            background = backgrounds[0]
+            selected_background_id = background.source_id
         ranked: list[tuple[float, VideoPlan]] = []
 
         for account, raw_candidates in catalog.items():
@@ -403,8 +412,6 @@ class ImageSelector:
             slides: list[SlidePlan] = [
                 SlidePlan(index=1, role=SlideRole.HOOK, text="", media=hook.media)
             ]
-            background_index = sum(ord(char) for char in account) % len(backgrounds)
-            background = backgrounds[background_index]
             for index, role in enumerate(TYPE_3_ROLES[1:], start=2):
                 slide_background = replace(
                     background,
@@ -427,6 +434,8 @@ class ImageSelector:
                 slides=slides,
                 used_media_ids=self._reservation_keys([hook.media]),
                 fallback_accounts=[],
+                type_3_background_id=selected_background_id,
+                type_3_background_candidates=list(background_ids),
             )
             ranked.append((hook.score, plan))
 
