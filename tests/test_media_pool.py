@@ -25,6 +25,15 @@ class FakePlanSelector:
             used_media_ids=[catalog[account][0].source_id],
         )
 
+    def _is_type_1_person_visible_media(self, candidate):
+        return True
+
+    def _is_type_2_user_visible_media(self, candidate):
+        return True
+
+    def _is_landscape_media(self, candidate):
+        return bool(candidate.metrics and candidate.metrics.is_landscape)
+
 
 def test_pool_merge_blocks_near_dhash_duplicates():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
@@ -116,6 +125,80 @@ def test_pool_ready_requires_viable_plan_for_each_type():
         )
 
         assert service._pool_ready(pool, ["alpha"], 50) is False
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_ready_requires_target_stock_for_each_type():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        image_path = root / "alpha.jpg"
+        Image.new("RGB", (32, 32), (10, 20, 30)).save(image_path)
+        pool = {
+            "version": 1,
+            "cursor_by_type": {},
+            "items": [
+                _pool_item(
+                    "alpha",
+                    f"alpha:POST{index}:0",
+                    image_path,
+                    eligible_types=(
+                        [VideoType.TYPE_1.value, VideoType.TYPE_2.value, VideoType.TYPE_3.value]
+                        if index < 3
+                        else [VideoType.TYPE_2.value, VideoType.TYPE_3.value]
+                    ),
+                )
+                for index in range(10)
+            ],
+        }
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        assert service._pool_ready(pool, ["alpha"], 10) is False
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_ready_when_target_stock_is_met_for_every_type():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        image_path = root / "alpha.jpg"
+        Image.new("RGB", (32, 32), (10, 20, 30)).save(image_path)
+        pool = {
+            "version": 1,
+            "cursor_by_type": {},
+            "items": [
+                _pool_item(
+                    "alpha",
+                    f"alpha:POST{index}:0",
+                    image_path,
+                    eligible_types=[
+                        VideoType.TYPE_1.value,
+                        VideoType.TYPE_2.value,
+                        VideoType.TYPE_3.value,
+                    ],
+                )
+                for index in range(10)
+            ],
+        }
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        assert service._pool_ready(pool, ["alpha"], 10) is True
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

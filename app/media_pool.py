@@ -314,6 +314,10 @@ class MediaPoolService:
         target: int,
     ) -> bool:
         counts = self._stock_counts(pool)
+        by_type = counts.get("by_type", {})
+        for video_type in ALL_VIDEO_TYPES:
+            if int(by_type.get(video_type.value, 0)) < target:
+                return False
         if int(counts["total"]) < target:
             return False
         viable = self._viable_accounts_by_type(pool, usernames)

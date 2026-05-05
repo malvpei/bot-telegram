@@ -202,7 +202,7 @@ async def download_pool_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     status_message = await update.effective_message.reply_text(
-        f"Rellenando pool hasta {settings.pool_target_images} fotos disponibles. "
+        f"Rellenando pool hasta {settings.pool_target_images} fotos aptas por tipo. "
         "Voy cuenta por cuenta y pongo cooldown despues de revisar cada una."
     )
     service: VideoCreationService = context.application.bot_data["service"]
@@ -623,7 +623,7 @@ def _format_pool_refill_summary(summary: dict) -> str:
     skipped = summary.get("skipped_cooldown", [])
     lines = [
         "Pool actualizado",
-        f"Objetivo minimo: {summary.get('target')}",
+        f"Objetivo minimo por tipo: {summary.get('target')}",
         f"Antes: {summary.get('before', {}).get('total', 0)}",
         f"Ahora: {after.get('total', 0)}",
         f"Nuevas: {summary.get('added', 0)}",
