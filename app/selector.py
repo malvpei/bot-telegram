@@ -194,7 +194,6 @@ class ImageSelector:
                 candidate
                 for candidate in raw_candidates
                 if not self._is_candidate_used(candidate)
-                and not self._is_extreme_luxury(candidate)
             ]
             LOGGER.info(
                 "tipo1 @%s: %d/%d candidatos disponibles",
@@ -218,11 +217,6 @@ class ImageSelector:
                     score_fn=lambda media, current_role=role: self._score_type_1(
                         media, current_role
                     ),
-                    accept_fn=(
-                        self._first_type_1_image_is_valid
-                        if role == SlideRole.HOOK
-                        else None
-                    ),
                 )
                 if best is None:
                     break
@@ -239,19 +233,7 @@ class ImageSelector:
                 )
                 continue
 
-            if not self._first_type_1_image_is_valid(picked[SlideRole.HOOK]):
-                LOGGER.info("tipo1 @%s: hook no pasa el umbral de calidad", account)
-                continue
-
             fallback_accounts: list[str] = []
-            if not self._enforce_type_1_person_visibility(
-                account,
-                picked,
-                role_scores,
-                available,
-                replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
-            ):
-                continue
 
             slides = self._build_slide_plans(
                 TYPE_1_ROLES,
@@ -1054,41 +1036,28 @@ class ImageSelector:
         metrics = media.metrics
         if metrics is None:
             return 0.0
-        if self._is_extreme_luxury(media):
-            return -1.0
-
-        # TYPE_1 es historia personal, la cara del creador es lo que engancha.
-        # Preferimos una sola persona clara; los grupos distraen del relato.
         face_score = self._single_person_score(metrics)
-        portrait_score = metrics.portrait_focus_score
+        person_or_composition = max(face_score, metrics.portrait_focus_score)
         score = (
-            0.24 * metrics.quality_score
-            + 0.10 * metrics.casual_score
-            + 0.08 * metrics.outdoor_score
-            + 0.24 * face_score
-            + 0.22 * portrait_score
-            - 0.18 * metrics.luxury_score
+            0.44 * metrics.quality_score
+            + 0.18 * metrics.daylight
+            + 0.14 * person_or_composition
+            + 0.12 * metrics.outdoor_score
+            + 0.08 * metrics.casual_score
+            + 0.04 * metrics.hands_score
         )
-        if metrics.has_visual_luxury:
-            score -= 0.15
         if role == SlideRole.HOOK:
-            if metrics.faces < 1:
-                if self._is_high_quality_portrait_without_detected_face(metrics):
-                    score -= 0.18
-                else:
-                    score -= 0.55
             score += (
-                0.10 * metrics.daylight
-                + 0.18 * face_score
-                + 0.30 * portrait_score
+                0.12 * metrics.daylight
+                + 0.18 * person_or_composition
             )
-            if metrics.is_landscape:
-                score -= 0.28
+            if metrics.is_landscape and person_or_composition <= 0:
+                score -= 0.18
         elif role == SlideRole.MARCH:
             # March is the closing slide, slight bump for upbeat outdoor shots.
             score += 0.05 * metrics.outdoor_score
-        elif metrics.is_landscape:
-            score += 0.05
+        if metrics.has_visual_luxury:
+            score -= 0.04
         return score
 
     def _score_type_2(self, media: MediaCandidate, role: SlideRole) -> float:
@@ -1151,8 +1120,6 @@ class ImageSelector:
 
     def _score_extra_image(self, media: MediaCandidate, video_type: VideoType) -> float:
         if video_type == VideoType.TYPE_1:
-            if not self._is_type_1_person_visible_media(media):
-                return 0.0
             return max(
                 self._score_type_1(media, SlideRole.HOOK),
                 self._score_type_1(media, SlideRole.OCTOBER),

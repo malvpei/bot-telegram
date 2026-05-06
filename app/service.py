@@ -350,7 +350,15 @@ class VideoCreationService:
         LOGGER.info(
             "Rendering video type %s for job %s", plan.video_type.value, job_dir.name
         )
-        video_path, script_path = self.renderer.render(plan, job_dir)
+        try:
+            video_path, script_path = self.renderer.render(plan, job_dir)
+        except Exception:  # noqa: BLE001
+            LOGGER.exception(
+                "Full MP4 render failed for job %s; continuing with slide images.",
+                job_dir.name,
+            )
+            video_path = None
+            script_path = self.renderer.write_script(plan, job_dir)
         self._normalize_slide_images(plan, job_dir)
         return video_path, script_path
 

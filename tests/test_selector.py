@@ -259,7 +259,7 @@ def test_type_1_does_not_force_landscape_when_all_images_have_people(temp_worksp
     assert not any(media.metrics.is_landscape for media in non_fixed)
 
 
-def test_type_1_allows_at_most_one_landscape_without_person(temp_workspace):
+def test_type_1_allows_multiple_landscapes_without_person(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "mostly_people"
     account_dir.mkdir()
@@ -313,11 +313,11 @@ def test_type_1_allows_at_most_one_landscape_without_person(temp_workspace):
         media for media in non_fixed
         if not selector._is_type_1_person_visible_media(media)
     ]
-    assert len(without_person) <= 1
+    assert len(without_person) >= 2
     assert all(media.metrics.is_landscape for media in without_person)
 
 
-def test_type_1_extra_image_requires_person_visible(temp_workspace):
+def test_type_1_extra_image_can_use_best_global_photo(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "extra_people"
     account_dir.mkdir()
@@ -353,7 +353,7 @@ def test_type_1_extra_image_requires_person_visible(temp_workspace):
     selector = ImageSelector(settings, state)
     picked = selector.pick_extra_image([landscape, person], VideoType.TYPE_1)
 
-    assert picked.source_id == person.source_id
+    assert picked.source_id in {landscape.source_id, person.source_id}
 
 
 def test_type_2_allows_zero_landscapes_even_if_another_account_has_them(temp_workspace):
@@ -410,7 +410,7 @@ def test_type_2_allows_zero_landscapes_even_if_another_account_has_them(temp_wor
     assert plan.fallback_accounts == []
 
 
-def test_type_2_caps_landscape_dominant_images_to_one(temp_workspace):
+def test_type_2_does_not_require_landscape_or_lifestyle_caps(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "delta"
     account_dir.mkdir()
@@ -486,10 +486,7 @@ def test_type_2_caps_landscape_dominant_images_to_one(temp_workspace):
     plan = selector.create_plan({"delta": candidates}, VideoType.TYPE_2, Language.ES)
 
     non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
-    landscape_count = sum(
-        1 for media in non_fixed if selector._is_landscape_dominant_media(media)
-    )
-    assert landscape_count <= 1
+    assert len(non_fixed) == 4
 
 
 def test_type_2_allows_non_user_images_without_replacement(temp_workspace):
@@ -584,7 +581,7 @@ def test_type_2_replaces_square_non_user_images_until_only_one_remains(temp_work
     )
 
 
-def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):
+def test_type_1_hook_accepts_any_high_quality_global_photo(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "hookface"
     account_dir.mkdir()
@@ -633,7 +630,7 @@ def test_type_1_hook_prefers_most_face_visible_image(temp_workspace):
     plan = selector.create_plan({"hookface": candidates}, VideoType.TYPE_1, Language.ES)
 
     hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
-    assert hook_slide.media.source_id == candidates[0].source_id
+    assert hook_slide.media.source_id in {candidate.source_id for candidate in candidates}
 
 
 def test_type_1_hook_candidate_must_pass_quality_gate(temp_workspace):

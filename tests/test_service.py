@@ -144,6 +144,54 @@ def test_type_3_outputs_skip_full_video_render():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_1_outputs_fall_back_to_slides_when_full_video_render_fails():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            width=72,
+            height=128,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = FakeRenderer()
+
+        source_path = root / "source.jpg"
+        Image.new("RGB", (72, 128), (120, 120, 120)).save(source_path)
+        media = MediaCandidate(
+            source_account="alpha",
+            source_id="alpha:1",
+            local_path=source_path,
+            permalink="",
+            caption="",
+            width=72,
+            height=128,
+            created_at="",
+        )
+        plan = VideoPlan(
+            chosen_account="alpha",
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            slides=[SlidePlan(index=1, role=SlideRole.HOOK, text="Hook", media=media)],
+            used_media_ids=[media.source_id],
+        )
+
+        video_path, script_path = service._render_outputs(plan, root / "outputs" / "job")
+
+        assert video_path is None
+        assert script_path.exists()
+        assert service.renderer.render_called is True
+        assert service.renderer.write_script_called is True
+        assert plan.slides[0].media.local_path.name == "slide_01.jpg"
+        assert plan.slides[0].media.local_path.exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_create_extra_image_returns_one_normalized_photo():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"extra-{uuid4().hex}"
     root.mkdir(parents=True)
