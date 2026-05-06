@@ -332,18 +332,6 @@ class ImageSelector:
                 )
                 continue
 
-            hook_media = picked[SlideRole.HOOK]
-            if not self._is_type_2_user_visible_media(hook_media):
-                LOGGER.info("tipo2 @%s: hook sin usuario visible", account)
-                continue
-
-            if not self._enforce_type_2_user_visibility(
-                account,
-                picked, role_scores, available,
-                replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
-            ):
-                continue
-
             slides = self._build_slide_plans(
                 TYPE_2_ROLES,
                 picked=picked,
@@ -1107,40 +1095,27 @@ class ImageSelector:
         metrics = media.metrics
         if metrics is None:
             return 0.0
-        # TYPE_2 tiene que vender "me ha ido bien": lifestyle alto, old money
-        # y una sensación de éxito del usuario, no solo objetos bonitos.
         face_score = self._single_person_score(metrics)
-        landscape_penalty = 0.22 if self._is_landscape_dominant_media(media) else 0.0
+        person_or_composition = max(face_score, metrics.portrait_focus_score)
         score = (
-            0.22 * metrics.quality_score
-            + 0.32 * metrics.affluent_lifestyle_score
-            + 0.16 * metrics.luxury_score
-            + 0.08 * metrics.daylight
-            + 0.10 * metrics.outdoor_score
-            + 0.12 * metrics.portrait_focus_score
-            + 0.06 * face_score
-            - 0.18 * metrics.casual_score
-            - landscape_penalty
+            0.42 * metrics.quality_score
+            + 0.18 * metrics.daylight
+            + 0.16 * person_or_composition
+            + 0.12 * metrics.outdoor_score
+            + 0.08 * metrics.casual_score
+            + 0.04 * metrics.hands_score
         )
-        if metrics.has_visual_luxury:
-            score += 0.10
         if role == SlideRole.HOOK:
-            if metrics.faces < 1:
-                return -1.0
             score += (
-                0.20 * face_score
-                + 0.26 * metrics.portrait_focus_score
+                0.18 * person_or_composition
                 + 0.08 * metrics.daylight
             )
-            if self._is_landscape_dominant_media(media):
-                # Hook debe ser retrato con cara, el paisaje va en un tip.
-                score -= 0.35
+            if metrics.is_landscape and person_or_composition <= 0:
+                score -= 0.22
         elif role == SlideRole.TIP4:
             score += 0.10 * metrics.outdoor_score
-            if self._is_landscape_dominant_media(media):
-                score += 0.08
-        elif self._is_landscape_dominant_media(media):
-            score -= 0.08
+        if metrics.has_visual_luxury:
+            score -= 0.06
         return score
 
     def _score_type_3_hook(self, media: MediaCandidate) -> float:
@@ -1184,8 +1159,6 @@ class ImageSelector:
                 self._score_type_1(media, SlideRole.MARCH),
             )
         if video_type == VideoType.TYPE_2:
-            if not self._is_type_2_user_visible_media(media):
-                return 0.0
             return max(
                 self._score_type_2(media, SlideRole.HOOK),
                 self._score_type_2(media, SlideRole.TIP1),

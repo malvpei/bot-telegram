@@ -8,7 +8,7 @@ from typing import Any
 
 from app.config import Settings
 from app.instagram import InstagramCollector
-from app.models import ImageMetrics, Language, MediaCandidate, SlideRole, VideoPlan, VideoType
+from app.models import ImageMetrics, Language, MediaCandidate, VideoPlan, VideoType
 from app.selector import ImageSelector
 from app.state import StateStore
 
@@ -16,6 +16,7 @@ from app.state import StateStore
 LOGGER = logging.getLogger(__name__)
 POOL_VERSION = 1
 ALL_VIDEO_TYPES = (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3)
+GLOBAL_POOL_ACCOUNT = "pool_global"
 
 
 class MediaPoolService:
@@ -122,28 +123,34 @@ class MediaPoolService:
             pool=pool,
             video_type=video_type,
         )
-        tried: list[str] = []
-        last_error: str | None = None
-        for account in ordered_accounts:
-            tried.append(account)
-            try:
-                plan = self.selector.create_plan(
-                    {account: candidates_by_account[account]},
-                    video_type,
-                    language,
-                )
-            except ValueError as error:
-                last_error = str(error)
-                LOGGER.info("Pool account @%s no viable: %s", account, error)
-                continue
-            return plan, tried
+        candidates = [
+            candidate
+            for account in ordered_accounts
+            for candidate in candidates_by_account[account]
+        ]
+        if not candidates:
+            raise ValueError(
+                "No hay fotos disponibles en el pool global. "
+                "Ejecuta /download_pool para rellenarlo."
+            )
 
-        detail = f"\n{last_error}" if last_error else ""
-        raise ValueError(
-            "No hay fotos suficientes en el pool para este tipo de video. "
-            "Ejecuta /download_pool para rellenarlo."
-            + detail
-        )
+        try:
+            plan = self.selector.create_plan(
+                {GLOBAL_POOL_ACCOUNT: candidates},
+                video_type,
+                language,
+            )
+        except ValueError as error:
+            LOGGER.info("Pool global no viable: %s", error)
+            detail = f"\n{error}"
+            raise ValueError(
+                "No hay fotos suficientes en el pool global para este tipo de video. "
+                "Ejecuta /download_pool para rellenarlo."
+                + detail
+            ) from error
+
+        plan.chosen_account = self._primary_account_for_plan(plan, candidates)
+        return plan, ordered_accounts
 
     def note_account_used(self, account: str, video_type: VideoType) -> None:
         pool = self._normalise_pool(self.state.read_media_pool())
@@ -200,42 +207,7 @@ class MediaPoolService:
         return valid
 
     def _eligible_types(self, candidate: MediaCandidate) -> list[str]:
-        eligible: list[str] = []
-        if (
-            not self.selector._is_extreme_luxury(candidate)
-            and (
-                self.selector._is_type_1_person_visible_media(candidate)
-                or self.selector._is_landscape_media(candidate)
-            )
-            and max(
-                self.selector._score_type_1(candidate, role)
-                for role in (
-                    SlideRole.HOOK,
-                    SlideRole.OCTOBER,
-                    SlideRole.MARCH,
-                )
-            )
-            > 0
-        ):
-            eligible.append(VideoType.TYPE_1.value)
-        if (
-            (
-                self.selector._is_type_2_user_visible_media(candidate)
-                or self.selector._is_landscape_media(candidate)
-            )
-            and max(
-                self.selector._score_type_2(candidate, role)
-                for role in (
-                    SlideRole.HOOK,
-                    SlideRole.TIP1,
-                    SlideRole.TIP4,
-                )
-            ) > 0
-        ):
-            eligible.append(VideoType.TYPE_2.value)
-        if self.selector._score_type_3_hook(candidate) > 0:
-            eligible.append(VideoType.TYPE_3.value)
-        return eligible
+        return [video_type.value for video_type in ALL_VIDEO_TYPES]
 
     def _merge_candidates_into_pool(
         self,
@@ -276,8 +248,6 @@ class MediaPoolService:
                 continue
             if account in skipped:
                 continue
-            if video_type.value not in item.get("eligible_types", []):
-                continue
             if not Path(str(item.get("local_path") or "")).exists():
                 continue
             if self.state.any_media_used(list(self._item_keys(item))):
@@ -314,10 +284,6 @@ class MediaPoolService:
         target: int,
     ) -> bool:
         counts = self._stock_counts(pool)
-        by_type = counts.get("by_type", {})
-        for video_type in ALL_VIDEO_TYPES:
-            if int(by_type.get(video_type.value, 0)) < target:
-                return False
         if int(counts["total"]) < target:
             return False
         viable = self._viable_accounts_by_type(pool, usernames)
@@ -337,16 +303,20 @@ class MediaPoolService:
                 skip_accounts=[],
             )
             result[video_type.value] = []
-            for account, candidates in candidates_by_account.items():
-                try:
-                    self.selector.create_plan(
-                        {account: candidates},
-                        video_type,
-                        Language.ES,
-                    )
-                except Exception:  # noqa: BLE001
-                    continue
-                result[video_type.value].append(account)
+            candidates = [
+                candidate
+                for account_candidates in candidates_by_account.values()
+                for candidate in account_candidates
+            ]
+            try:
+                self.selector.create_plan(
+                    {GLOBAL_POOL_ACCOUNT: candidates},
+                    video_type,
+                    Language.ES,
+                )
+            except Exception:  # noqa: BLE001
+                continue
+            result[video_type.value].append(GLOBAL_POOL_ACCOUNT)
         return result
 
     def _stock_counts(self, pool: dict[str, Any]) -> dict[str, Any]:
@@ -365,9 +335,8 @@ class MediaPoolService:
             account = str(item.get("source_account") or "").lower()
             if account:
                 by_account[account] = by_account.get(account, 0) + 1
-            for video_type in item.get("eligible_types", []):
-                if video_type in by_type:
-                    by_type[video_type] += 1
+            for video_type in ALL_VIDEO_TYPES:
+                by_type[video_type.value] += 1
         return {
             "total": len(total_seen),
             "by_type": by_type,
@@ -392,9 +361,8 @@ class MediaPoolService:
                 account,
                 {video_type.value: 0 for video_type in ALL_VIDEO_TYPES},
             )
-            for video_type in item.get("eligible_types", []):
-                if video_type in result[account]:
-                    result[account][video_type] += 1
+            for video_type in ALL_VIDEO_TYPES:
+                result[account][video_type.value] += 1
         return result
 
     def _candidate_to_item(
@@ -414,7 +382,7 @@ class MediaPoolService:
             "metrics": asdict(candidate.metrics) if candidate.metrics else None,
             "content_fingerprint": candidate.content_fingerprint,
             "content_fingerprints": list(candidate.content_fingerprints),
-            "eligible_types": list(eligible_types),
+            "eligible_types": [video_type.value for video_type in ALL_VIDEO_TYPES],
             "added_at": datetime.now(timezone.utc).isoformat(),
         }
 
@@ -425,23 +393,32 @@ class MediaPoolService:
         *,
         include_landscape_exceptions: bool,
     ) -> bool:
-        if video_type == VideoType.TYPE_1:
-            return (
-                self.selector._is_type_1_person_visible_media(candidate)
-                or (
-                    include_landscape_exceptions
-                    and self.selector._is_landscape_media(candidate)
-                )
-            )
-        if video_type == VideoType.TYPE_2:
-            return (
-                self.selector._is_type_2_user_visible_media(candidate)
-                or (
-                    include_landscape_exceptions
-                    and self.selector._is_landscape_media(candidate)
-                )
-            )
         return True
+
+    def _primary_account_for_plan(
+        self,
+        plan: VideoPlan,
+        candidates: list[MediaCandidate],
+    ) -> str:
+        counts: dict[str, int] = {}
+        for slide in plan.slides:
+            if slide.fixed_asset:
+                continue
+            account = slide.media.source_account.strip().lower()
+            if account:
+                counts[account] = counts.get(account, 0) + 1
+        if not counts:
+            selected = set(plan.used_media_ids)
+            for candidate in candidates:
+                keys = set(self.selector.reservation_keys_for([candidate]))
+                if not selected.intersection(keys):
+                    continue
+                account = candidate.source_account.strip().lower()
+                if account:
+                    counts[account] = counts.get(account, 0) + 1
+        if counts:
+            return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
+        return candidates[0].source_account if candidates else plan.chosen_account
 
     def _item_to_candidate(self, item: dict[str, Any]) -> MediaCandidate:
         metrics = item.get("metrics")

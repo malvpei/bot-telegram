@@ -25,6 +25,14 @@ class FakePlanSelector:
             used_media_ids=[catalog[account][0].source_id],
         )
 
+    def reservation_keys_for(self, media_items):
+        return [
+            key
+            for media in media_items
+            for key in (media.source_id, media.content_fingerprint)
+            if key
+        ]
+
     def _is_type_1_person_visible_media(self, candidate):
         return True
 
@@ -33,6 +41,22 @@ class FakePlanSelector:
 
     def _is_landscape_media(self, candidate):
         return bool(candidate.metrics and candidate.metrics.is_landscape)
+
+
+class RequiresSixSelector(FakePlanSelector):
+    def create_plan(self, catalog, video_type, language):
+        account = next(iter(catalog))
+        candidates = catalog[account]
+        if video_type == VideoType.TYPE_1 and len(candidates) < 6:
+            raise ValueError("need six")
+        picked = candidates[:6] if video_type == VideoType.TYPE_1 else candidates[:1]
+        return VideoPlan(
+            chosen_account=account,
+            video_type=video_type,
+            language=language,
+            slides=[],
+            used_media_ids=[candidate.source_id for candidate in picked],
+        )
 
 
 def test_pool_merge_blocks_near_dhash_duplicates():
@@ -101,35 +125,89 @@ def test_pool_select_plan_can_skip_current_account():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_ready_requires_viable_plan_for_each_type():
+def test_pool_select_plan_uses_global_candidates_across_accounts():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
         settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
         state = StateStore(settings.state_dir)
-        image_path = root / "alpha.jpg"
-        Image.new("RGB", (32, 32), (10, 20, 30)).save(image_path)
+        image_paths = []
+        for index in range(6):
+            image_path = root / f"account{index}.jpg"
+            Image.new("RGB", (32, 32), (10 + index, 20, 30)).save(image_path)
+            image_paths.append(image_path)
         pool = {
             "version": 1,
             "cursor_by_type": {},
             "items": [
-                _pool_item("alpha", f"alpha:POST{index}:0", image_path)
-                for index in range(60)
+                _pool_item(
+                    f"account{index}",
+                    f"account{index}:POST1:0",
+                    image_paths[index],
+                )
+                for index in range(6)
             ],
         }
+        state.write_media_pool(pool)
         service = MediaPoolService(
             settings,
             state,
             None,  # type: ignore[arg-type]
-            FakePlanSelector(),  # type: ignore[arg-type]
+            RequiresSixSelector(),  # type: ignore[arg-type]
         )
 
-        assert service._pool_ready(pool, ["alpha"], 50) is False
+        plan, tried = service.select_plan(
+            [f"account{index}" for index in range(6)],
+            VideoType.TYPE_1,
+            Language.ES,
+        )
+
+        assert len(plan.used_media_ids) == 6
+        assert tried == [f"account{index}" for index in range(6)]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_ready_requires_target_stock_for_each_type():
+def test_pool_select_plan_can_make_multiple_type_1_videos_from_global_stock():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        items = []
+        accounts = []
+        for index in range(12):
+            account = f"account{index}"
+            accounts.append(account)
+            image_path = root / f"{account}.jpg"
+            Image.new("RGB", (32, 32), (10 + index, 20, 30)).save(image_path)
+            items.append(_pool_item(account, f"{account}:POST1:0", image_path))
+        state.write_media_pool(
+            {
+                "version": 1,
+                "cursor_by_type": {},
+                "items": items,
+            }
+        )
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            RequiresSixSelector(),  # type: ignore[arg-type]
+        )
+
+        first, _ = service.select_plan(accounts, VideoType.TYPE_1, Language.ES)
+        state.mark_media_used(first.used_media_ids, "job-1")
+        second, _ = service.select_plan(accounts, VideoType.TYPE_1, Language.ES)
+
+        assert len(first.used_media_ids) == 6
+        assert len(second.used_media_ids) == 6
+        assert set(first.used_media_ids).isdisjoint(second.used_media_ids)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_ready_uses_global_stock_not_legacy_type_buckets():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -161,7 +239,7 @@ def test_pool_ready_requires_target_stock_for_each_type():
             FakePlanSelector(),  # type: ignore[arg-type]
         )
 
-        assert service._pool_ready(pool, ["alpha"], 10) is False
+        assert service._pool_ready(pool, ["alpha"], 10) is True
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -203,7 +281,7 @@ def test_pool_ready_when_target_stock_is_met_for_every_type():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_eligibility_for_type_1_and_2_requires_person_or_landscape():
+def test_pool_eligibility_is_global_for_all_video_types():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -223,8 +301,11 @@ def test_pool_eligibility_for_type_1_and_2_requires_person_or_landscape():
         object_types = service._eligible_types(object_photo)
         landscape_types = service._eligible_types(landscape)
 
-        assert VideoType.TYPE_1.value not in object_types
-        assert VideoType.TYPE_2.value not in object_types
+        assert object_types == [
+            VideoType.TYPE_1.value,
+            VideoType.TYPE_2.value,
+            VideoType.TYPE_3.value,
+        ]
         assert VideoType.TYPE_1.value in landscape_types
         assert VideoType.TYPE_2.value in landscape_types
     finally:

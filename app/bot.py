@@ -202,7 +202,7 @@ async def download_pool_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     status_message = await update.effective_message.reply_text(
-        f"Rellenando pool hasta {settings.pool_target_images} fotos aptas por tipo. "
+        f"Rellenando pool global hasta {settings.pool_target_images} fotos disponibles. "
         "Voy cuenta por cuenta y pongo cooldown despues de revisar cada una."
     )
     service: VideoCreationService = context.application.bot_data["service"]
@@ -495,7 +495,7 @@ async def _execute_job(
                 chat_id=chat.id,
                 text=(
                     "Aviso: el pool se esta quedando bajo "
-                    f"({result.pool_remaining} fotos aptas para tipo {result.video_type.value}). "
+                    f"({result.pool_remaining} fotos disponibles). "
                     "Ejecuta /download_pool cuando quieras rellenarlo."
                 ),
             )
@@ -623,7 +623,7 @@ def _format_pool_refill_summary(summary: dict) -> str:
     skipped = summary.get("skipped_cooldown", [])
     lines = [
         "Pool actualizado",
-        f"Objetivo minimo por tipo: {summary.get('target')}",
+        f"Objetivo minimo global: {summary.get('target')}",
         f"Antes: {summary.get('before', {}).get('total', 0)}",
         f"Ahora: {after.get('total', 0)}",
         f"Nuevas: {summary.get('added', 0)}",
@@ -634,16 +634,10 @@ def _format_pool_refill_summary(summary: dict) -> str:
             f"T3={after.get('by_type', {}).get('3', 0)}"
         ),
         (
-            "Planes viables: "
+            "Pool global viable: "
             f"T1={'si' if summary.get('viable_after', {}).get('1') else 'no'}, "
             f"T2={'si' if summary.get('viable_after', {}).get('2') else 'no'}, "
             f"T3={'si' if summary.get('viable_after', {}).get('3') else 'no'}"
-        ),
-        (
-            "Cuentas listas: "
-            f"T1={len(summary.get('viable_accounts_after', {}).get('1', []))}, "
-            f"T2={len(summary.get('viable_accounts_after', {}).get('2', []))}, "
-            f"T3={len(summary.get('viable_accounts_after', {}).get('3', []))}"
         ),
     ]
     if added_by_account:
