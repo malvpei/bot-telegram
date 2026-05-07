@@ -125,7 +125,7 @@ def test_pool_select_plan_can_skip_current_account():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_select_plan_uses_global_candidates_across_accounts():
+def test_pool_select_plan_does_not_mix_accounts_for_one_video():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -156,19 +156,21 @@ def test_pool_select_plan_uses_global_candidates_across_accounts():
             RequiresSixSelector(),  # type: ignore[arg-type]
         )
 
-        plan, tried = service.select_plan(
-            [f"account{index}" for index in range(6)],
-            VideoType.TYPE_1,
-            Language.ES,
-        )
-
-        assert len(plan.used_media_ids) == 6
-        assert tried == [f"account{index}" for index in range(6)]
+        try:
+            service.select_plan(
+                [f"account{index}" for index in range(6)],
+                VideoType.TYPE_1,
+                Language.ES,
+            )
+        except ValueError as error:
+            assert "No hay una cuenta" in str(error)
+        else:  # pragma: no cover - defensive assertion for readability
+            raise AssertionError("type 1 must not mix accounts")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_select_plan_can_make_multiple_type_1_videos_from_global_stock():
+def test_pool_select_plan_can_make_multiple_type_1_videos_from_same_account_stock():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -176,12 +178,12 @@ def test_pool_select_plan_can_make_multiple_type_1_videos_from_global_stock():
         state = StateStore(settings.state_dir)
         items = []
         accounts = []
+        account = "alpha"
+        accounts.append(account)
         for index in range(12):
-            account = f"account{index}"
-            accounts.append(account)
-            image_path = root / f"{account}.jpg"
+            image_path = root / f"{account}_{index}.jpg"
             Image.new("RGB", (32, 32), (10 + index, 20, 30)).save(image_path)
-            items.append(_pool_item(account, f"{account}:POST1:0", image_path))
+            items.append(_pool_item(account, f"{account}:POST{index}:0", image_path))
         state.write_media_pool(
             {
                 "version": 1,

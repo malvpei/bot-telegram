@@ -233,6 +233,16 @@ class ImageSelector:
                 )
                 continue
 
+            if not self._enforce_single_landscape(
+                account,
+                picked,
+                role_scores,
+                available,
+                score_fn=self._score_type_1,
+                label="tipo1",
+            ):
+                continue
+
             fallback_accounts: list[str] = []
 
             slides = self._build_slide_plans(
@@ -312,6 +322,16 @@ class ImageSelector:
                     len(non_fixed_roles),
                     len(available),
                 )
+                continue
+
+            if not self._enforce_single_landscape(
+                account,
+                picked,
+                role_scores,
+                available,
+                score_fn=self._score_type_2,
+                label="tipo2",
+            ):
                 continue
 
             slides = self._build_slide_plans(
@@ -485,6 +505,54 @@ class ImageSelector:
 
     def _is_landscape_dominant_media(self, media: MediaCandidate) -> bool:
         return self._is_type_2_non_user_media(media)
+
+    def _enforce_single_landscape(
+        self,
+        account: str,
+        picked: dict[SlideRole, MediaCandidate],
+        role_scores: dict[SlideRole, float],
+        available: list[MediaCandidate],
+        *,
+        score_fn: Callable[[MediaCandidate, SlideRole], float],
+        label: str,
+    ) -> bool:
+        landscape_roles = [
+            role for role, media in picked.items()
+            if self._is_landscape_media(media)
+        ]
+        if len(landscape_roles) <= 1:
+            return True
+
+        landscape_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
+        for role in landscape_roles[1:]:
+            original = picked[role]
+            exclude = self._exclude_ids_by_post(picked, available)
+            replacement = self._pick_best(
+                available,
+                exclude_ids=exclude,
+                score_fn=lambda media, current_role=role: (
+                    0.0 if self._is_landscape_media(media)
+                    else score_fn(media, current_role)
+                ),
+            )
+            if replacement is None:
+                LOGGER.info(
+                    "%s @%s: no pude reemplazar paisaje %s por foto no paisaje",
+                    label,
+                    account,
+                    original.source_id,
+                )
+                return False
+            picked[role] = replacement.media
+            role_scores[role] = replacement.score
+            LOGGER.info(
+                "%s landscape cap: %s -> reemplazo %s por %s",
+                label,
+                role.value,
+                original.source_id,
+                replacement.media.source_id,
+            )
+        return True
 
     def _enforce_type_1_person_visibility(
         self,

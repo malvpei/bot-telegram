@@ -202,7 +202,7 @@ async def download_pool_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     status_message = await update.effective_message.reply_text(
-        f"Rellenando pool global hasta {settings.pool_target_images} fotos disponibles. "
+        f"Rellenando pool hasta {settings.pool_target_images} fotos disponibles. "
         "Voy cuenta por cuenta y pongo cooldown despues de revisar cada una."
     )
     service: VideoCreationService = context.application.bot_data["service"]
@@ -623,7 +623,7 @@ def _format_pool_refill_summary(summary: dict) -> str:
     skipped = summary.get("skipped_cooldown", [])
     lines = [
         "Pool actualizado",
-        f"Objetivo minimo global: {summary.get('target')}",
+        f"Objetivo minimo de fotos: {summary.get('target')}",
         f"Antes: {summary.get('before', {}).get('total', 0)}",
         f"Ahora: {after.get('total', 0)}",
         f"Nuevas: {summary.get('added', 0)}",
@@ -634,7 +634,13 @@ def _format_pool_refill_summary(summary: dict) -> str:
             f"T3={after.get('by_type', {}).get('3', 0)}"
         ),
         (
-            "Pool global viable: "
+            "Cuentas viables: "
+            f"T1={len(summary.get('viable_accounts_after', {}).get('1', []))}, "
+            f"T2={len(summary.get('viable_accounts_after', {}).get('2', []))}, "
+            f"T3={len(summary.get('viable_accounts_after', {}).get('3', []))}"
+        ),
+        (
+            "Planes viables: "
             f"T1={'si' if summary.get('viable_after', {}).get('1') else 'no'}, "
             f"T2={'si' if summary.get('viable_after', {}).get('2') else 'no'}, "
             f"T3={'si' if summary.get('viable_after', {}).get('3') else 'no'}"

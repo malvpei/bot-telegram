@@ -128,9 +128,13 @@ def test_type_1_plan_aligns_fixed_slide_and_roles(temp_workspace):
         for i in range(8)
     ]
     # Force enough faces to satisfy hook-friendly scoring paths.
-    for candidate in candidates:
+    for index, candidate in enumerate(candidates):
         candidate.metrics = _metrics_stub(
-            quality=0.85, daylight=0.8, faces=1, is_landscape=True, outdoor=0.7
+            quality=0.85,
+            daylight=0.8,
+            faces=1,
+            is_landscape=index == 0,
+            outdoor=0.7,
         )
 
     selector = ImageSelector(settings, state)
@@ -259,7 +263,7 @@ def test_type_1_does_not_force_landscape_when_all_images_have_people(temp_worksp
     assert not any(media.metrics.is_landscape for media in non_fixed)
 
 
-def test_type_1_allows_multiple_landscapes_without_person(temp_workspace):
+def test_type_1_allows_at_most_one_landscape_without_person(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "mostly_people"
     account_dir.mkdir()
@@ -313,7 +317,7 @@ def test_type_1_allows_multiple_landscapes_without_person(temp_workspace):
         media for media in non_fixed
         if not selector._is_type_1_person_visible_media(media)
     ]
-    assert len(without_person) >= 2
+    assert len(without_person) <= 1
     assert all(media.metrics.is_landscape for media in without_person)
 
 
@@ -410,7 +414,7 @@ def test_type_2_allows_zero_landscapes_even_if_another_account_has_them(temp_wor
     assert plan.fallback_accounts == []
 
 
-def test_type_2_does_not_require_landscape_or_lifestyle_caps(temp_workspace):
+def test_type_2_caps_landscape_dominant_images_to_one(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "delta"
     account_dir.mkdir()
@@ -486,7 +490,10 @@ def test_type_2_does_not_require_landscape_or_lifestyle_caps(temp_workspace):
     plan = selector.create_plan({"delta": candidates}, VideoType.TYPE_2, Language.ES)
 
     non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
-    assert len(non_fixed) == 4
+    landscape_count = sum(
+        1 for media in non_fixed if selector._is_landscape_media(media)
+    )
+    assert landscape_count <= 1
 
 
 def test_type_2_allows_non_user_images_without_replacement(temp_workspace):

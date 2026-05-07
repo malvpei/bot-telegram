@@ -16,7 +16,6 @@ from app.state import StateStore
 LOGGER = logging.getLogger(__name__)
 POOL_VERSION = 1
 ALL_VIDEO_TYPES = (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3)
-GLOBAL_POOL_ACCOUNT = "pool_global"
 
 
 class MediaPoolService:
@@ -123,34 +122,28 @@ class MediaPoolService:
             pool=pool,
             video_type=video_type,
         )
-        candidates = [
-            candidate
-            for account in ordered_accounts
-            for candidate in candidates_by_account[account]
-        ]
-        if not candidates:
-            raise ValueError(
-                "No hay fotos disponibles en el pool global. "
-                "Ejecuta /download_pool para rellenarlo."
-            )
+        tried: list[str] = []
+        last_error: str | None = None
+        for account in ordered_accounts:
+            tried.append(account)
+            try:
+                plan = self.selector.create_plan(
+                    {account: candidates_by_account[account]},
+                    video_type,
+                    language,
+                )
+            except ValueError as error:
+                last_error = str(error)
+                LOGGER.info("Pool account @%s no viable: %s", account, error)
+                continue
+            return plan, tried
 
-        try:
-            plan = self.selector.create_plan(
-                {GLOBAL_POOL_ACCOUNT: candidates},
-                video_type,
-                language,
-            )
-        except ValueError as error:
-            LOGGER.info("Pool global no viable: %s", error)
-            detail = f"\n{error}"
-            raise ValueError(
-                "No hay fotos suficientes en el pool global para este tipo de video. "
-                "Ejecuta /download_pool para rellenarlo."
-                + detail
-            ) from error
-
-        plan.chosen_account = self._primary_account_for_plan(plan, candidates)
-        return plan, ordered_accounts
+        detail = f"\n{last_error}" if last_error else ""
+        raise ValueError(
+            "No hay una cuenta con fotos suficientes en el pool para este tipo de video. "
+            "Ejecuta /download_pool para rellenarlo."
+            + detail
+        )
 
     def note_account_used(self, account: str, video_type: VideoType) -> None:
         pool = self._normalise_pool(self.state.read_media_pool())
@@ -303,20 +296,16 @@ class MediaPoolService:
                 skip_accounts=[],
             )
             result[video_type.value] = []
-            candidates = [
-                candidate
-                for account_candidates in candidates_by_account.values()
-                for candidate in account_candidates
-            ]
-            try:
-                self.selector.create_plan(
-                    {GLOBAL_POOL_ACCOUNT: candidates},
-                    video_type,
-                    Language.ES,
-                )
-            except Exception:  # noqa: BLE001
-                continue
-            result[video_type.value].append(GLOBAL_POOL_ACCOUNT)
+            for account, candidates in candidates_by_account.items():
+                try:
+                    self.selector.create_plan(
+                        {account: candidates},
+                        video_type,
+                        Language.ES,
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
+                result[video_type.value].append(account)
         return result
 
     def _stock_counts(self, pool: dict[str, Any]) -> dict[str, Any]:
@@ -393,32 +382,9 @@ class MediaPoolService:
         *,
         include_landscape_exceptions: bool,
     ) -> bool:
+        if not include_landscape_exceptions:
+            return not self.selector._is_landscape_media(candidate)
         return True
-
-    def _primary_account_for_plan(
-        self,
-        plan: VideoPlan,
-        candidates: list[MediaCandidate],
-    ) -> str:
-        counts: dict[str, int] = {}
-        for slide in plan.slides:
-            if slide.fixed_asset:
-                continue
-            account = slide.media.source_account.strip().lower()
-            if account:
-                counts[account] = counts.get(account, 0) + 1
-        if not counts:
-            selected = set(plan.used_media_ids)
-            for candidate in candidates:
-                keys = set(self.selector.reservation_keys_for([candidate]))
-                if not selected.intersection(keys):
-                    continue
-                account = candidate.source_account.strip().lower()
-                if account:
-                    counts[account] = counts.get(account, 0) + 1
-        if counts:
-            return sorted(counts.items(), key=lambda item: (-item[1], item[0]))[0][0]
-        return candidates[0].source_account if candidates else plan.chosen_account
 
     def _item_to_candidate(self, item: dict[str, Any]) -> MediaCandidate:
         metrics = item.get("metrics")

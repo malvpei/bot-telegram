@@ -108,7 +108,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `ACCOUNTS_FILE` | `accounts.txt` | archivo con cuentas (una por línea) |
 | `MAX_POSTS_PER_ACCOUNT` | 100 | posts con foto a escanear por cuenta |
 | `MAX_URLS_PER_JOB` | 8 | URLs máximas por job (del archivo) |
-| `POOL_TARGET_IMAGES` | 100 | fotos disponibles que `/download_pool` intenta mantener en el pool global |
+| `POOL_TARGET_IMAGES` | 100 | fotos disponibles que `/download_pool` intenta mantener en el pool |
 | `POOL_LOW_STOCK_THRESHOLD` | 12 | aviso cuando el pool baja de este stock |
 | `ACCOUNT_COOLDOWN_DAYS` | 30 | cooldown de cuenta tras revisar sus fotos |
 | `VIDEO_WIDTH/HEIGHT/FPS` | 1080/1920/30 | render vertical |
