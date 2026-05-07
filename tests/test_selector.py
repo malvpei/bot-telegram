@@ -321,7 +321,7 @@ def test_type_1_allows_at_most_one_landscape_without_person(temp_workspace):
     assert all(media.metrics.is_landscape for media in without_person)
 
 
-def test_type_1_extra_image_can_use_best_global_photo(temp_workspace):
+def test_type_1_extra_image_requires_person_visible(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "extra_people"
     account_dir.mkdir()
@@ -357,7 +357,55 @@ def test_type_1_extra_image_can_use_best_global_photo(temp_workspace):
     selector = ImageSelector(settings, state)
     picked = selector.pick_extra_image([landscape, person], VideoType.TYPE_1)
 
-    assert picked.source_id in {landscape.source_id, person.source_id}
+    assert picked.source_id == person.source_id
+
+
+def test_extra_image_requires_non_landscape_person_for_every_type(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "extra_global"
+    account_dir.mkdir()
+
+    landscape = _make_candidate(
+        account_dir,
+        username="extra_global",
+        idx=1,
+        landscape=True,
+    )
+    object_photo = _make_candidate(account_dir, username="extra_global", idx=2)
+    person = _make_candidate(account_dir, username="extra_global", idx=3)
+    landscape.metrics = _metrics_stub(
+        quality=0.99,
+        daylight=0.95,
+        faces=1,
+        is_landscape=True,
+        outdoor=1.0,
+        portrait_focus=0.8,
+    )
+    object_photo.metrics = _metrics_stub(
+        quality=0.98,
+        daylight=0.95,
+        faces=0,
+        is_landscape=False,
+        outdoor=0.8,
+        portrait_focus=0.0,
+    )
+    person.metrics = _metrics_stub(
+        quality=0.55,
+        daylight=0.55,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.1,
+        portrait_focus=0.3,
+    )
+
+    selector = ImageSelector(settings, state)
+
+    for video_type in (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3):
+        picked = selector.pick_extra_image(
+            [landscape, object_photo, person],
+            video_type,
+        )
+        assert picked.source_id == person.source_id
 
 
 def test_type_2_allows_zero_landscapes_even_if_another_account_has_them(temp_workspace):

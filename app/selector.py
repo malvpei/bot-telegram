@@ -243,6 +243,15 @@ class ImageSelector:
             ):
                 continue
 
+            if not self._enforce_type_1_person_visibility(
+                account,
+                picked,
+                role_scores,
+                available,
+                replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
+            ):
+                continue
+
             fallback_accounts: list[str] = []
 
             slides = self._build_slide_plans(
@@ -712,6 +721,12 @@ class ImageSelector:
         if metrics.faces >= 1:
             return True
         return metrics.face_area_ratio > 0 and metrics.portrait_focus_score >= 0.22
+
+    def _is_person_visible_media(self, media: MediaCandidate) -> bool:
+        return (
+            self._is_type_1_person_visible_media(media)
+            or self._is_type_2_user_visible_media(media)
+        )
 
     def _is_type_1_person_visible_media(self, media: MediaCandidate) -> bool:
         if not media.metrics:
@@ -1187,6 +1202,8 @@ class ImageSelector:
         return score
 
     def _score_extra_image(self, media: MediaCandidate, video_type: VideoType) -> float:
+        if self._is_landscape_media(media) or not self._is_person_visible_media(media):
+            return 0.0
         if video_type == VideoType.TYPE_1:
             return max(
                 self._score_type_1(media, SlideRole.HOOK),
