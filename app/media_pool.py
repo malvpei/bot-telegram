@@ -388,6 +388,12 @@ class MediaPoolService:
 
     def _item_to_candidate(self, item: dict[str, Any]) -> MediaCandidate:
         metrics = item.get("metrics")
+        metric_values = (
+            metrics
+            if isinstance(metrics, dict)
+            and self._has_current_metric_fields(metrics)
+            else None
+        )
         candidate = MediaCandidate(
             source_account=str(item["source_account"]),
             source_id=str(item["source_id"]),
@@ -397,11 +403,17 @@ class MediaPoolService:
             width=int(item.get("width", 0)),
             height=int(item.get("height", 0)),
             created_at=str(item.get("created_at", "")),
-            metrics=ImageMetrics(**metrics) if isinstance(metrics, dict) else None,
+            metrics=ImageMetrics(**metric_values) if metric_values else None,
             content_fingerprint=item.get("content_fingerprint"),
             content_fingerprints=list(item.get("content_fingerprints") or []),
         )
         return candidate
+
+    def _has_current_metric_fields(self, metrics: dict[str, Any]) -> bool:
+        return all(
+            field in metrics
+            for field in ("sky_ratio", "face_area_ratio", "portrait_focus_score")
+        )
 
     def _item_keys(self, item: dict[str, Any]) -> set[str]:
         keys = {str(item.get("source_id") or "")}

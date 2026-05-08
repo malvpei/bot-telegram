@@ -107,6 +107,8 @@ TYPE_2_REPLACEABLE_FOR_LANDSCAPE: tuple[SlideRole, ...] = (
 )
 TOP_PICK_SCORE_RATIO = 0.92
 TOP_PICK_SCORE_WINDOW = 0.08
+MIN_VISIBLE_FACE_AREA_RATIO = 0.006
+MIN_VISIBLE_PERSON_FOCUS_SCORE = 0.22
 
 
 def _word_in_text(word: str, lowered: str) -> bool:
@@ -715,26 +717,29 @@ class ImageSelector:
         return not self._is_type_2_user_visible_media(media)
 
     def _is_type_2_user_visible_media(self, media: MediaCandidate) -> bool:
-        if not media.metrics:
-            return False
-        metrics = media.metrics
-        if metrics.faces >= 1:
-            return True
-        return metrics.face_area_ratio > 0 and metrics.portrait_focus_score >= 0.22
+        return self._has_person_signal(media)
 
     def _is_person_visible_media(self, media: MediaCandidate) -> bool:
-        return (
-            self._is_type_1_person_visible_media(media)
-            or self._is_type_2_user_visible_media(media)
-        )
+        return self._has_person_signal(media)
 
     def _is_type_1_person_visible_media(self, media: MediaCandidate) -> bool:
+        return self._has_person_signal(media)
+
+    def _has_person_signal(self, media: MediaCandidate) -> bool:
         if not media.metrics:
             return False
         metrics = media.metrics
         if metrics.faces >= 1:
-            return True
-        return self._is_high_quality_portrait_without_detected_face(metrics)
+            return (
+                metrics.face_area_ratio >= MIN_VISIBLE_FACE_AREA_RATIO
+                or metrics.portrait_focus_score >= MIN_VISIBLE_PERSON_FOCUS_SCORE
+            )
+        # A pretty vertical image is not enough: there must be some detected
+        # person/face area signal, otherwise scenic photos get treated as people.
+        return (
+            metrics.face_area_ratio >= MIN_VISIBLE_FACE_AREA_RATIO
+            and metrics.portrait_focus_score >= MIN_VISIBLE_PERSON_FOCUS_SCORE
+        )
 
     def _inject_landscape(
         self,
@@ -1248,7 +1253,23 @@ class ImageSelector:
         return any(_word_in_text(keyword, lowered) or keyword in lowered for keyword in EXTREME_LUXURY_KEYWORDS)
 
     def _is_landscape_media(self, media: MediaCandidate) -> bool:
-        return bool(media.metrics and media.metrics.is_landscape)
+        if not media.metrics:
+            return False
+        metrics = media.metrics
+        if metrics.is_landscape:
+            return True
+        if self._has_person_signal(media):
+            return False
+
+        lowered = (media.caption or "").lower()
+        landscape_by_caption = any(
+            _word_in_text(keyword, lowered) or keyword in lowered
+            for keyword in LANDSCAPE_KEYWORDS
+        )
+        scenic_score = max(metrics.sky_ratio, metrics.outdoor_score)
+        return scenic_score >= 0.62 or (
+            landscape_by_caption and scenic_score >= 0.35
+        )
 
     def _is_candidate_used(self, media: MediaCandidate) -> bool:
         return self.state.any_media_used(self._reservation_keys([media]))
@@ -1274,10 +1295,7 @@ class ImageSelector:
         if (
             media.metrics.quality_score >= 0.38
             and media.metrics.daylight >= 0.35
-            and (
-                media.metrics.faces >= 1
-                or media.metrics.portrait_focus_score >= 0.18
-            )
+            and self._has_person_signal(media)
         ):
             return True
         return self._is_high_quality_portrait_without_detected_face(media.metrics)

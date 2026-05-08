@@ -321,6 +321,84 @@ def test_type_1_allows_at_most_one_landscape_without_person(temp_workspace):
     assert all(media.metrics.is_landscape for media in without_person)
 
 
+def test_type_1_treats_scenic_vertical_photos_as_landscape_exceptions(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "scenic_vertical"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(
+            account_dir,
+            username="scenic_vertical",
+            idx=i,
+            caption="mountain view",
+        )
+        for i in range(10)
+    ]
+    for candidate in candidates[:4]:
+        candidate.metrics = _metrics_stub(
+            quality=0.96,
+            daylight=0.92,
+            faces=0,
+            is_landscape=False,
+            outdoor=0.92,
+            sky=0.7,
+            casual=0.0,
+            luxury=0.05,
+            portrait_focus=0.0,
+        )
+        candidate.metrics.aspect_ratio = 0.75
+    for candidate in candidates[4:]:
+        candidate.metrics = _metrics_stub(
+            quality=0.48,
+            daylight=0.46,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.12,
+            casual=0.08,
+            luxury=0.03,
+            portrait_focus=0.32,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"scenic_vertical": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    scenic_without_person = [
+        media for media in non_fixed
+        if not selector._is_type_1_person_visible_media(media)
+    ]
+    assert len(scenic_without_person) <= 1
+    assert all(selector._is_landscape_media(media) for media in scenic_without_person)
+
+
+def test_tiny_face_detection_does_not_count_as_visible_person(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "tiny_false_face"
+    account_dir.mkdir()
+
+    candidate = _make_candidate(account_dir, username="tiny_false_face", idx=1)
+    candidate.metrics = _metrics_stub(
+        quality=0.9,
+        daylight=0.9,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.85,
+        sky=0.65,
+        face_area=0.001,
+        portrait_focus=0.05,
+    )
+
+    selector = ImageSelector(settings, state)
+
+    assert not selector._is_person_visible_media(candidate)
+    assert selector._is_landscape_media(candidate)
+
+
 def test_type_1_extra_image_requires_person_visible(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "extra_people"
@@ -753,13 +831,12 @@ def test_type_1_accepts_clear_vertical_hook_when_face_detector_misses(temp_works
         candidate.metrics.aspect_ratio = 0.72
 
     selector = ImageSelector(settings, state)
-    plan = selector.create_plan(
-        {"vertical_no_face": candidates},
-        VideoType.TYPE_1,
-        Language.ES,
-    )
-
-    assert plan.chosen_account == "vertical_no_face"
+    with pytest.raises(ValueError):
+        selector.create_plan(
+            {"vertical_no_face": candidates},
+            VideoType.TYPE_1,
+            Language.ES,
+        )
 
 
 def test_type_3_uses_one_real_hook_and_one_background_for_all_tools(temp_workspace):
@@ -984,6 +1061,7 @@ def _metrics_stub(
     affluent: float | None = None,
     laptop: float = 0.0,
     hands: float = 0.0,
+    sky: float | None = None,
 ) -> ImageMetrics:
     return ImageMetrics(
         brightness=150.0,
@@ -997,7 +1075,7 @@ def _metrics_stub(
         luxury_score=luxury,
         quality_score=quality,
         has_visual_luxury=luxury > 0.6,
-        sky_ratio=0.25 if is_landscape else 0.05,
+        sky_ratio=(0.25 if is_landscape else 0.05) if sky is None else sky,
         face_area_ratio=face_area if faces else 0.0,
         face_center_score=face_center if faces else 0.0,
         portrait_focus_score=portrait_focus,

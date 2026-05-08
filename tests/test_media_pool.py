@@ -125,6 +125,27 @@ def test_pool_select_plan_can_skip_current_account():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_ignores_stale_saved_metrics_for_reanalysis():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        selector = ImageSelector(settings, state)
+        service = MediaPoolService(settings, state, None, selector)  # type: ignore[arg-type]
+        image_path = root / "legacy.jpg"
+        Image.new("RGB", (32, 32), (10, 20, 30)).save(image_path)
+        item = _pool_item("alpha", "alpha:LEGACY:0", image_path)
+        for stale_field in ("sky_ratio", "face_area_ratio", "portrait_focus_score"):
+            item["metrics"].pop(stale_field)
+
+        candidate = service._item_to_candidate(item)
+
+        assert candidate.metrics is None
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_pool_select_plan_does_not_mix_accounts_for_one_video():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -419,6 +440,10 @@ def _pool_item(
             "casual_score": 0.1,
             "luxury_score": 0.4,
             "quality_score": quality,
+            "sky_ratio": 0.25 if is_landscape else 0.05,
+            "face_area_ratio": 0.04 if faces else 0.0,
+            "face_center_score": 0.6 if faces else 0.0,
+            "portrait_focus_score": 0.45 if faces else 0.0,
         },
         "content_fingerprint": f"dhash:{source_id[-1] * 16}",
         "content_fingerprints": [f"dhash:{source_id[-1] * 16}"],
