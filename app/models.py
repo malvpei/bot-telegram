@@ -100,6 +100,8 @@ class ImageMetrics:
     affluent_lifestyle_score: float = 0.0
     laptop_score: float = 0.0
     hands_score: float = 0.0
+    body_area_ratio: float = 0.0
+    body_focus_score: float = 0.0
 
 
 @dataclass

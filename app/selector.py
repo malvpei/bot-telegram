@@ -109,6 +109,8 @@ TOP_PICK_SCORE_RATIO = 0.92
 TOP_PICK_SCORE_WINDOW = 0.08
 MIN_VISIBLE_FACE_AREA_RATIO = 0.006
 MIN_VISIBLE_PERSON_FOCUS_SCORE = 0.22
+MIN_VISIBLE_BODY_AREA_RATIO = 0.035
+MIN_VISIBLE_BODY_FOCUS_SCORE = 0.18
 
 
 def _word_in_text(word: str, lowered: str) -> bool:
@@ -129,6 +131,8 @@ class ImageSelector:
         self._face_detector = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
         )
+        self._people_detector = cv2.HOGDescriptor()
+        self._people_detector.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
         self._fixed_media_cache: MediaCandidate | None = None
         self._type_3_backgrounds_cache: tuple[MediaCandidate, ...] | None = None
 
@@ -739,17 +743,23 @@ class ImageSelector:
         return self._metrics_have_person_signal(media.metrics)
 
     def _metrics_have_person_signal(self, metrics: ImageMetrics) -> bool:
-        if metrics.faces >= 1:
-            return (
+        face_signal = (
+            metrics.faces >= 1
+            and (
                 metrics.face_area_ratio >= MIN_VISIBLE_FACE_AREA_RATIO
                 or metrics.portrait_focus_score >= MIN_VISIBLE_PERSON_FOCUS_SCORE
             )
-        # A pretty vertical image is not enough: there must be some detected
-        # person/face area signal, otherwise scenic photos get treated as people.
-        return (
-            metrics.face_area_ratio >= MIN_VISIBLE_FACE_AREA_RATIO
+        )
+        body_signal = (
+            metrics.body_area_ratio >= MIN_VISIBLE_BODY_AREA_RATIO
+            and metrics.body_focus_score >= MIN_VISIBLE_BODY_FOCUS_SCORE
+        )
+        weak_face_signal = (
+            metrics.faces == 0
+            and metrics.face_area_ratio >= MIN_VISIBLE_FACE_AREA_RATIO
             and metrics.portrait_focus_score >= MIN_VISIBLE_PERSON_FOCUS_SCORE
         )
+        return face_signal or body_signal or weak_face_signal
 
     def _inject_landscape(
         self,
@@ -839,6 +849,11 @@ class ImageSelector:
             face_boxes,
             gray.shape,
         )
+        body_boxes = self._detect_people(rgb)
+        body_area_ratio, body_focus_score = self._body_presence_features(
+            body_boxes,
+            gray.shape,
+        )
         aspect_ratio = media.width / max(media.height, 1)
 
         sky_ratio = self._sky_ratio(rgb)
@@ -864,6 +879,7 @@ class ImageSelector:
                 1.0,
                 0.5 * self._keyword_score(media.caption, CASUAL_KEYWORDS)
                 + 0.3 * min(faces, 2) / 2.0
+                + 0.2 * min(body_focus_score, 1.0)
                 + 0.2 * daylight,
             ),
         )
@@ -918,6 +934,8 @@ class ImageSelector:
             affluent_lifestyle_score=affluent_lifestyle_score,
             laptop_score=laptop_score,
             hands_score=hands_score,
+            body_area_ratio=body_area_ratio,
+            body_focus_score=body_focus_score,
         )
 
     def _open_image_rgb_array(self, media: MediaCandidate) -> np.ndarray:
@@ -986,6 +1004,41 @@ class ImageSelector:
             return np.empty((0, 4), dtype=np.int32)
         return np.asarray(detected)
 
+    def _detect_people(self, rgb: np.ndarray) -> np.ndarray:
+        height, width = rgb.shape[:2]
+        scale = min(1.0, 900.0 / max(height, width, 1))
+        if scale < 1.0:
+            resized = cv2.resize(
+                rgb,
+                (max(1, int(width * scale)), max(1, int(height * scale))),
+                interpolation=cv2.INTER_AREA,
+            )
+        else:
+            resized = rgb
+        boxes, weights = self._people_detector.detectMultiScale(
+            resized,
+            winStride=(8, 8),
+            padding=(8, 8),
+            scale=1.05,
+        )
+        if len(boxes) == 0:
+            return np.empty((0, 4), dtype=np.int32)
+        if len(weights) > 0:
+            boxes = np.asarray(
+                [
+                    box
+                    for box, weight in zip(boxes, weights)
+                    if float(weight) >= 0.2
+                ],
+                dtype=np.float32,
+            )
+            if len(boxes) == 0:
+                return np.empty((0, 4), dtype=np.int32)
+        boxes = np.asarray(boxes, dtype=np.float32)
+        if scale < 1.0:
+            boxes[:, :4] = boxes[:, :4] / scale
+        return boxes.astype(np.int32)
+
     def _face_presence_features(
         self,
         face_boxes: np.ndarray,
@@ -1021,6 +1074,35 @@ class ImageSelector:
                 best_portrait_focus = portrait_focus
 
         return best_area_ratio, best_center_score, best_portrait_focus
+
+    def _body_presence_features(
+        self,
+        body_boxes: np.ndarray,
+        image_shape: tuple[int, int],
+    ) -> tuple[float, float]:
+        if len(body_boxes) == 0:
+            return 0.0, 0.0
+
+        height, width = image_shape
+        image_area = max(float(height * width), 1.0)
+        cx = width / 2.0
+        cy = height / 2.0
+        max_distance = max(math.hypot(cx, cy), 1.0)
+
+        best_area_ratio = 0.0
+        best_focus = 0.0
+        for x, y, w, h in body_boxes:
+            area_ratio = (w * h) / image_area
+            body_center_x = x + (w / 2.0)
+            body_center_y = y + (h / 2.0)
+            distance = math.hypot(body_center_x - cx, body_center_y - cy)
+            center_score = max(0.0, 1.0 - (distance / max_distance))
+            size_score = self._normalize(area_ratio, low=0.035, high=0.35)
+            focus = max(0.0, min(1.0, 0.70 * size_score + 0.30 * center_score))
+            if focus > best_focus:
+                best_area_ratio = area_ratio
+                best_focus = focus
+        return best_area_ratio, best_focus
 
     def _sky_ratio(self, rgb: np.ndarray) -> float:
         # Approximate "sky / open horizon" by counting blue-cyan pixels in the
@@ -1135,7 +1217,11 @@ class ImageSelector:
         if metrics is None:
             return 0.0
         face_score = self._single_person_score(metrics)
-        person_or_composition = max(face_score, metrics.portrait_focus_score)
+        person_or_composition = max(
+            face_score,
+            metrics.portrait_focus_score,
+            metrics.body_focus_score,
+        )
         score = (
             0.44 * metrics.quality_score
             + 0.18 * metrics.daylight
@@ -1163,7 +1249,11 @@ class ImageSelector:
         if metrics is None:
             return 0.0
         face_score = self._single_person_score(metrics)
-        person_or_composition = max(face_score, metrics.portrait_focus_score)
+        person_or_composition = max(
+            face_score,
+            metrics.portrait_focus_score,
+            metrics.body_focus_score,
+        )
         score = (
             0.42 * metrics.quality_score
             + 0.18 * metrics.daylight
@@ -1195,6 +1285,7 @@ class ImageSelector:
         person_or_hands = max(
             self._single_person_score(metrics),
             metrics.portrait_focus_score,
+            metrics.body_focus_score,
             metrics.hands_score,
         )
         if person_or_hands <= 0 and metrics.laptop_score <= 0:
@@ -1326,8 +1417,10 @@ class ImageSelector:
         )
 
     def _single_person_score(self, metrics: ImageMetrics) -> float:
-        if metrics.faces <= 0 or not self._metrics_have_person_signal(metrics):
+        if not self._metrics_have_person_signal(metrics):
             return 0.0
+        if metrics.faces <= 0:
+            return max(0.55, min(0.85, metrics.body_focus_score))
         if metrics.faces == 1:
             return 1.0
         if metrics.faces == 2:

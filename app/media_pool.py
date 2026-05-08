@@ -477,7 +477,13 @@ class MediaPoolService:
     def _has_current_metric_fields(self, metrics: dict[str, Any]) -> bool:
         return all(
             field in metrics
-            for field in ("sky_ratio", "face_area_ratio", "portrait_focus_score")
+            for field in (
+                "sky_ratio",
+                "face_area_ratio",
+                "portrait_focus_score",
+                "body_area_ratio",
+                "body_focus_score",
+            )
         )
 
     def _item_keys(self, item: dict[str, Any]) -> set[str]:

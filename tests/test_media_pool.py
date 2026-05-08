@@ -136,7 +136,13 @@ def test_pool_ignores_stale_saved_metrics_for_reanalysis():
         image_path = root / "legacy.jpg"
         Image.new("RGB", (32, 32), (10, 20, 30)).save(image_path)
         item = _pool_item("alpha", "alpha:LEGACY:0", image_path)
-        for stale_field in ("sky_ratio", "face_area_ratio", "portrait_focus_score"):
+        for stale_field in (
+            "sky_ratio",
+            "face_area_ratio",
+            "portrait_focus_score",
+            "body_area_ratio",
+            "body_focus_score",
+        ):
             item["metrics"].pop(stale_field)
 
         candidate = service._item_to_candidate(item)
@@ -500,6 +506,8 @@ def _pool_item(
             "face_area_ratio": 0.04 if faces else 0.0,
             "face_center_score": 0.6 if faces else 0.0,
             "portrait_focus_score": 0.45 if faces else 0.0,
+            "body_area_ratio": 0.0,
+            "body_focus_score": 0.0,
         },
         "content_fingerprint": f"dhash:{source_id[-1] * 16}",
         "content_fingerprints": [f"dhash:{source_id[-1] * 16}"],

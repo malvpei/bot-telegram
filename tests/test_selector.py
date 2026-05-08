@@ -398,6 +398,36 @@ def test_tiny_face_detection_does_not_count_as_visible_person(temp_workspace):
     assert selector._is_landscape_media(candidate)
 
 
+def test_type_1_accepts_full_body_person_without_detected_face(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "full_body"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="full_body", idx=i)
+        for i in range(7)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.72,
+            daylight=0.68,
+            faces=0,
+            is_landscape=False,
+            outdoor=0.2,
+            casual=0.12,
+            luxury=0.05,
+            portrait_focus=0.0,
+            body_area=0.08,
+            body_focus=0.42,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"full_body": candidates}, VideoType.TYPE_1, Language.ES)
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    assert all(selector._is_type_1_person_visible_media(media) for media in non_fixed)
+
+
 def test_type_1_extra_image_requires_person_visible(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "extra_people"
@@ -1059,6 +1089,8 @@ def _metrics_stub(
     laptop: float = 0.0,
     hands: float = 0.0,
     sky: float | None = None,
+    body_area: float = 0.0,
+    body_focus: float = 0.0,
 ) -> ImageMetrics:
     return ImageMetrics(
         brightness=150.0,
@@ -1079,4 +1111,6 @@ def _metrics_stub(
         affluent_lifestyle_score=luxury if affluent is None else affluent,
         laptop_score=laptop,
         hands_score=hands,
+        body_area_ratio=body_area,
+        body_focus_score=body_focus,
     )
