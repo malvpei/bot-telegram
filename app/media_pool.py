@@ -309,9 +309,8 @@ class MediaPoolService:
         return result
 
     def _stock_counts(self, pool: dict[str, Any]) -> dict[str, Any]:
-        by_type = {video_type.value: 0 for video_type in ALL_VIDEO_TYPES}
-        by_account: dict[str, int] = {}
-        total_seen: set[str] = set()
+        raw_total_seen: set[str] = set()
+        raw_by_account: dict[str, int] = {}
         for item in pool["items"]:
             keys = list(self._item_keys(item))
             if not keys or self.state.any_media_used(keys):
@@ -320,16 +319,64 @@ class MediaPoolService:
                 continue
             source_id = str(item.get("source_id") or "")
             if source_id:
-                total_seen.add(source_id)
+                raw_total_seen.add(source_id)
             account = str(item.get("source_account") or "").lower()
             if account:
-                by_account[account] = by_account.get(account, 0) + 1
-            for video_type in ALL_VIDEO_TYPES:
-                by_type[video_type.value] += 1
+                raw_by_account[account] = raw_by_account.get(account, 0) + 1
+
+        by_type = {video_type.value: 0 for video_type in ALL_VIDEO_TYPES}
+        by_type_by_account: dict[str, dict[str, int]] = {}
+        usable_ids_by_account: dict[str, set[str]] = {}
+        viable_accounts_by_type: dict[str, list[str]] = {}
+
+        for video_type in ALL_VIDEO_TYPES:
+            video_key = video_type.value
+            viable_accounts_by_type[video_key] = []
+            candidates_by_account = self._available_candidates_by_account(
+                pool,
+                video_type=video_type,
+                usernames=[],
+                skip_accounts=[],
+            )
+            for account, candidates in candidates_by_account.items():
+                try:
+                    self.selector.create_plan(
+                        {account: candidates},
+                        video_type,
+                        Language.ES,
+                    )
+                except Exception:  # noqa: BLE001
+                    continue
+
+                viable_accounts_by_type[video_key].append(account)
+                usable = [
+                    candidate
+                    for candidate in candidates
+                    if self._candidate_counts_for_type(candidate, video_type)
+                ]
+                by_type[video_key] += len(usable)
+                by_type_by_account.setdefault(account, {})[video_key] = len(usable)
+                usable_ids = usable_ids_by_account.setdefault(account, set())
+                usable_ids.update(candidate.source_id for candidate in usable)
+
+        by_account = {
+            account: len(source_ids)
+            for account, source_ids in usable_ids_by_account.items()
+        }
         return {
-            "total": len(total_seen),
+            "total": sum(len(source_ids) for source_ids in usable_ids_by_account.values()),
+            "raw_total": len(raw_total_seen),
             "by_type": by_type,
             "by_account": dict(sorted(by_account.items())),
+            "raw_by_account": dict(sorted(raw_by_account.items())),
+            "by_type_by_account": {
+                account: {
+                    video_type.value: counts.get(video_type.value, 0)
+                    for video_type in ALL_VIDEO_TYPES
+                }
+                for account, counts in sorted(by_type_by_account.items())
+            },
+            "viable_accounts_by_type": viable_accounts_by_type,
         }
 
     def _valid_by_type_by_account(
@@ -338,21 +385,39 @@ class MediaPoolService:
         touched_accounts: dict[str, int],
     ) -> dict[str, dict[str, int]]:
         touched = {account.lower() for account in touched_accounts}
-        result: dict[str, dict[str, int]] = {
-            account: {video_type.value: 0 for video_type in ALL_VIDEO_TYPES}
+        by_account = self._stock_counts(pool).get("by_type_by_account", {})
+        return {
+            account: {
+                video_type.value: int(
+                    by_account.get(account.lower(), {}).get(video_type.value, 0)
+                )
+                for video_type in ALL_VIDEO_TYPES
+            }
             for account in touched_accounts
+            if account.lower() in touched
         }
-        for item in pool["items"]:
-            account = str(item.get("source_account") or "").lower()
-            if account not in touched:
-                continue
-            result.setdefault(
-                account,
-                {video_type.value: 0 for video_type in ALL_VIDEO_TYPES},
+
+    def _candidate_counts_for_type(
+        self,
+        candidate: MediaCandidate,
+        video_type: VideoType,
+    ) -> bool:
+        if candidate.metrics is None:
+            return False
+        if video_type == VideoType.TYPE_1:
+            return (
+                self.selector._is_type_1_person_visible_media(candidate)
+                or self.selector._is_landscape_media(candidate)
             )
-            for video_type in ALL_VIDEO_TYPES:
-                result[account][video_type.value] += 1
-        return result
+        if video_type == VideoType.TYPE_2:
+            return (
+                self.selector._is_type_2_user_visible_media(candidate)
+                or self.selector._is_landscape_media(candidate)
+            )
+        scorer = getattr(self.selector, "_score_type_3_hook", None)
+        if scorer is None:
+            return True
+        return scorer(candidate) > 0
 
     def _candidate_to_item(
         self,

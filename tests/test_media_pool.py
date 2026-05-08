@@ -230,6 +230,62 @@ def test_pool_select_plan_can_make_multiple_type_1_videos_from_same_account_stoc
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_stock_counts_only_marks_type_viable_when_account_can_build_plan():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        items = []
+        for index in range(5):
+            image_path = root / f"alpha_{index}.jpg"
+            Image.new("RGB", (32, 32), (10 + index, 20, 30)).save(image_path)
+            items.append(_pool_item("alpha", f"alpha:POST{index}:0", image_path))
+        pool = {"version": 1, "cursor_by_type": {}, "items": items}
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            RequiresSixSelector(),  # type: ignore[arg-type]
+        )
+
+        counts = service._stock_counts(pool)
+
+        assert counts["raw_total"] == 5
+        assert counts["by_type"][VideoType.TYPE_1.value] == 0
+        assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == []
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_stock_counts_type_photos_when_account_can_build_plan():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        items = []
+        for index in range(6):
+            image_path = root / f"alpha_{index}.jpg"
+            Image.new("RGB", (32, 32), (10 + index, 20, 30)).save(image_path)
+            items.append(_pool_item("alpha", f"alpha:POST{index}:0", image_path))
+        pool = {"version": 1, "cursor_by_type": {}, "items": items}
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            RequiresSixSelector(),  # type: ignore[arg-type]
+        )
+
+        counts = service._stock_counts(pool)
+
+        assert counts["raw_total"] == 6
+        assert counts["by_type"][VideoType.TYPE_1.value] == 6
+        assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == ["alpha"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_pool_ready_uses_global_stock_not_legacy_type_buckets():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)

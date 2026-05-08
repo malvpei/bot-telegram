@@ -11,6 +11,7 @@ from app.bot import (
     REGENERATE_SKIP_ACCOUNT,
     _ask_for_another_same_account,
     _clear_wizard_state,
+    _format_pool_status,
     _send_slides_text_then_image,
 )
 from app.models import ImageMetrics, MediaCandidate, SlidePlan, SlideRole
@@ -115,3 +116,19 @@ def test_clear_wizard_state_keeps_repeat_request():
     _clear_wizard_state(context)
 
     assert context.user_data == {"repeat_request": {"chosen_account": "alpha"}}
+
+
+def test_pool_status_distinguishes_raw_photos_from_usable_plan_photos():
+    text = _format_pool_status(
+        {
+            "total": 0,
+            "raw_total": 2155,
+            "by_type": {"1": 0, "2": 12, "3": 20},
+            "by_account": {},
+            "viable_accounts_by_type": {"1": [], "2": ["alpha"], "3": ["alpha"]},
+        }
+    )
+
+    assert "Fotos aptas para planes: 0" in text
+    assert "Fotos en disco sin usar: 2155" in text
+    assert "Tipo 1 aptas: 0 (0 cuentas viables)" in text

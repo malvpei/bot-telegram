@@ -600,19 +600,24 @@ def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
 def _format_pool_status(summary: dict) -> str:
     by_type = summary.get("by_type", {})
     by_account = summary.get("by_account", {})
+    viable = summary.get("viable_accounts_by_type", {})
     account_lines = [
         f"@{account}: {count}"
         for account, count in sorted(by_account.items(), key=lambda item: (-item[1], item[0]))[:12]
     ]
     text = (
         "Pool de fotos\n"
-        f"Total disponible: {summary.get('total', 0)}\n"
-        f"Tipo 1: {by_type.get('1', 0)}\n"
-        f"Tipo 2: {by_type.get('2', 0)}\n"
-        f"Tipo 3: {by_type.get('3', 0)}"
+        f"Fotos aptas para planes: {summary.get('total', 0)}\n"
+        f"Fotos en disco sin usar: {summary.get('raw_total', summary.get('total', 0))}\n"
+        f"Tipo 1 aptas: {by_type.get('1', 0)} "
+        f"({len(viable.get('1', []))} cuentas viables)\n"
+        f"Tipo 2 aptas: {by_type.get('2', 0)} "
+        f"({len(viable.get('2', []))} cuentas viables)\n"
+        f"Tipo 3 aptas: {by_type.get('3', 0)} "
+        f"({len(viable.get('3', []))} cuentas viables)"
     )
     if account_lines:
-        text += "\n\nPor cuenta:\n" + "\n".join(account_lines)
+        text += "\n\nPor cuenta viable:\n" + "\n".join(account_lines)
     return text
 
 
@@ -623,12 +628,13 @@ def _format_pool_refill_summary(summary: dict) -> str:
     skipped = summary.get("skipped_cooldown", [])
     lines = [
         "Pool actualizado",
-        f"Objetivo minimo de fotos: {summary.get('target')}",
-        f"Antes: {summary.get('before', {}).get('total', 0)}",
-        f"Ahora: {after.get('total', 0)}",
-        f"Nuevas: {summary.get('added', 0)}",
+        f"Objetivo minimo de fotos aptas: {summary.get('target')}",
+        f"Antes aptas: {summary.get('before', {}).get('total', 0)}",
+        f"Ahora aptas: {after.get('total', 0)}",
+        f"En disco sin usar: {after.get('raw_total', after.get('total', 0))}",
+        f"Nuevas guardadas: {summary.get('added', 0)}",
         (
-            "Por tipo: "
+            "Aptas por tipo: "
             f"T1={after.get('by_type', {}).get('1', 0)}, "
             f"T2={after.get('by_type', {}).get('2', 0)}, "
             f"T3={after.get('by_type', {}).get('3', 0)}"
@@ -653,7 +659,7 @@ def _format_pool_refill_summary(summary: dict) -> str:
             valid = summary.get("valid_by_account", {}).get(account, count)
             type_counts = summary.get("valid_by_type_by_account", {}).get(account, {})
             lines.append(
-                f"@{account}: {count} nuevas ({valid} aptas; "
+                f"@{account}: {count} nuevas ({valid} guardadas; aptas para planes: "
                 f"T1={type_counts.get('1', 0)}, "
                 f"T2={type_counts.get('2', 0)}, "
                 f"T3={type_counts.get('3', 0)})"
