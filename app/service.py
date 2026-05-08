@@ -294,11 +294,7 @@ class VideoCreationService:
         media_ids: list[str] = []
         job_id = self._build_job_id()
         for attempt in range(1, 4):
-            if hasattr(self, "pool"):
-                media = self.pool.pick_extra_image(account, request.video_type)
-            else:
-                candidates = self.collector.collect_one(account)
-                media = self.selector.pick_extra_image(candidates, request.video_type)
+            media = self._pick_extra_image_candidate(account, request.video_type)
             media_ids = self.selector.reservation_keys_for([media])
             already_used = self.state.reserve_media(media_ids, job_id)
             if not already_used:
@@ -339,6 +335,27 @@ class VideoCreationService:
 
         self._cleanup_old_outputs()
         return normalized
+
+    def _pick_extra_image_candidate(
+        self,
+        account: str,
+        video_type: VideoType,
+    ) -> MediaCandidate:
+        if hasattr(self, "pool"):
+            try:
+                return self.pool.pick_extra_image(account, video_type)
+            except ValueError as pool_error:
+                LOGGER.info(
+                    "No valid extra image for @%s in pool, checking account directly: %s",
+                    account,
+                    pool_error,
+                )
+
+        try:
+            candidates = self.collector.collect_one(account, use_cache=False)
+        except TypeError:
+            candidates = self.collector.collect_one(account)
+        return self.selector.pick_extra_image(candidates, video_type)
 
     def _render_outputs(self, plan: VideoPlan, job_dir: Path) -> tuple[Path | None, Path]:
         if plan.video_type == VideoType.TYPE_3:

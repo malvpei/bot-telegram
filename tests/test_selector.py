@@ -175,7 +175,7 @@ def test_type_2_plan_fixed_tip3_and_hook_requires_face(temp_workspace):
     assert tip3_slide.media.source_account == "fixed"
 
 
-def test_type_2_can_use_global_pool_without_faces(temp_workspace):
+def test_type_2_rejects_pool_without_visible_people(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "gamma"
     account_dir.mkdir()
@@ -189,9 +189,8 @@ def test_type_2_can_use_global_pool_without_faces(temp_workspace):
         )
 
     selector = ImageSelector(settings, state)
-    plan = selector.create_plan({"gamma": candidates}, VideoType.TYPE_2, Language.ES)
-
-    assert [slide.role for slide in plan.slides] == list(TYPE_2_ROLES)
+    with pytest.raises(ValueError):
+        selector.create_plan({"gamma": candidates}, VideoType.TYPE_2, Language.ES)
 
 
 def test_type_1_never_uses_landscape_from_another_account(temp_workspace):
@@ -622,7 +621,7 @@ def test_type_2_caps_landscape_dominant_images_to_one(temp_workspace):
     assert landscape_count <= 1
 
 
-def test_type_2_allows_non_user_images_without_replacement(temp_workspace):
+def test_type_2_rejects_object_only_account(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "no_user"
     account_dir.mkdir()
@@ -653,10 +652,8 @@ def test_type_2_allows_non_user_images_without_replacement(temp_workspace):
         )
 
     selector = ImageSelector(settings, state)
-    plan = selector.create_plan({"no_user": candidates}, VideoType.TYPE_2, Language.ES)
-
-    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
-    assert len(non_fixed) == 4
+    with pytest.raises(ValueError):
+        selector.create_plan({"no_user": candidates}, VideoType.TYPE_2, Language.ES)
 
 
 def test_type_2_replaces_square_non_user_images_until_only_one_remains(temp_workspace):

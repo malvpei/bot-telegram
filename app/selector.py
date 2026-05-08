@@ -345,6 +345,15 @@ class ImageSelector:
             ):
                 continue
 
+            if not self._enforce_type_2_user_visibility(
+                account,
+                picked,
+                role_scores,
+                available,
+                replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
+            ):
+                continue
+
             slides = self._build_slide_plans(
                 TYPE_2_ROLES,
                 picked=picked,
@@ -649,18 +658,17 @@ class ImageSelector:
         *,
         replaceable_roles: tuple[SlideRole, ...],
     ) -> bool:
-        non_user_roles = [
-            role for role, media in picked.items()
-            if self._is_type_2_non_user_media(media) and role in replaceable_roles
-        ]
-        allowed_landscape_roles = [
-            role for role in non_user_roles
-            if self._is_landscape_media(picked[role])
-        ]
-        roles_to_replace = [
-            role for role in non_user_roles
-            if role not in allowed_landscape_roles
-        ]
+        allowed_landscape_roles: list[SlideRole] = []
+        roles_to_replace: list[SlideRole] = []
+
+        for role, media in picked.items():
+            if self._is_type_2_user_visible_media(media):
+                continue
+            if role in replaceable_roles and self._is_landscape_media(media):
+                allowed_landscape_roles.append(role)
+                continue
+            roles_to_replace.append(role)
+
         allowed_landscape_roles.sort(
             key=lambda role: role_scores.get(role, 0.0),
             reverse=True,
@@ -696,11 +704,11 @@ class ImageSelector:
 
         remaining = [
             role for role, media in picked.items()
-            if self._is_type_2_non_user_media(media) and role in replaceable_roles
+            if self._is_type_2_non_user_media(media)
         ]
         allowed_remaining = [
             role for role in remaining
-            if self._is_landscape_media(picked[role])
+            if role in replaceable_roles and self._is_landscape_media(picked[role])
         ]
         if len(remaining) != len(allowed_remaining) or len(allowed_remaining) > 1:
             LOGGER.info(
@@ -728,7 +736,9 @@ class ImageSelector:
     def _has_person_signal(self, media: MediaCandidate) -> bool:
         if not media.metrics:
             return False
-        metrics = media.metrics
+        return self._metrics_have_person_signal(media.metrics)
+
+    def _metrics_have_person_signal(self, metrics: ImageMetrics) -> bool:
         if metrics.faces >= 1:
             return (
                 metrics.face_area_ratio >= MIN_VISIBLE_FACE_AREA_RATIO
@@ -1183,12 +1193,12 @@ class ImageSelector:
             return 0.0
 
         person_or_hands = max(
-            min(metrics.faces, 2) / 2.0,
+            self._single_person_score(metrics),
             metrics.portrait_focus_score,
             metrics.hands_score,
         )
         if person_or_hands <= 0 and metrics.laptop_score <= 0:
-            person_or_hands = 0.12 if not metrics.is_landscape else 0.0
+            return 0.0
 
         score = (
             0.28 * metrics.quality_score
@@ -1316,7 +1326,7 @@ class ImageSelector:
         )
 
     def _single_person_score(self, metrics: ImageMetrics) -> float:
-        if metrics.faces <= 0:
+        if metrics.faces <= 0 or not self._metrics_have_person_signal(metrics):
             return 0.0
         if metrics.faces == 1:
             return 1.0

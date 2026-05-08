@@ -73,6 +73,21 @@ class ExtraImageCollector:
         return [self.media]
 
 
+class ExtraImageCollectorNoCache(ExtraImageCollector):
+    def collect_one(
+        self,
+        username: str,
+        use_cache: bool = True,
+    ) -> list[MediaCandidate]:
+        self.seen.append(f"{username}:{use_cache}")
+        return [self.media]
+
+
+class EmptyExtraPool:
+    def pick_extra_image(self, account: str, video_type: VideoType):
+        raise ValueError("No quedan fotos disponibles")
+
+
 def test_type_3_outputs_skip_full_video_render():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -237,6 +252,53 @@ def test_create_extra_image_returns_one_normalized_photo():
         assert result.height == 128
         assert service.collector.seen == ["alpha"]
         assert service.state.any_media_used(["alpha:extra:1"])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_create_extra_image_falls_back_to_same_account_fetch_when_pool_has_none():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"extra-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            width=72,
+            height=128,
+        )
+        source_path = root / "source.jpg"
+        Image.new("RGB", (200, 100), (120, 80, 40)).save(source_path)
+        media = MediaCandidate(
+            source_account="alpha",
+            source_id="alpha:fresh:1",
+            local_path=source_path,
+            permalink="",
+            caption="",
+            width=200,
+            height=100,
+            created_at="",
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(root / "state")
+        service.pool = EmptyExtraPool()
+        service.collector = ExtraImageCollectorNoCache(media)
+        service.selector = ExtraImageSelector()
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            account_inputs=["alpha"],
+        )
+
+        result = service._create_extra_image_locked(request)
+
+        assert result.source_id == "alpha:fresh:1"
+        assert service.collector.seen == ["alpha:False"]
+        assert service.state.any_media_used(["alpha:fresh:1"])
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
