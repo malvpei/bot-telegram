@@ -517,10 +517,6 @@ async def _execute_job(
         f"Tipo: {result.video_type.value}\n"
         f"Idioma: {result.language.value}"
     )
-    if result.fallback_accounts:
-        fallback_text = ", ".join(f"@{account}" for account in result.fallback_accounts)
-        header += f"\nPaisaje fallback: {fallback_text}"
-
     await status_message.edit_text("Enviando imágenes con su texto.")
     try:
         await context.bot.send_message(chat_id=chat.id, text=header)

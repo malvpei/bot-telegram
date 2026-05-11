@@ -25,16 +25,6 @@ class FakePlanSelector:
             used_media_ids=[catalog[account][0].source_id],
         )
 
-    def create_mixed_pool_plan(self, catalog, video_type, language):
-        account = next(iter(catalog))
-        return VideoPlan(
-            chosen_account=account,
-            video_type=video_type,
-            language=language,
-            slides=[],
-            used_media_ids=[catalog[account][0].source_id],
-        )
-
     def reservation_keys_for(self, media_items):
         return [
             key
@@ -62,23 +52,6 @@ class RequiresSixSelector(FakePlanSelector):
         picked = candidates[:6] if video_type == VideoType.TYPE_1 else candidates[:1]
         return VideoPlan(
             chosen_account=account,
-            video_type=video_type,
-            language=language,
-            slides=[],
-            used_media_ids=[candidate.source_id for candidate in picked],
-        )
-
-    def create_mixed_pool_plan(self, catalog, video_type, language):
-        candidates = [
-            candidate
-            for account_candidates in catalog.values()
-            for candidate in account_candidates
-        ]
-        if video_type == VideoType.TYPE_1 and len(candidates) < 6:
-            raise ValueError("need six mixed")
-        picked = candidates[:6] if video_type == VideoType.TYPE_1 else candidates[:1]
-        return VideoPlan(
-            chosen_account=picked[0].source_account,
             video_type=video_type,
             language=language,
             slides=[],
@@ -190,7 +163,7 @@ def test_pool_ignores_stale_saved_metrics_for_reanalysis():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_select_plan_can_mix_accounts_when_no_single_account_has_enough():
+def test_pool_select_plan_never_mixes_accounts_for_one_video():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -221,15 +194,16 @@ def test_pool_select_plan_can_mix_accounts_when_no_single_account_has_enough():
             RequiresSixSelector(),  # type: ignore[arg-type]
         )
 
-        plan, tried = service.select_plan(
-            [f"account{index}" for index in range(6)],
-            VideoType.TYPE_1,
-            Language.ES,
-        )
-
-        assert len(tried) == 6
-        assert len(plan.used_media_ids) == 6
-        assert len({source_id.split(":", 1)[0] for source_id in plan.used_media_ids}) == 6
+        try:
+            service.select_plan(
+                [f"account{index}" for index in range(6)],
+                VideoType.TYPE_1,
+                Language.ES,
+            )
+        except ValueError as error:
+            assert "No hay una cuenta viable" in str(error)
+        else:  # pragma: no cover - defensive assertion for readability
+            raise AssertionError("pool picker must not mix accounts")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

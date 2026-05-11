@@ -183,21 +183,6 @@ class ImageSelector:
     def reservation_keys_for(self, media_items) -> list[str]:
         return self._reservation_keys(media_items)
 
-    def create_mixed_pool_plan(
-        self,
-        catalog: dict[str, list[MediaCandidate]],
-        video_type: VideoType,
-        language: Language,
-    ) -> VideoPlan:
-        for items in catalog.values():
-            self._prepare_candidates(items, ensure_fingerprints=False)
-
-        if video_type == VideoType.TYPE_1:
-            return self._create_mixed_type_1_plan(catalog, language)
-        if video_type == VideoType.TYPE_2:
-            return self._create_mixed_type_2_plan(catalog, language)
-        return self.create_plan(catalog, video_type, language)
-
     # ------------------------------------------------------------------
     # Type 1
     # ------------------------------------------------------------------
@@ -298,48 +283,6 @@ class ImageSelector:
         ranked.sort(key=lambda entry: entry[0], reverse=True)
         return ranked[0][1]
 
-    def _create_mixed_type_1_plan(
-        self,
-        catalog: dict[str, list[MediaCandidate]],
-        language: Language,
-    ) -> VideoPlan:
-        available = self._mixed_available_candidates(catalog)
-        non_fixed_roles = [role for role in TYPE_1_ROLES if role != SlideRole.FEBRUARY]
-        picked, role_scores = self._pick_roles_from_available(
-            available,
-            roles=non_fixed_roles,
-            score_fn=self._score_type_1,
-        )
-        if len(picked) != len(non_fixed_roles):
-            raise ValueError(
-                f"Pool mixto tipo 1: solo pude elegir {len(picked)}/{len(non_fixed_roles)} slides."
-            )
-        if not self._enforce_single_landscape(
-            "pool-mixto",
-            picked,
-            role_scores,
-            available,
-            score_fn=self._score_type_1,
-            label="tipo1 mixto",
-        ):
-            raise ValueError("Pool mixto tipo 1: demasiadas fotos de paisaje.")
-        if not self._enforce_type_1_person_visibility(
-            "pool-mixto",
-            picked,
-            role_scores,
-            available,
-            replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
-        ):
-            raise ValueError("Pool mixto tipo 1: faltan fotos con persona visible.")
-        return self._build_mixed_plan(
-            roles=TYPE_1_ROLES,
-            picked=picked,
-            role_scores=role_scores,
-            fixed_role=SlideRole.FEBRUARY,
-            video_type=VideoType.TYPE_1,
-            language=language,
-        )
-
     # ------------------------------------------------------------------
     # Type 2
     # ------------------------------------------------------------------
@@ -437,48 +380,6 @@ class ImageSelector:
             )
         ranked.sort(key=lambda entry: entry[0], reverse=True)
         return ranked[0][1]
-
-    def _create_mixed_type_2_plan(
-        self,
-        catalog: dict[str, list[MediaCandidate]],
-        language: Language,
-    ) -> VideoPlan:
-        available = self._mixed_available_candidates(catalog)
-        non_fixed_roles = [role for role in TYPE_2_ROLES if role != SlideRole.TIP3]
-        picked, role_scores = self._pick_roles_from_available(
-            available,
-            roles=non_fixed_roles,
-            score_fn=self._score_type_2,
-        )
-        if len(picked) != len(non_fixed_roles):
-            raise ValueError(
-                f"Pool mixto tipo 2: solo pude elegir {len(picked)}/{len(non_fixed_roles)} slides."
-            )
-        if not self._enforce_single_landscape(
-            "pool-mixto",
-            picked,
-            role_scores,
-            available,
-            score_fn=self._score_type_2,
-            label="tipo2 mixto",
-        ):
-            raise ValueError("Pool mixto tipo 2: demasiadas fotos de paisaje.")
-        if not self._enforce_type_2_user_visibility(
-            "pool-mixto",
-            picked,
-            role_scores,
-            available,
-            replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
-        ):
-            raise ValueError("Pool mixto tipo 2: faltan fotos con usuario visible.")
-        return self._build_mixed_plan(
-            roles=TYPE_2_ROLES,
-            picked=picked,
-            role_scores=role_scores,
-            fixed_role=SlideRole.TIP3,
-            video_type=VideoType.TYPE_2,
-            language=language,
-        )
 
     # ------------------------------------------------------------------
     # Helpers — composition
@@ -628,87 +529,6 @@ class ImageSelector:
 
     def _is_landscape_dominant_media(self, media: MediaCandidate) -> bool:
         return self._is_type_2_non_user_media(media)
-
-    def _mixed_available_candidates(
-        self,
-        catalog: dict[str, list[MediaCandidate]],
-    ) -> list[MediaCandidate]:
-        available = [
-            candidate
-            for candidates in catalog.values()
-            for candidate in candidates
-            if not self._is_candidate_used(candidate)
-        ]
-        LOGGER.info(
-            "pool mixto: %d candidatos disponibles de %d cuentas",
-            len(available),
-            len(catalog),
-        )
-        return available
-
-    def _pick_roles_from_available(
-        self,
-        available: list[MediaCandidate],
-        *,
-        roles: list[SlideRole],
-        score_fn: Callable[[MediaCandidate, SlideRole], float],
-    ) -> tuple[dict[SlideRole, MediaCandidate], dict[SlideRole, float]]:
-        picked: dict[SlideRole, MediaCandidate] = {}
-        role_scores: dict[SlideRole, float] = {}
-        for role in roles:
-            exclude = self._exclude_ids_by_post(picked, available)
-            best = self._pick_best(
-                available,
-                exclude_ids=exclude,
-                score_fn=lambda media, current_role=role: score_fn(
-                    media,
-                    current_role,
-                ),
-            )
-            if best is None:
-                break
-            picked[role] = best.media
-            role_scores[role] = best.score
-        return picked, role_scores
-
-    def _build_mixed_plan(
-        self,
-        *,
-        roles: tuple[SlideRole, ...],
-        picked: dict[SlideRole, MediaCandidate],
-        role_scores: dict[SlideRole, float],
-        fixed_role: SlideRole,
-        video_type: VideoType,
-        language: Language,
-    ) -> VideoPlan:
-        slides = self._build_slide_plans(
-            roles,
-            picked=picked,
-            fixed_role=fixed_role,
-            fixed_media=self._build_fixed_media(),
-        )
-        accounts_by_count: dict[str, int] = {}
-        for media in picked.values():
-            accounts_by_count[media.source_account] = (
-                accounts_by_count.get(media.source_account, 0) + 1
-            )
-        chosen_account = max(
-            accounts_by_count,
-            key=lambda account: (accounts_by_count[account], account),
-        )
-        fallback_accounts = sorted(
-            account
-            for account in accounts_by_count
-            if account != chosen_account
-        )
-        return VideoPlan(
-            chosen_account=chosen_account,
-            video_type=video_type,
-            language=language,
-            slides=slides,
-            used_media_ids=self._reservation_keys(picked.values()),
-            fallback_accounts=fallback_accounts,
-        )
 
     def _enforce_single_landscape(
         self,

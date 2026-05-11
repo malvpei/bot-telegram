@@ -201,6 +201,7 @@ class VideoCreationService:
             len(tried),
             len(usernames),
         )
+        self._assert_single_source_account(plan)
 
         try:
             script_package = self.script_generator.generate(
@@ -360,26 +361,27 @@ class VideoCreationService:
         return self.selector.pick_extra_image(candidates, video_type)
 
     def _render_outputs(self, plan: VideoPlan, job_dir: Path) -> tuple[Path | None, Path]:
-        if plan.video_type == VideoType.TYPE_3:
-            LOGGER.info("Rendering tipo3 still images for job %s", job_dir.name)
-            script_path = self.renderer.write_script(plan, job_dir)
-            self._normalize_slide_images(plan, job_dir)
-            return None, script_path
-
         LOGGER.info(
-            "Rendering video type %s for job %s", plan.video_type.value, job_dir.name
+            "Preparing slide images for type %s job %s",
+            plan.video_type.value,
+            job_dir.name,
         )
-        try:
-            video_path, script_path = self.renderer.render(plan, job_dir)
-        except Exception:  # noqa: BLE001
-            LOGGER.exception(
-                "Full MP4 render failed for job %s; continuing with slide images.",
-                job_dir.name,
-            )
-            video_path = None
-            script_path = self.renderer.write_script(plan, job_dir)
+        script_path = self.renderer.write_script(plan, job_dir)
         self._normalize_slide_images(plan, job_dir)
-        return video_path, script_path
+        return None, script_path
+
+    def _assert_single_source_account(self, plan: VideoPlan) -> None:
+        source_accounts = {
+            slide.media.source_account
+            for slide in plan.slides
+            if not slide.fixed_asset
+            and slide.media.source_account != "fixed"
+        }
+        if len(source_accounts) > 1:
+            raise RuntimeError(
+                "El plan mezcla fotos de varias cuentas: "
+                + ", ".join(f"@{account}" for account in sorted(source_accounts))
+            )
 
     def _pick_and_reserve_plan(
         self,

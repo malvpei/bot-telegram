@@ -159,7 +159,7 @@ def test_type_3_outputs_skip_full_video_render():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_1_outputs_fall_back_to_slides_when_full_video_render_fails():
+def test_type_1_outputs_skip_full_video_render():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -199,12 +199,54 @@ def test_type_1_outputs_fall_back_to_slides_when_full_video_render_fails():
 
         assert video_path is None
         assert script_path.exists()
-        assert service.renderer.render_called is True
+        assert service.renderer.render_called is False
         assert service.renderer.write_script_called is True
         assert plan.slides[0].media.local_path.name == "slide_01.jpg"
         assert plan.slides[0].media.local_path.exists()
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_service_rejects_plan_that_mixes_source_accounts():
+    service = VideoCreationService.__new__(VideoCreationService)
+    first = MediaCandidate(
+        source_account="alpha",
+        source_id="alpha:1",
+        local_path=Path("alpha.jpg"),
+        permalink="",
+        caption="",
+        width=1,
+        height=1,
+        created_at="",
+    )
+    second = MediaCandidate(
+        source_account="beta",
+        source_id="beta:1",
+        local_path=Path("beta.jpg"),
+        permalink="",
+        caption="",
+        width=1,
+        height=1,
+        created_at="",
+    )
+    plan = VideoPlan(
+        chosen_account="alpha",
+        video_type=VideoType.TYPE_1,
+        language=Language.ES,
+        slides=[
+            SlidePlan(index=1, role=SlideRole.HOOK, text="", media=first),
+            SlidePlan(index=2, role=SlideRole.OCTOBER, text="", media=second),
+        ],
+        used_media_ids=["alpha:1", "beta:1"],
+    )
+
+    try:
+        service._assert_single_source_account(plan)
+    except RuntimeError as error:
+        assert "@alpha" in str(error)
+        assert "@beta" in str(error)
+    else:  # pragma: no cover - defensive assertion for readability
+        raise AssertionError("mixed-account plans must be rejected")
 
 
 def test_create_extra_image_returns_one_normalized_photo():

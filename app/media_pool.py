@@ -132,25 +132,6 @@ class MediaPoolService:
             pool=pool,
             video_type=video_type,
         )
-        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
-            try:
-                plan = self.selector.create_mixed_pool_plan(
-                    {
-                        account: candidates_by_account[account]
-                        for account in ordered_accounts
-                    },
-                    video_type,
-                    language,
-                )
-            except ValueError as mixed_error:
-                LOGGER.info("Pool mixed plan not viable: %s", mixed_error)
-            else:
-                LOGGER.info(
-                    "Pool picker used mixed-account plan over %d account(s).",
-                    len(ordered_accounts),
-                )
-                return plan, ordered_accounts
-
         tried: list[str] = []
         last_error: str | None = None
         max_attempts = self._max_account_attempts(len(ordered_accounts))
@@ -166,25 +147,6 @@ class MediaPoolService:
                 last_error = str(error)
                 LOGGER.info("Pool account @%s no viable: %s", account, error)
                 continue
-            return plan, tried
-
-        try:
-            plan = self.selector.create_mixed_pool_plan(
-                {
-                    account: candidates_by_account[account]
-                    for account in ordered_accounts
-                },
-                video_type,
-                language,
-            )
-        except ValueError as mixed_error:
-            last_error = f"{last_error}; {mixed_error}" if last_error else str(mixed_error)
-        else:
-            LOGGER.info(
-                "Pool picker used mixed-account fallback after %d/%d single-account attempts.",
-                len(tried),
-                len(ordered_accounts),
-            )
             return plan, tried
 
         detail = f"\nÚltimo motivo: {last_error}" if last_error else ""
@@ -349,10 +311,8 @@ class MediaPoolService:
         counts = self._stock_counts(pool)
         if int(counts["total"]) < target:
             return False
-        return all(
-            int(counts["by_type"].get(video_type.value, 0)) >= MIN_POOL_ITEMS_BY_TYPE[video_type]
-            for video_type in ALL_VIDEO_TYPES
-        )
+        viable = self._viable_accounts_by_type(pool, usernames)
+        return all(bool(viable.get(video_type.value)) for video_type in ALL_VIDEO_TYPES)
 
     def _viable_accounts_by_type(
         self,
