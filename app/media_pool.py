@@ -21,6 +21,11 @@ COMPATIBLE_SOURCE_TYPES_BY_REQUESTED = {
     VideoType.TYPE_2: (VideoType.TYPE_2, VideoType.TYPE_3),
     VideoType.TYPE_3: (VideoType.TYPE_3,),
 }
+MIN_POOL_ITEMS_BY_TYPE = {
+    VideoType.TYPE_1: 6,
+    VideoType.TYPE_2: 4,
+    VideoType.TYPE_3: 1,
+}
 
 
 class MediaPoolService:
@@ -127,6 +132,25 @@ class MediaPoolService:
             pool=pool,
             video_type=video_type,
         )
+        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
+            try:
+                plan = self.selector.create_mixed_pool_plan(
+                    {
+                        account: candidates_by_account[account]
+                        for account in ordered_accounts
+                    },
+                    video_type,
+                    language,
+                )
+            except ValueError as mixed_error:
+                LOGGER.info("Pool mixed plan not viable: %s", mixed_error)
+            else:
+                LOGGER.info(
+                    "Pool picker used mixed-account plan over %d account(s).",
+                    len(ordered_accounts),
+                )
+                return plan, ordered_accounts
+
         tried: list[str] = []
         last_error: str | None = None
         max_attempts = self._max_account_attempts(len(ordered_accounts))
@@ -325,8 +349,10 @@ class MediaPoolService:
         counts = self._stock_counts(pool)
         if int(counts["total"]) < target:
             return False
-        viable = self._viable_accounts_by_type(pool, usernames)
-        return all(bool(viable.get(video_type.value)) for video_type in ALL_VIDEO_TYPES)
+        return all(
+            int(counts["by_type"].get(video_type.value, 0)) >= MIN_POOL_ITEMS_BY_TYPE[video_type]
+            for video_type in ALL_VIDEO_TYPES
+        )
 
     def _viable_accounts_by_type(
         self,
@@ -343,13 +369,12 @@ class MediaPoolService:
             )
             result[video_type.value] = []
             for account, candidates in candidates_by_account.items():
-                try:
-                    self.selector.create_plan(
-                        {account: candidates},
-                        video_type,
-                        Language.ES,
-                    )
-                except Exception:  # noqa: BLE001
+                usable_count = sum(
+                    1
+                    for candidate in candidates
+                    if self._candidate_counts_for_type(candidate, video_type)
+                )
+                if usable_count < MIN_POOL_ITEMS_BY_TYPE[video_type]:
                     continue
                 result[video_type.value].append(account)
         return result
@@ -385,23 +410,17 @@ class MediaPoolService:
                 skip_accounts=[],
             )
             for account, candidates in candidates_by_account.items():
-                try:
-                    self.selector.create_plan(
-                        {account: candidates},
-                        video_type,
-                        Language.ES,
-                    )
-                except Exception:  # noqa: BLE001
-                    continue
-
-                viable_accounts_by_type[video_key].append(account)
                 usable = [
                     candidate
                     for candidate in candidates
                     if self._candidate_counts_for_type(candidate, video_type)
                 ]
+                if not usable:
+                    continue
                 by_type[video_key] += len(usable)
                 by_type_by_account.setdefault(account, {})[video_key] = len(usable)
+                if len(usable) >= MIN_POOL_ITEMS_BY_TYPE[video_type]:
+                    viable_accounts_by_type[video_key].append(account)
                 usable_ids = usable_ids_by_account.setdefault(account, set())
                 usable_ids.update(candidate.source_id for candidate in usable)
 

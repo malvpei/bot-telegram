@@ -314,7 +314,7 @@ def test_pool_select_plan_can_make_multiple_type_1_videos_from_same_account_stoc
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_stock_counts_only_marks_type_viable_when_account_can_build_plan():
+def test_pool_stock_counts_are_fast_and_viability_uses_minimum_counts():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -336,7 +336,7 @@ def test_pool_stock_counts_only_marks_type_viable_when_account_can_build_plan():
         counts = service._stock_counts(pool)
 
         assert counts["raw_total"] == 5
-        assert counts["by_type"][VideoType.TYPE_1.value] == 0
+        assert counts["by_type"][VideoType.TYPE_1.value] == 5
         assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == []
     finally:
         shutil.rmtree(root, ignore_errors=True)

@@ -190,7 +190,7 @@ class ImageSelector:
         language: Language,
     ) -> VideoPlan:
         for items in catalog.values():
-            self._prepare_candidates(items)
+            self._prepare_candidates(items, ensure_fingerprints=False)
 
         if video_type == VideoType.TYPE_1:
             return self._create_mixed_type_1_plan(catalog, language)
@@ -990,10 +990,15 @@ class ImageSelector:
     # Helpers — image preparation and analysis
     # ------------------------------------------------------------------
 
-    def _prepare_candidates(self, media_items: list[MediaCandidate]) -> None:
+    def _prepare_candidates(
+        self,
+        media_items: list[MediaCandidate],
+        *,
+        ensure_fingerprints: bool = True,
+    ) -> None:
         for media in media_items:
             if media.metrics is not None:
-                if not media.content_fingerprints:
+                if ensure_fingerprints and not media.content_fingerprints:
                     try:
                         media.content_fingerprints = self._fingerprint_images(media)
                         media.content_fingerprint = media.content_fingerprints[0]
