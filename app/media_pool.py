@@ -144,6 +144,25 @@ class MediaPoolService:
                 continue
             return plan, tried
 
+        try:
+            plan = self.selector.create_mixed_pool_plan(
+                {
+                    account: candidates_by_account[account]
+                    for account in ordered_accounts
+                },
+                video_type,
+                language,
+            )
+        except ValueError as mixed_error:
+            last_error = f"{last_error}; {mixed_error}" if last_error else str(mixed_error)
+        else:
+            LOGGER.info(
+                "Pool picker used mixed-account fallback after %d/%d single-account attempts.",
+                len(tried),
+                len(ordered_accounts),
+            )
+            return plan, tried
+
         detail = f"\nÚltimo motivo: {last_error}" if last_error else ""
         raise ValueError(
             "No hay una cuenta viable en el pool para este tipo de video dentro "

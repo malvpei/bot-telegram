@@ -149,6 +149,32 @@ def test_type_1_plan_aligns_fixed_slide_and_roles(temp_workspace):
     assert "fixed:imagen6" not in plan.used_media_ids
 
 
+def test_type_1_mixed_pool_plan_can_use_multiple_accounts(temp_workspace):
+    settings, state = temp_workspace
+    catalog = {}
+    for index in range(6):
+        account = f"account{index}"
+        account_dir = settings.downloads_dir / account
+        account_dir.mkdir()
+        candidate = _make_candidate(account_dir, username=account, idx=index)
+        candidate.metrics = _metrics_stub(
+            quality=0.85,
+            daylight=0.8,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.5,
+        )
+        catalog[account] = [candidate]
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_mixed_pool_plan(catalog, VideoType.TYPE_1, Language.ES)
+    source_ids = [key for key in plan.used_media_ids if key.startswith("account")]
+
+    assert len(plan.slides) == 7
+    assert len(source_ids) == 6
+    assert len({source_id.split(":", 1)[0] for source_id in source_ids}) == 6
+
+
 def test_type_2_plan_fixed_tip3_and_hook_requires_face(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "beta"
