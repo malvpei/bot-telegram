@@ -78,6 +78,7 @@ class VideoRequest:
     language: Language
     account_inputs: list[str]
     skip_accounts: list[str] = field(default_factory=list)
+    lowercase_text: bool = False
 
 
 @dataclass

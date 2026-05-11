@@ -346,6 +346,42 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
     assert all("Titulo:" not in message for message in package.social_copy.messages)
     assert all("Descripcion:" not in message for message in package.social_copy.messages)
     assert all("Hashtags:" not in message for message in package.social_copy.messages)
+    assert "#dropshipping" in package.social_copy.hashtags
+
+
+def test_lowercase_option_formats_slides_and_social_copy(state_dir):
+    generator = _make_generator(state_dir)
+    package = generator.generate(
+        VideoType.TYPE_1,
+        Language.EN,
+        lowercase_text=True,
+    )
+
+    assert package.plain_text == package.plain_text.lower()
+    assert all(slide == slide.lower() for slide in package.ordered_slides)
+    assert all(text == text.lower() for text in package.slides_by_role.values())
+    assert package.social_copy.title == package.social_copy.title.lower()
+    assert package.social_copy.description == package.social_copy.description.lower()
+    assert all(tag == tag.lower() for tag in package.social_copy.hashtags)
+
+
+def test_social_hashtags_force_literal_dropshipping():
+    hashtags = ScriptGenerator._prepare_social_hashtags(
+        ["#dropshipping2026", "#ecommerce", "#shopify", "#dropradar"]
+    )
+
+    assert "#dropshipping" in hashtags
+    assert "#dropshipping2026" not in hashtags
+
+
+def test_social_hashtags_shuffle_order(monkeypatch):
+    monkeypatch.setattr(texts_module.random, "shuffle", lambda values: values.reverse())
+
+    hashtags = ScriptGenerator._prepare_social_hashtags(
+        ["#ecommerce", "#shopify", "#dropradar", "#dropshipping"]
+    )
+
+    assert hashtags[0] == "#dropshipping"
 
 
 @pytest.mark.parametrize(

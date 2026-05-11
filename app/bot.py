@@ -22,7 +22,7 @@ from app.service import VideoCreationService
 from app.state import StateStore
 
 
-TYPE_STATE, LANGUAGE_STATE = range(2)
+TYPE_STATE, LANGUAGE_STATE, LOWERCASE_STATE = range(3)
 REGENERATE_ACCEPT = "regen:accept"
 REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
@@ -62,6 +62,7 @@ def run_bot() -> None:
         states={
             TYPE_STATE: [CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:")],
             LANGUAGE_STATE: [CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:")],
+            LOWERCASE_STATE: [CallbackQueryHandler(wizard_lowercase, pattern=r"^wizard:lowercase:")],
         },
         fallbacks=[CommandHandler("cancel", wizard_cancel)],
     )
@@ -108,7 +109,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "1. /create\n"
         "2. elige Tipo 1, Tipo 2 o Tipo 3\n"
         "3. elige Español o English\n"
-        "4. el bot elige imágenes ya guardadas y envía el video\n\n"
+        "4. elige si quieres textos normales o todo en minúscula\n"
+        "5. el bot elige imágenes ya guardadas y envía el video\n\n"
         "Tipos:\n"
         "1 = historia de 7 imágenes (slide 6 = imagen6.png, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = imagen6.png, tip3)\n"
@@ -345,6 +347,44 @@ async def wizard_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     raw_lang = query.data.rsplit(":", maxsplit=1)[-1]
     try:
+        Language(raw_lang)
+    except ValueError:
+        await query.edit_message_text("Idioma no reconocido. Lanza /create otra vez.")
+        return ConversationHandler.END
+    context.user_data["language"] = raw_lang
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton("Normal", callback_data="wizard:lowercase:no"),
+                InlineKeyboardButton("Todo minúscula", callback_data="wizard:lowercase:yes"),
+            ]
+        ]
+    )
+    await query.edit_message_text(
+        "¿Quieres mantener mayúsculas normales o mandar todos los textos y títulos en minúscula?",
+        reply_markup=keyboard,
+    )
+    return LOWERCASE_STATE
+
+
+async def wizard_lowercase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    raw_lowercase = query.data.rsplit(":", maxsplit=1)[-1]
+    if raw_lowercase not in {"yes", "no"}:
+        await query.edit_message_text("Opción no reconocida. Lanza /create otra vez.")
+        return ConversationHandler.END
+    lowercase_text = raw_lowercase == "yes"
+
+    raw_lang = context.user_data.get("language")
+    if not raw_lang:
+        await query.edit_message_text(
+            "Perdí el idioma elegido. Lanza /create otra vez."
+        )
+        return ConversationHandler.END
+
+    try:
         language = Language(raw_lang)
     except ValueError:
         await query.edit_message_text("Idioma no reconocido. Lanza /create otra vez.")
@@ -372,11 +412,13 @@ async def wizard_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         video_type=video_type,
         language=language,
         account_inputs=list(accounts),
+        lowercase_text=lowercase_text,
     )
 
+    lowercase_line = "todo en minúscula" if lowercase_text else "formato normal"
     await query.edit_message_text(
         f"Preparando video tipo {video_type.value} en {language.value} "
-        f"con {len(accounts)} cuentas."
+        f"con {len(accounts)} cuentas ({lowercase_line})."
     )
     await _execute_job(update, context, request)
     _clear_wizard_state(context)
@@ -422,6 +464,7 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 if query.data == REGENERATE_SKIP_ACCOUNT
                 else []
             ),
+            lowercase_text=bool(repeat_request.get("lowercase_text", False)),
         )
     except (KeyError, ValueError):
         context.user_data.pop("repeat_request", None)
@@ -445,6 +488,7 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             video_type=request.video_type,
             language=request.language,
             account_inputs=[repeat_request["chosen_account"]],
+            lowercase_text=request.lowercase_text,
         )
         await _execute_extra_image(update, context, extra_request)
 
@@ -488,6 +532,7 @@ async def _execute_job(
             "requested_accounts": request.account_inputs,
             "video_type": result.video_type.value,
             "language": result.language.value,
+            "lowercase_text": request.lowercase_text,
         }
         await _ask_for_another_same_account(context, chat.id, result.chosen_account)
         if result.pool_low_stock:
@@ -535,6 +580,7 @@ async def _execute_extra_image(
             "requested_accounts": request.account_inputs,
             "video_type": request.video_type.value,
             "language": request.language.value,
+            "lowercase_text": request.lowercase_text,
         }
         await _ask_for_another_same_account(context, chat.id, media.source_account)
     except TelegramError as error:
@@ -595,6 +641,7 @@ def _split_title_body(text: str) -> tuple[str, str]:
 def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop("accounts_snapshot", None)
     context.user_data.pop("video_type", None)
+    context.user_data.pop("language", None)
 
 
 def _format_pool_status(summary: dict) -> str:

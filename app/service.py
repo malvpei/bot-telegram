@@ -204,7 +204,9 @@ class VideoCreationService:
 
         try:
             script_package = self.script_generator.generate(
-                request.video_type, request.language
+                request.video_type,
+                request.language,
+                lowercase_text=request.lowercase_text,
             )
 
             # Bind text to slides by role so order changes never desync them.

@@ -59,6 +59,17 @@ class RequiresSixSelector(FakePlanSelector):
         )
 
 
+class TypeCompatibilitySelector(FakePlanSelector):
+    def _is_type_1_person_visible_media(self, candidate):
+        return candidate.source_id.endswith(":TYPE1:0")
+
+    def _is_type_2_user_visible_media(self, candidate):
+        return candidate.source_id.endswith(":TYPE2:0")
+
+    def _score_type_3_hook(self, candidate):
+        return 1.0 if candidate.source_id.endswith(":TYPE3:0") else 0.0
+
+
 def test_pool_merge_blocks_near_dhash_duplicates():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -366,7 +377,7 @@ def test_pool_ready_when_target_stock_is_met_for_every_type():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_eligibility_is_global_for_all_video_types():
+def test_pool_eligibility_uses_video_rules_with_downward_compatibility():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -386,13 +397,99 @@ def test_pool_eligibility_is_global_for_all_video_types():
         object_types = service._eligible_types(object_photo)
         landscape_types = service._eligible_types(landscape)
 
-        assert object_types == [
+        assert object_types == []
+        assert VideoType.TYPE_1.value in landscape_types
+        assert VideoType.TYPE_2.value in landscape_types
+        assert VideoType.TYPE_3.value not in landscape_types
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_eligibility_flows_from_higher_types_to_lower_types():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            TypeCompatibilitySelector(),  # type: ignore[arg-type]
+        )
+        type_1_photo = _candidate(root, "alpha:TYPE1:0", "dhash:1111111111111111")
+        type_2_photo = _candidate(root, "alpha:TYPE2:0", "dhash:2222222222222222")
+        type_3_photo = _candidate(root, "alpha:TYPE3:0", "dhash:3333333333333333")
+
+        assert service._eligible_types(type_1_photo) == [VideoType.TYPE_1.value]
+        assert service._eligible_types(type_2_photo) == [
+            VideoType.TYPE_1.value,
+            VideoType.TYPE_2.value,
+        ]
+        assert service._eligible_types(type_3_photo) == [
             VideoType.TYPE_1.value,
             VideoType.TYPE_2.value,
             VideoType.TYPE_3.value,
         ]
-        assert VideoType.TYPE_1.value in landscape_types
-        assert VideoType.TYPE_2.value in landscape_types
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_item_with_type_2_eligibility_can_be_used_for_type_1_only_downwards():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        type_1_path = root / "type1.jpg"
+        type_2_path = root / "type2.jpg"
+        Image.new("RGB", (32, 32), (10, 20, 30)).save(type_1_path)
+        Image.new("RGB", (32, 32), (30, 20, 10)).save(type_2_path)
+        pool = {
+            "version": 1,
+            "cursor_by_type": {},
+            "items": [
+                _pool_item(
+                    "alpha",
+                    "alpha:TYPE1:0",
+                    type_1_path,
+                    eligible_types=[VideoType.TYPE_1.value],
+                ),
+                _pool_item(
+                    "alpha",
+                    "alpha:TYPE2:0",
+                    type_2_path,
+                    eligible_types=[VideoType.TYPE_2.value],
+                ),
+            ],
+        }
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        type_1_candidates = service._available_candidates_by_account(
+            pool,
+            video_type=VideoType.TYPE_1,
+            usernames=["alpha"],
+            skip_accounts=[],
+        )
+        type_2_candidates = service._available_candidates_by_account(
+            pool,
+            video_type=VideoType.TYPE_2,
+            usernames=["alpha"],
+            skip_accounts=[],
+        )
+
+        assert [candidate.source_id for candidate in type_1_candidates["alpha"]] == [
+            "alpha:TYPE1:0",
+            "alpha:TYPE2:0",
+        ]
+        assert [candidate.source_id for candidate in type_2_candidates["alpha"]] == [
+            "alpha:TYPE2:0",
+        ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

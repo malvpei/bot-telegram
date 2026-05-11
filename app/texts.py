@@ -41,7 +41,13 @@ class ScriptGenerator:
     def __init__(self, state: StateStore) -> None:
         self.state = state
 
-    def generate(self, video_type: VideoType, language: Language) -> ScriptPackage:
+    def generate(
+        self,
+        video_type: VideoType,
+        language: Language,
+        *,
+        lowercase_text: bool = False,
+    ) -> ScriptPackage:
         builder = self._builder_for(video_type, language)
         last_signature = self.state.get_last_signature(video_type, language)
         known_signatures = self.state.get_known_signatures(video_type, language)
@@ -53,20 +59,43 @@ class ScriptGenerator:
                 continue
             if package.signature in known_signatures:
                 continue
-            return package
+            return self._format_package(package, lowercase_text=lowercase_text)
 
         # Final guarantee: at least don't repeat the *immediately* previous
         # video, even if everything historic is exhausted.
         for _ in range(self.MAX_ATTEMPTS):
             package = builder()
             if package.signature != last_signature:
-                return package
+                return self._format_package(package, lowercase_text=lowercase_text)
 
         # Truly exhausted; surface as exception so caller can react instead of
         # silently violating the "no two equal in a row" rule.
         if package is None:
             package = builder()
-        return package
+        return self._format_package(package, lowercase_text=lowercase_text)
+
+    @staticmethod
+    def _format_package(package: ScriptPackage, *, lowercase_text: bool) -> ScriptPackage:
+        if not lowercase_text:
+            return package
+        slides_by_role = {
+            role: text.lower()
+            for role, text in package.slides_by_role.items()
+        }
+        ordered_slides = [text.lower() for text in package.ordered_slides]
+        return ScriptPackage(
+            slides_by_role=slides_by_role,
+            ordered_slides=ordered_slides,
+            signature=package.signature,
+            plain_text=package.plain_text.lower(),
+            social_copy=SocialCopy(
+                title=package.social_copy.title.lower(),
+                description=package.social_copy.description.lower(),
+                hashtags=[tag.lower() for tag in package.social_copy.hashtags],
+            ),
+            choice_key=package.choice_key,
+            social_choice_key=package.social_choice_key,
+        )
 
     def _builder_for(self, video_type: VideoType, language: Language):
         if video_type == VideoType.TYPE_1:
@@ -549,8 +578,30 @@ class ScriptGenerator:
         return f"{copy_key}:{title_key}", SocialCopy(
             title=title,
             description=description,
-            hashtags=hashtags,
+            hashtags=self._prepare_social_hashtags(hashtags),
         )
+
+    @staticmethod
+    def _prepare_social_hashtags(hashtags: list[str]) -> list[str]:
+        prepared = [
+            "#dropshipping" if tag.lower() == "#dropshipping" else tag
+            for tag in hashtags
+        ]
+        if "#dropshipping" not in prepared:
+            replacement_index = next(
+                (
+                    index
+                    for index, tag in enumerate(prepared)
+                    if tag.lower().startswith("#dropshipping")
+                ),
+                None,
+            )
+            if replacement_index is None:
+                prepared.append("#dropshipping")
+            else:
+                prepared[replacement_index] = "#dropshipping"
+        random.shuffle(prepared)
+        return prepared
 
     @staticmethod
     def _copy_choice_from_social_key(social_key: str) -> str:

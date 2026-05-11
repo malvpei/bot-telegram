@@ -16,6 +16,11 @@ from app.state import StateStore
 LOGGER = logging.getLogger(__name__)
 POOL_VERSION = 1
 ALL_VIDEO_TYPES = (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3)
+COMPATIBLE_SOURCE_TYPES_BY_REQUESTED = {
+    VideoType.TYPE_1: (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3),
+    VideoType.TYPE_2: (VideoType.TYPE_2, VideoType.TYPE_3),
+    VideoType.TYPE_3: (VideoType.TYPE_3,),
+}
 
 
 class MediaPoolService:
@@ -200,7 +205,11 @@ class MediaPoolService:
         return valid
 
     def _eligible_types(self, candidate: MediaCandidate) -> list[str]:
-        return [video_type.value for video_type in ALL_VIDEO_TYPES]
+        return [
+            video_type.value
+            for video_type in ALL_VIDEO_TYPES
+            if self._candidate_counts_for_type(candidate, video_type)
+        ]
 
     def _merge_candidates_into_pool(
         self,
@@ -244,6 +253,8 @@ class MediaPoolService:
             if not Path(str(item.get("local_path") or "")).exists():
                 continue
             if self.state.any_media_used(list(self._item_keys(item))):
+                continue
+            if not self._item_allowed_for_type(item, video_type):
                 continue
             candidate = self._item_to_candidate(item)
             if not self._candidate_allowed_for_type(
@@ -402,6 +413,16 @@ class MediaPoolService:
         candidate: MediaCandidate,
         video_type: VideoType,
     ) -> bool:
+        return any(
+            self._candidate_matches_type_rules(candidate, source_type)
+            for source_type in COMPATIBLE_SOURCE_TYPES_BY_REQUESTED[video_type]
+        )
+
+    def _candidate_matches_type_rules(
+        self,
+        candidate: MediaCandidate,
+        video_type: VideoType,
+    ) -> bool:
         if candidate.metrics is None:
             return False
         if video_type == VideoType.TYPE_1:
@@ -436,9 +457,35 @@ class MediaPoolService:
             "metrics": asdict(candidate.metrics) if candidate.metrics else None,
             "content_fingerprint": candidate.content_fingerprint,
             "content_fingerprints": list(candidate.content_fingerprints),
-            "eligible_types": [video_type.value for video_type in ALL_VIDEO_TYPES],
+            "eligible_types": self._compatible_eligible_types(eligible_types),
             "added_at": datetime.now(timezone.utc).isoformat(),
         }
+
+    def _item_allowed_for_type(
+        self,
+        item: dict[str, Any],
+        video_type: VideoType,
+    ) -> bool:
+        raw_types = item.get("eligible_types")
+        if not isinstance(raw_types, list) or not raw_types:
+            return True
+        eligible = {str(value) for value in raw_types}
+        return any(
+            source_type.value in eligible
+            for source_type in COMPATIBLE_SOURCE_TYPES_BY_REQUESTED[video_type]
+        )
+
+    def _compatible_eligible_types(self, eligible_types: list[str]) -> list[str]:
+        eligible = set(eligible_types)
+        requested_types = [
+            video_type.value
+            for video_type in ALL_VIDEO_TYPES
+            if any(
+                source_type.value in eligible
+                for source_type in COMPATIBLE_SOURCE_TYPES_BY_REQUESTED[video_type]
+            )
+        ]
+        return requested_types
 
     def _candidate_allowed_for_type(
         self,
