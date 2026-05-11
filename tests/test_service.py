@@ -334,6 +334,35 @@ def test_picker_keeps_searching_beyond_first_failed_accounts(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_picker_respects_account_attempt_limit(monkeypatch):
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), account_pick_attempts=2)
+        service.state = StateStore(root / "state")
+        service.collector = FakeCollector()
+        service.selector = PlanWhenGoodSelector()
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        try:
+            service._pick_account_with_plan(["bad1", "bad2", "good"], request)
+        except Exception as error:  # noqa: BLE001
+            assert "Ninguna de las 2 cuentas probadas" in str(error)
+        else:  # pragma: no cover - defensive assertion for readability
+            raise AssertionError("picker should stop at the configured limit")
+        assert service.collector.seen == ["bad1", "bad2"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_picker_uses_pure_random_account_order(monkeypatch):
     def reverse_shuffle(values):
         values.reverse()

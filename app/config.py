@@ -8,6 +8,9 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 
+DEFAULT_ACCOUNT_PICK_ATTEMPTS = 24
+
+
 def _split_chat_ids(raw_value: str) -> set[int]:
     chat_ids: set[int] = set()
     for piece in raw_value.split(","):
@@ -152,7 +155,7 @@ def get_settings() -> Settings:
         download_backoff_seconds=_env_float("DOWNLOAD_BACKOFF_SECONDS", 1.5),
         output_retention_days=_env_int("OUTPUT_RETENTION_DAYS", 7),
         account_cache_ttl_hours=_env_int("ACCOUNT_CACHE_TTL_HOURS", 0),
-        account_pick_attempts=_env_int("ACCOUNT_PICK_ATTEMPTS", 0),
+        account_pick_attempts=_env_int("ACCOUNT_PICK_ATTEMPTS", DEFAULT_ACCOUNT_PICK_ATTEMPTS),
         pool_target_images=_env_int("POOL_TARGET_IMAGES", 100),
         pool_low_stock_threshold=_env_int("POOL_LOW_STOCK_THRESHOLD", 12),
         account_cooldown_days=_env_int("ACCOUNT_COOLDOWN_DAYS", 30),

@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from PIL import Image
 
-from app.config import get_settings
+from app.config import DEFAULT_ACCOUNT_PICK_ATTEMPTS, get_settings
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
 from app.media_pool import MediaPoolService
 from app.models import GenerationResult, MediaCandidate, VideoPlan, VideoRequest, VideoType
@@ -482,14 +482,16 @@ class VideoCreationService:
 
     def _max_account_attempts(self, available_count: int) -> int:
         configured = self.settings.account_pick_attempts
-        if configured > 0 and configured < available_count:
+        limit = configured if configured > 0 else DEFAULT_ACCOUNT_PICK_ATTEMPTS
+        max_attempts = min(available_count, max(1, limit))
+        if max_attempts < available_count:
             LOGGER.info(
-                "ACCOUNT_PICK_ATTEMPTS=%d is a soft target; picker can continue "
-                "through %d accounts to avoid false exhaustion.",
-                configured,
+                "Account picker will try %d/%d account(s). Set ACCOUNT_PICK_ATTEMPTS "
+                "higher if you want a wider search.",
+                max_attempts,
                 available_count,
             )
-        return available_count
+        return max_attempts
 
     # ------------------------------------------------------------------
     # Helpers

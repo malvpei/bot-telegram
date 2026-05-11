@@ -208,6 +208,47 @@ def test_pool_select_plan_does_not_mix_accounts_for_one_video():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_select_plan_respects_account_attempt_limit():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+            account_pick_attempts=2,
+        )
+        state = StateStore(settings.state_dir)
+        items = []
+        accounts = ["alpha", "beta", "gamma"]
+        for account in accounts:
+            image_path = root / f"{account}.jpg"
+            Image.new("RGB", (32, 32), (10, 20, 30)).save(image_path)
+            items.append(_pool_item(account, f"{account}:POST1:0", image_path))
+        state.write_media_pool(
+            {
+                "version": 1,
+                "cursor_by_type": {},
+                "items": items,
+            }
+        )
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            RequiresSixSelector(),  # type: ignore[arg-type]
+        )
+
+        try:
+            service.select_plan(accounts, VideoType.TYPE_1, Language.ES)
+        except ValueError as error:
+            assert "2/3 cuentas probadas" in str(error)
+        else:  # pragma: no cover - defensive assertion for readability
+            raise AssertionError("pool picker should stop at the configured limit")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_pool_select_plan_can_make_multiple_type_1_videos_from_same_account_stock():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)

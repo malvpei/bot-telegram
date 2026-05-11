@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from app.config import Settings
+from app.config import DEFAULT_ACCOUNT_PICK_ATTEMPTS, Settings
 from app.instagram import InstagramCollector
 from app.models import ImageMetrics, Language, MediaCandidate, VideoPlan, VideoType
 from app.selector import ImageSelector
@@ -129,7 +129,8 @@ class MediaPoolService:
         )
         tried: list[str] = []
         last_error: str | None = None
-        for account in ordered_accounts:
+        max_attempts = self._max_account_attempts(len(ordered_accounts))
+        for account in ordered_accounts[:max_attempts]:
             tried.append(account)
             try:
                 plan = self.selector.create_plan(
@@ -143,10 +144,12 @@ class MediaPoolService:
                 continue
             return plan, tried
 
-        detail = f"\n{last_error}" if last_error else ""
+        detail = f"\nÚltimo motivo: {last_error}" if last_error else ""
         raise ValueError(
-            "No hay una cuenta con fotos suficientes en el pool para este tipo de video. "
-            "Ejecuta /download_pool para rellenarlo."
+            "No hay una cuenta viable en el pool para este tipo de video dentro "
+            f"del límite de búsqueda ({len(tried)}/{len(ordered_accounts)} cuentas probadas). "
+            "Ejecuta /download_pool para rellenarlo o sube ACCOUNT_PICK_ATTEMPTS si "
+            "quieres que busque durante más tiempo."
             + detail
         )
 
@@ -280,6 +283,19 @@ class MediaPoolService:
             return accounts
         index = accounts.index(last_account)
         return accounts[index + 1 :] + accounts[: index + 1]
+
+    def _max_account_attempts(self, available_count: int) -> int:
+        configured = self.settings.account_pick_attempts
+        limit = configured if configured > 0 else DEFAULT_ACCOUNT_PICK_ATTEMPTS
+        max_attempts = min(available_count, max(1, limit))
+        if max_attempts < available_count:
+            LOGGER.info(
+                "Pool picker will try %d/%d account(s). Set ACCOUNT_PICK_ATTEMPTS "
+                "higher if you want a wider search.",
+                max_attempts,
+                available_count,
+            )
+        return max_attempts
 
     def _pool_ready(
         self,
