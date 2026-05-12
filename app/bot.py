@@ -5,7 +5,7 @@ import logging
 from typing import Any
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.error import TelegramError
+from telegram.error import NetworkError, RetryAfter, TelegramError
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -28,6 +28,9 @@ REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
 
 LOGGER = logging.getLogger(__name__)
+TELEGRAM_SEND_ATTEMPTS = 3
+TELEGRAM_SEND_RETRY_BASE_DELAY = 1.5
+
 
 def run_bot() -> None:
     settings = get_settings()
@@ -38,6 +41,8 @@ def run_bot() -> None:
         level=logging.INFO,
         format="%(asctime)s | %(levelname)s | %(name)s | %(message)s",
     )
+    logging.getLogger("httpx").setLevel(logging.WARNING)
+    logging.getLogger("httpcore").setLevel(logging.WARNING)
 
     service = VideoCreationService()
     for warning in service.preflight():
@@ -519,9 +524,9 @@ async def _execute_job(
     )
     await status_message.edit_text("Enviando imágenes con su texto.")
     try:
-        await context.bot.send_message(chat_id=chat.id, text=header)
+        await _send_message(context, chat.id, header)
         for message in result.social_copy.messages:
-            await context.bot.send_message(chat_id=chat.id, text=message)
+            await _send_message(context, chat.id, message)
         await _send_slides_text_then_image(context, chat.id, result.slides)
         context.user_data["repeat_request"] = {
             "chosen_account": result.chosen_account,
@@ -532,9 +537,10 @@ async def _execute_job(
         }
         await _ask_for_another_same_account(context, chat.id, result.chosen_account)
         if result.pool_low_stock:
-            await context.bot.send_message(
-                chat_id=chat.id,
-                text=(
+            await _send_message(
+                context,
+                chat.id,
+                (
                     "Aviso: el pool se esta quedando bajo "
                     f"({result.pool_remaining} fotos disponibles). "
                     "Ejecuta /download_pool cuando quieras rellenarlo."
@@ -542,8 +548,9 @@ async def _execute_job(
             )
     except TelegramError as error:
         LOGGER.exception("Telegram refused the send")
-        await context.bot.send_message(
-            chat_id=chat.id,
+        await _send_message(
+            context,
+            chat.id,
             text=f"Telegram rechazó el envío.\nCausa: {error}",
         )
 
@@ -569,8 +576,7 @@ async def _execute_extra_image(
 
     await status_message.edit_text(f"Te mando otra imagen de @{media.source_account}.")
     try:
-        with media.local_path.open("rb") as handle:
-            await context.bot.send_photo(chat_id=chat.id, photo=handle)
+        await _send_photo(context, chat.id, media.local_path)
         context.user_data["repeat_request"] = {
             "chosen_account": media.source_account,
             "requested_accounts": request.account_inputs,
@@ -581,10 +587,63 @@ async def _execute_extra_image(
         await _ask_for_another_same_account(context, chat.id, media.source_account)
     except TelegramError as error:
         LOGGER.exception("Telegram refused the extra image")
-        await context.bot.send_message(
-            chat_id=chat.id,
+        await _send_message(
+            context,
+            chat.id,
             text=f"Telegram rechazó la imagen.\nCausa: {error}",
         )
+
+
+async def _send_message(context, chat_id: int, text: str, **kwargs):
+    return await _telegram_call_with_retries(
+        context.bot.send_message,
+        chat_id=chat_id,
+        text=text,
+        **kwargs,
+    )
+
+
+async def _send_photo(context, chat_id: int, path):
+    async def send_opened_photo(*, chat_id: int, photo_path):
+        with photo_path.open("rb") as handle:
+            return await context.bot.send_photo(chat_id=chat_id, photo=handle)
+
+    return await _telegram_call_with_retries(
+        send_opened_photo,
+        chat_id=chat_id,
+        photo_path=path,
+    )
+
+
+async def _telegram_call_with_retries(call, **kwargs):
+    for attempt in range(1, TELEGRAM_SEND_ATTEMPTS + 1):
+        try:
+            return await call(**kwargs)
+        except RetryAfter as error:
+            if attempt >= TELEGRAM_SEND_ATTEMPTS:
+                raise
+            delay = float(error.retry_after) + 0.25
+            LOGGER.warning(
+                "Telegram rate limit while sending; retrying in %.2fs (%d/%d)",
+                delay,
+                attempt,
+                TELEGRAM_SEND_ATTEMPTS,
+            )
+            await asyncio.sleep(delay)
+        except NetworkError:
+            if attempt >= TELEGRAM_SEND_ATTEMPTS:
+                raise
+            delay = TELEGRAM_SEND_RETRY_BASE_DELAY * attempt
+            LOGGER.warning(
+                "Telegram network error while sending; retrying in %.2fs (%d/%d)",
+                delay,
+                attempt,
+                TELEGRAM_SEND_ATTEMPTS,
+                exc_info=True,
+            )
+            await asyncio.sleep(delay)
+
+    raise RuntimeError("Telegram send retry loop finished without a result")
 
 
 async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
@@ -597,14 +656,13 @@ async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
         if raw:
             title, body = _split_title_body(raw)
             if title:
-                await context.bot.send_message(chat_id=chat_id, text=title)
+                await _send_message(context, chat_id, title)
             if body:
-                await context.bot.send_message(chat_id=chat_id, text=body)
+                await _send_message(context, chat_id, body)
         path = slide.media.local_path
         if not path.exists():
             continue
-        with path.open("rb") as handle:
-            await context.bot.send_photo(chat_id=chat_id, photo=handle)
+        await _send_photo(context, chat_id, path)
 
 
 async def _ask_for_another_same_account(context, chat_id: int, account: str) -> None:
@@ -617,8 +675,9 @@ async def _ask_for_another_same_account(context, chat_id: int, account: str) -> 
             ]
         ]
     )
-    await context.bot.send_message(
-        chat_id=chat_id,
+    await _send_message(
+        context,
+        chat_id,
         text=(
             f"¿Quieres otra imagen distinta de @{account} por si "
             "alguna no te convence?"

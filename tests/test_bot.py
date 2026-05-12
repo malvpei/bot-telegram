@@ -1,9 +1,11 @@
 import asyncio
 import shutil
 from pathlib import Path
+from unittest.mock import patch
 from uuid import uuid4
 
 from PIL import Image
+from telegram.error import NetworkError
 
 from app.bot import (
     REGENERATE_ACCEPT,
@@ -34,6 +36,28 @@ class FakeContext:
     def __init__(self) -> None:
         self.bot = FakeTelegramBot()
         self.user_data = {}
+
+
+class FlakyMessageTelegramBot(FakeTelegramBot):
+    def __init__(self) -> None:
+        super().__init__()
+        self.failures_left = 1
+
+    async def send_message(self, *, chat_id: int, text: str, reply_markup=None) -> None:
+        if self.failures_left:
+            self.failures_left -= 1
+            raise NetworkError("temporary read error")
+        await super().send_message(chat_id=chat_id, text=text, reply_markup=reply_markup)
+
+
+class FlakyContext(FakeContext):
+    def __init__(self) -> None:
+        self.bot = FlakyMessageTelegramBot()
+        self.user_data = {}
+
+
+async def _fast_sleep(delay: float) -> None:
+    return None
 
 
 def test_type_3_slide_text_is_sent_before_image():
@@ -77,6 +101,52 @@ def test_type_3_slide_text_is_sent_before_image():
         assert context.bot.events == [
             ("message", "4. Payments"),
             ("message", "Manage payments securely\nUse Stripe"),
+            ("photo", "slide.jpg"),
+        ]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_slide_text_send_retries_after_network_error():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "slide.jpg"
+        Image.new("RGB", (10, 10), (0, 0, 0)).save(image_path)
+        context = FlakyContext()
+        slide = SlidePlan(
+            index=1,
+            role=SlideRole.HOOK,
+            text="Hook text",
+            media=MediaCandidate(
+                source_account="tipo1",
+                source_id="img",
+                local_path=image_path,
+                permalink="",
+                caption="",
+                width=10,
+                height=10,
+                created_at="",
+                metrics=ImageMetrics(
+                    brightness=0,
+                    daylight=0,
+                    sharpness=0,
+                    faces=0,
+                    aspect_ratio=1,
+                    is_landscape=False,
+                    outdoor_score=0,
+                    casual_score=0,
+                    luxury_score=0,
+                    quality_score=0,
+                ),
+            ),
+        )
+
+        with patch("app.bot.asyncio.sleep", new=_fast_sleep):
+            asyncio.run(_send_slides_text_then_image(context, 123, [slide]))
+
+        assert context.bot.events == [
+            ("message", "Hook text"),
             ("photo", "slide.jpg"),
         ]
     finally:
