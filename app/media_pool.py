@@ -44,7 +44,8 @@ class MediaPoolService:
     def refill(self, usernames: list[str]) -> dict[str, Any]:
         target = max(1, self.settings.pool_target_images)
         pool = self._normalise_pool(self.state.read_media_pool())
-        before = self._stock_counts(pool)
+        used_media = self.state.read_used_media()
+        before = self._stock_counts(pool, used_media=used_media)
         cooldowns = self.state.read_account_cooldowns()
         now = datetime.now(timezone.utc)
 
@@ -55,10 +56,21 @@ class MediaPoolService:
         scraped: list[str] = []
 
         for username in usernames:
-            if self._pool_ready(pool, usernames, target):
+            if self._pool_ready(pool, usernames, target, used_media=used_media):
                 break
             cooldown_until = self._cooldown_until(cooldowns, username)
             if cooldown_until is not None and cooldown_until > now:
+                cached_candidates = self._cached_candidates(username)
+                if cached_candidates:
+                    valid_candidates = self._valid_pool_candidates(
+                        cached_candidates,
+                        used_media=used_media,
+                    )
+                    added = self._merge_candidates_into_pool(pool, valid_candidates)
+                    if added:
+                        added_by_account[username] = added
+                        valid_by_account[username] = len(valid_candidates)
+                        continue
                 skipped_cooldown.append(username)
                 continue
             try:
@@ -69,7 +81,10 @@ class MediaPoolService:
                 continue
 
             scraped.append(username)
-            valid_candidates = self._valid_pool_candidates(candidates)
+            valid_candidates = self._valid_pool_candidates(
+                candidates,
+                used_media=used_media,
+            )
             added = self._merge_candidates_into_pool(pool, valid_candidates)
             added_by_account[username] = added
             valid_by_account[username] = len(valid_candidates)
@@ -90,8 +105,12 @@ class MediaPoolService:
 
         pool["updated_at"] = datetime.now(timezone.utc).isoformat()
         self.state.write_media_pool(pool)
-        after = self._stock_counts(pool)
-        viable_accounts_after = self._viable_accounts_by_type(pool, usernames)
+        after = self._stock_counts(pool, used_media=used_media)
+        viable_accounts_after = self._viable_accounts_by_type(
+            pool,
+            usernames,
+            used_media=used_media,
+        )
         viable_after = {
             video_type: bool(accounts)
             for video_type, accounts in viable_accounts_after.items()
@@ -102,11 +121,20 @@ class MediaPoolService:
             "after": after,
             "viable_after": viable_after,
             "viable_accounts_after": viable_accounts_after,
-            "ready": self._pool_ready(pool, usernames, target),
+            "ready": self._pool_ready(
+                pool,
+                usernames,
+                target,
+                used_media=used_media,
+            ),
             "added": sum(added_by_account.values()),
             "added_by_account": added_by_account,
             "valid_by_account": valid_by_account,
-            "valid_by_type_by_account": self._valid_by_type_by_account(pool, added_by_account),
+            "valid_by_type_by_account": self._valid_by_type_by_account(
+                pool,
+                added_by_account,
+                used_media=used_media,
+            ),
             "scraped": scraped,
             "skipped_cooldown": skipped_cooldown,
             "errors": errors,
@@ -121,11 +149,13 @@ class MediaPoolService:
         skip_accounts: list[str] | None = None,
     ) -> tuple[VideoPlan, list[str]]:
         pool = self._normalise_pool(self.state.read_media_pool())
+        used_media = self.state.read_used_media()
         candidates_by_account = self._available_candidates_by_account(
             pool,
             video_type=video_type,
             usernames=usernames,
             skip_accounts=skip_accounts or [],
+            used_media=used_media,
         )
         ordered_accounts = self._ordered_accounts(
             list(candidates_by_account),
@@ -170,12 +200,14 @@ class MediaPoolService:
         video_type: VideoType,
     ) -> MediaCandidate:
         pool = self._normalise_pool(self.state.read_media_pool())
+        used_media = self.state.read_used_media()
         candidates_by_account = self._available_candidates_by_account(
             pool,
             video_type=video_type,
             usernames=[account],
             skip_accounts=[],
             include_landscape_exceptions=False,
+            used_media=used_media,
         )
         candidates = candidates_by_account.get(account, [])
         if not candidates:
@@ -185,7 +217,11 @@ class MediaPoolService:
         return self.selector.pick_extra_image(candidates, video_type)
 
     def stock_counts(self) -> dict[str, Any]:
-        return self._stock_counts(self._normalise_pool(self.state.read_media_pool()))
+        used_media = self.state.read_used_media()
+        return self._stock_counts(
+            self._normalise_pool(self.state.read_media_pool()),
+            used_media=used_media,
+        )
 
     def is_low_stock(self, video_type: VideoType | None = None) -> bool:
         counts = self.stock_counts()
@@ -197,6 +233,8 @@ class MediaPoolService:
     def _valid_pool_candidates(
         self,
         candidates: list[MediaCandidate],
+        *,
+        used_media: dict[str, Any],
     ) -> list[tuple[MediaCandidate, list[str]]]:
         self.selector._prepare_candidates(candidates)
         valid: list[tuple[MediaCandidate, list[str]]] = []
@@ -204,7 +242,7 @@ class MediaPoolService:
             if candidate.metrics is None:
                 continue
             keys = self.selector.reservation_keys_for([candidate])
-            if self.state.any_media_used(keys):
+            if self._keys_used(keys, used_media):
                 continue
             eligible_types = self._eligible_types(candidate)
             if not eligible_types:
@@ -248,7 +286,10 @@ class MediaPoolService:
         usernames: list[str],
         skip_accounts: list[str],
         include_landscape_exceptions: bool = True,
+        used_media: dict[str, Any] | None = None,
     ) -> dict[str, list[MediaCandidate]]:
+        if used_media is None:
+            used_media = self.state.read_used_media()
         allowed = {username.lower() for username in usernames}
         skipped = {account.lower() for account in skip_accounts}
         by_account: dict[str, list[MediaCandidate]] = {}
@@ -260,7 +301,7 @@ class MediaPoolService:
                 continue
             if not Path(str(item.get("local_path") or "")).exists():
                 continue
-            if self.state.any_media_used(list(self._item_keys(item))):
+            if self._item_used(item, used_media):
                 continue
             if not self._item_allowed_for_type(item, video_type):
                 continue
@@ -307,18 +348,30 @@ class MediaPoolService:
         pool: dict[str, Any],
         usernames: list[str],
         target: int,
+        *,
+        used_media: dict[str, Any] | None = None,
     ) -> bool:
-        counts = self._stock_counts(pool)
+        if used_media is None:
+            used_media = self.state.read_used_media()
+        counts = self._stock_counts(pool, used_media=used_media)
         if int(counts["total"]) < target:
             return False
-        viable = self._viable_accounts_by_type(pool, usernames)
+        viable = self._viable_accounts_by_type(
+            pool,
+            usernames,
+            used_media=used_media,
+        )
         return all(bool(viable.get(video_type.value)) for video_type in ALL_VIDEO_TYPES)
 
     def _viable_accounts_by_type(
         self,
         pool: dict[str, Any],
         usernames: list[str],
+        *,
+        used_media: dict[str, Any] | None = None,
     ) -> dict[str, list[str]]:
+        if used_media is None:
+            used_media = self.state.read_used_media()
         result: dict[str, list[str]] = {}
         for video_type in ALL_VIDEO_TYPES:
             candidates_by_account = self._available_candidates_by_account(
@@ -326,6 +379,7 @@ class MediaPoolService:
                 video_type=video_type,
                 usernames=usernames,
                 skip_accounts=[],
+                used_media=used_media,
             )
             result[video_type.value] = []
             for account, candidates in candidates_by_account.items():
@@ -339,12 +393,19 @@ class MediaPoolService:
                 result[video_type.value].append(account)
         return result
 
-    def _stock_counts(self, pool: dict[str, Any]) -> dict[str, Any]:
+    def _stock_counts(
+        self,
+        pool: dict[str, Any],
+        *,
+        used_media: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        if used_media is None:
+            used_media = self.state.read_used_media()
         raw_total_seen: set[str] = set()
         raw_by_account: dict[str, int] = {}
         for item in pool["items"]:
             keys = list(self._item_keys(item))
-            if not keys or self.state.any_media_used(keys):
+            if not keys or self._keys_used(keys, used_media):
                 continue
             if not Path(str(item.get("local_path") or "")).exists():
                 continue
@@ -368,6 +429,7 @@ class MediaPoolService:
                 video_type=video_type,
                 usernames=[],
                 skip_accounts=[],
+                used_media=used_media,
             )
             for account, candidates in candidates_by_account.items():
                 usable = [
@@ -408,9 +470,14 @@ class MediaPoolService:
         self,
         pool: dict[str, Any],
         touched_accounts: dict[str, int],
+        *,
+        used_media: dict[str, Any] | None = None,
     ) -> dict[str, dict[str, int]]:
         touched = {account.lower() for account in touched_accounts}
-        by_account = self._stock_counts(pool).get("by_type_by_account", {})
+        by_account = self._stock_counts(
+            pool,
+            used_media=used_media,
+        ).get("by_type_by_account", {})
         return {
             account: {
                 video_type.value: int(
@@ -554,6 +621,23 @@ class MediaPoolService:
             keys.add(str(item["content_fingerprint"]))
         keys.discard("")
         return keys
+
+    def _item_used(self, item: dict[str, Any], used_media: dict[str, Any]) -> bool:
+        return self._keys_used(list(self._item_keys(item)), used_media)
+
+    def _keys_used(self, keys: list[str], used_media: dict[str, Any]) -> bool:
+        return self.state.any_media_used_in_snapshot(keys, used_media)
+
+    def _cached_candidates(self, username: str) -> list[MediaCandidate]:
+        loader = getattr(self.collector, "_load_cached_account", None)
+        if not callable(loader):
+            return []
+        try:
+            cached = loader(username)
+        except Exception as error:  # noqa: BLE001
+            LOGGER.info("@%s no se pudo leer desde cache para pool: %s", username, error)
+            return []
+        return list(cached or [])
 
     def _keys_conflict(self, existing: set[str], incoming: set[str]) -> bool:
         if existing.intersection(incoming):

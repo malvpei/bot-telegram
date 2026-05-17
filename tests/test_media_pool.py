@@ -15,6 +15,9 @@ from app.state import StateStore
 
 
 class FakePlanSelector:
+    def _prepare_candidates(self, media_items):
+        return None
+
     def create_plan(self, catalog, video_type, language):
         account = next(iter(catalog))
         return VideoPlan(
@@ -41,6 +44,9 @@ class FakePlanSelector:
 
     def _is_landscape_media(self, candidate):
         return bool(candidate.metrics and candidate.metrics.is_landscape)
+
+    def _score_type_3_hook(self, candidate):
+        return 1.0
 
 
 class RequiresSixSelector(FakePlanSelector):
@@ -70,6 +76,19 @@ class TypeCompatibilitySelector(FakePlanSelector):
         return 1.0 if candidate.source_id.endswith(":TYPE3:0") else 0.0
 
 
+class CachedOnlyCollector:
+    def __init__(self, items):
+        self.items = items
+        self.collect_called = False
+
+    def _load_cached_account(self, username: str):
+        return self.items
+
+    def collect_one(self, username: str, *, use_cache: bool = True):
+        self.collect_called = True
+        raise AssertionError("cooldown accounts should be filled from cache only")
+
+
 def test_pool_merge_blocks_near_dhash_duplicates():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -92,6 +111,45 @@ def test_pool_merge_blocks_near_dhash_duplicates():
 
         assert added == 1
         assert len(pool["items"]) == 1
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_refill_uses_cached_candidates_during_cooldown():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+            pool_target_images=1,
+        )
+        state = StateStore(settings.state_dir)
+        candidate = _candidate(root, "alpha:POST1:0", "dhash:1111111111111111")
+        collector = CachedOnlyCollector([candidate])
+        service = MediaPoolService(
+            settings,
+            state,
+            collector,
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+        state.set_account_cooldown(
+            "alpha",
+            cooldown_until="2999-01-01T00:00:00+00:00",
+            scraped_at="2026-01-01T00:00:00+00:00",
+            added_count=0,
+            valid_count=0,
+            total_count=0,
+        )
+
+        summary = service.refill(["alpha"])
+
+        assert summary["added"] == 1
+        assert summary["skipped_cooldown"] == []
+        assert summary["scraped"] == []
+        assert collector.collect_called is False
+        assert state.read_media_pool()["items"][0]["source_id"] == "alpha:POST1:0"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

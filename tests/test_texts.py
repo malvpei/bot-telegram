@@ -333,7 +333,7 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
 
     assert package.social_copy.title
     assert package.social_copy.description
-    assert 2400 <= len(package.social_copy.description) <= 3200
+    assert 500 <= len(package.social_copy.description) <= 3500
     assert len(package.social_copy.hashtags) >= 3
     assert all(tag.startswith("#") for tag in package.social_copy.hashtags)
     assert all(" " not in tag for tag in package.social_copy.hashtags)
@@ -395,12 +395,14 @@ def test_social_hashtags_shuffle_order(monkeypatch):
         (VideoType.TYPE_3, Language.EN),
     ],
 )
-def test_social_copy_has_four_long_rotating_descriptions(state_dir, video_type, language):
+def test_social_copy_has_many_rotating_descriptions_with_varied_lengths(state_dir, video_type, language):
     generator = _make_generator(state_dir)
     variants = generator._social_copy_variants(video_type, language)
 
-    assert len(variants) == 4
-    assert all(2400 <= len(description) <= 3200 for _, description, _ in variants.values())
+    lengths = [len(description) for _, description, _ in variants.values()]
+    assert len(variants) >= 8
+    assert all(500 <= length <= 3500 for length in lengths)
+    assert len(set(lengths)) >= 4
 
     first_key, first_copy = generator._choose_social_copy(video_type, language)
     generator.state.set_last_social_choice(

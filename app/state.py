@@ -112,7 +112,22 @@ class StateStore:
             return False
         with self._exclusive():
             used = self._read_json(self._used_media_path, {})
-        return any(self._media_id_is_used(media_id, used) for media_id in media_ids)
+        return self.any_media_used_in_snapshot(media_ids, used)
+
+    def read_used_media(self) -> dict[str, Any]:
+        with self._exclusive():
+            used = self._read_json(self._used_media_path, {})
+        return used if isinstance(used, dict) else {}
+
+    @classmethod
+    def any_media_used_in_snapshot(
+        cls,
+        media_ids: list[str],
+        used: dict[str, Any],
+    ) -> bool:
+        if not media_ids:
+            return False
+        return any(cls._media_id_is_used(media_id, used) for media_id in media_ids)
 
     def mark_media_used(self, media_ids: list[str], job_id: str) -> None:
         if not media_ids:
