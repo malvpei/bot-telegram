@@ -128,24 +128,6 @@ class ScriptGenerator:
                 SlideRole.FEBRUARY: "Febrero - 680€\nVi a un dropshipper que sigo usando Dropradar y decidí darle una última oportunidad. Elegí un producto basándome en sus datos y métricas y, por primera vez, empecé a vender de verdad.",
                 SlideRole.MARCH: "Marzo - 3100€\nNo soy millonario, pero por fin tengo un negocio que funciona. Me alegro de no haberme rendido en enero; la clave era la constancia y dejar de adivinar qué producto iba a funcionar.",
             },
-            "c": {
-                SlideRole.HOOK: "Exactamente cuanto facture con Dropshipping cuando deje de probar productos sin criterio...",
-                SlideRole.OCTOBER: "Octubre - 0€\nArranque pensando que la tienda era lo dificil. Pase horas retocando detalles pequenos, pero elegi el producto por gusto personal y el mercado me respondio con silencio total.",
-                SlideRole.NOVEMBER: "Noviembre - 0€\nIntente arreglarlo cambiando anuncios, precios y fotos. El problema era que no tenia una razon clara para vender ese producto, asi que cada cambio era casi una apuesta.",
-                SlideRole.DECEMBER: "Diciembre - 120€\nCayo una venta pequena por Navidad y me emocione demasiado rapido. Cuando mire el margen real, entendi que una venta aislada no significaba tener un sistema.",
-                SlideRole.JANUARY: "Enero - 0€\nLa tienda volvio a quedarse muda y casi cierro todo. Me pesaba pagar herramientas mientras seguia tomando decisiones con mas ansiedad que datos.",
-                SlideRole.FEBRUARY: "Febrero - 920€\nUse Dropradar para filtrar productos con demanda y competencia entendible. Por primera vez, cada test tenia una hipotesis y las ventas empezaron a entrar con mas sentido.",
-                SlideRole.MARCH: "Marzo - 3400€\nNo fue un salto perfecto, pero ya podia explicar por que un producto funcionaba. Esa claridad hizo que el negocio dejara de sentirse como una loteria.",
-            },
-            "d": {
-                SlideRole.HOOK: "Exactamente cuanto hice en mis primeros meses de Dropshipping antes de ordenar el proceso...",
-                SlideRole.OCTOBER: "Octubre - 0€\nPublique mi primera tienda convencido de que con esfuerzo bastaba. Tuve visitas, revise la pagina mil veces y aun asi nadie compro.",
-                SlideRole.NOVEMBER: "Noviembre - 0€\nMe obsesione con copiar tiendas que veia por internet. Copiaba partes sueltas, pero no entendia la logica detras de la oferta ni del producto.",
-                SlideRole.DECEMBER: "Diciembre - 75€\nLa primera venta me dio un subidon, pero tambien me confundio. Pense que ya habia encontrado el camino y en realidad solo habia tenido una senal pequena.",
-                SlideRole.JANUARY: "Enero - 0€\nEnero fue el bajon. Sin ventas, sin plan y con la sensacion de estar pagando por aprender a base de golpes.",
-                SlideRole.FEBRUARY: "Febrero - 760€\nCon Dropradar empece a mirar datos antes de enamorarme de una idea. No hizo el trabajo por mi, pero me ayudo a elegir mejor donde probar.",
-                SlideRole.MARCH: "Marzo - 2850€\nEse mes no me cambio la vida, pero si me cambio la forma de trabajar. Ya no buscaba suerte, buscaba repetir decisiones que tenian sentido.",
-            },
         }
         return self._compose_type_1_fixed(language=Language.ES, variants=variants)
         hook_options = {
@@ -235,24 +217,6 @@ class ScriptGenerator:
                 SlideRole.JANUARY: "January - $0\nI was completely unmotivated. Paying the Shopify fee without selling anything felt like throwing money away, and I was one step away from closing the account and forgetting about everything.",
                 SlideRole.FEBRUARY: "February - $680\nI saw a dropshipper I follow using Dropradar, and I decided to give it one last chance. I picked a product based on its data and metrics and, for the first time, I started selling for real.",
                 SlideRole.MARCH: "March - $3100\nI am not a millionaire, but I finally have a business that works. I am glad I did not give up in January; the key was consistency and stopping the guessing game about which product would work.",
-            },
-            "c": {
-                SlideRole.HOOK: "Exactly how much I made with Dropshipping when I stopped testing products blindly...",
-                SlideRole.OCTOBER: "October - $0\nI started thinking the store was the hard part. I spent hours polishing tiny details, but I chose the product from personal taste and the market answered with silence.",
-                SlideRole.NOVEMBER: "November - $0\nI tried fixing it by changing ads, prices and photos. The real issue was that I had no clear reason to sell that product, so every change felt close to a bet.",
-                SlideRole.DECEMBER: "December - $120\nOne small Christmas sale came in and I got excited too fast. When I checked the real margin, I understood that one isolated order was not a system.",
-                SlideRole.JANUARY: "January - $0\nThe store went quiet again and I almost closed everything. Paying for tools while making anxious decisions instead of data driven ones was getting heavy.",
-                SlideRole.FEBRUARY: "February - $920\nI used Dropradar to filter products with demand and readable competition. For the first time, every test had a hypothesis and the sales started making more sense.",
-                SlideRole.MARCH: "March - $3400\nIt was not a perfect jump, but I could finally explain why a product worked. That clarity made the business feel less like a monthly lottery.",
-            },
-            "d": {
-                SlideRole.HOOK: "Exactly how much I made in my first Dropshipping months before fixing the process...",
-                SlideRole.OCTOBER: "October - $0\nI published my first store convinced that effort would be enough. I had visitors, checked the page constantly and still nobody bought.",
-                SlideRole.NOVEMBER: "November - $0\nI became obsessed with copying stores I saw online. I copied pieces, but I did not understand the logic behind the offer or the product.",
-                SlideRole.DECEMBER: "December - $75\nThe first sale gave me a rush, but it also confused me. I thought I had found the path when it was really just a small signal.",
-                SlideRole.JANUARY: "January - $0\nJanuary was the low point. No sales, no plan and the feeling that I was paying to learn everything the hard way.",
-                SlideRole.FEBRUARY: "February - $760\nWith Dropradar I started reading data before falling in love with an idea. It did not do the work for me, but it helped me choose better tests.",
-                SlideRole.MARCH: "March - $2850\nThat month did not change my life, but it changed how I worked. I was no longer chasing luck, I was trying to repeat decisions that made sense.",
             },
         }
         return self._compose_type_1_fixed(language=Language.EN, variants=variants)
@@ -461,20 +425,6 @@ class ScriptGenerator:
                 SlideRole.TIP3: "3. Vende lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
                 SlideRole.TIP4: "4. Descuidar el trato con el comprador\nConseguir el pago es solo la mitad del trabajo. Si no ayudas al cliente tras la compra, tu reputación y tu cuenta bancaria lo pagarán. Una comunicación rápida evita devoluciones y protege tu negocio.",
             },
-            "c": {
-                SlideRole.HOOK: "4 cosas que revisaria antes de invertir mas dinero en Dropshipping",
-                SlideRole.TIP1: "1. Calcula el margen real\nNo te quedes con el precio de venta. Resta producto, envio, comisiones, devoluciones y coste de adquisicion antes de pensar que una venta es rentable.",
-                SlideRole.TIP2: "2. Haz que la oferta se entienda rapido\nSi el cliente necesita pensar demasiado para entender el beneficio, se va. La pagina debe explicar el problema, la solucion y por que comprar ahora.",
-                SlideRole.TIP3: "3. Elige productos con señales reales\nUn producto bonito no siempre se vende. Revisa demanda, competencia y anuncios activos con Dropradar antes de gastar presupuesto en una corazonada.",
-                SlideRole.TIP4: "4. Prepara respuestas antes de vender\nCuando llegue la primera duda sobre envio, talla o devolucion, no improvises. Un soporte claro reduce miedo, reembolsos y problemas con la cuenta.",
-            },
-            "d": {
-                SlideRole.HOOK: "Lo que miraria hoy antes de lanzar una tienda de Dropshipping",
-                SlideRole.TIP1: "1. No escales una prueba confusa\nSi no sabes por que vendiste, subir presupuesto solo aumenta el caos. Antes de escalar, identifica que anuncio, producto y pagina generaron la compra.",
-                SlideRole.TIP2: "2. La confianza se gana en segundos\nReseñas, fotos claras, tiempos de envio sinceros y politicas visibles hacen mas por la conversion que una pagina llena de promesas exageradas.",
-                SlideRole.TIP3: "3. No compitas donde todos compiten\nSi todo el mundo vende lo mismo, el margen desaparece. Usa Dropradar para encontrar angulos y nichos con menos ruido antes de copiar al mercado.",
-                SlideRole.TIP4: "4. Cuida la experiencia completa\nEl cliente no recuerda solo el anuncio. Recuerda si entendio la compra, si recibio informacion y si sintio que habia alguien detras de la tienda.",
-            },
         }
         return self._compose_type_2_fixed(Language.ES, variants)
 
@@ -493,20 +443,6 @@ class ScriptGenerator:
                 SlideRole.TIP2: "2. Treating ads like a slot machine\nDo not throw money at Facebook or TikTok hoping for a miracle. Start small, test different angles and use organic content to see what works before investing heavily.",
                 SlideRole.TIP3: "3. Selling the same thing as everyone else\nViral products have too much competition and no margin. Look for niches that solve real problems and lean on tools like Dropradar to find profitable products.",
                 SlideRole.TIP4: "4. Neglecting the buyer experience\nGetting the payment is only half the job. If you do not help the customer after purchase, your reputation and your bank account will pay for it. Fast communication prevents refunds and protects your business.",
-            },
-            "c": {
-                SlideRole.HOOK: "4 things I would check before spending more money on Dropshipping",
-                SlideRole.TIP1: "1. Calculate the real margin\nDo not stop at the selling price. Subtract product, shipping, fees, refunds and acquisition cost before calling an order profitable.",
-                SlideRole.TIP2: "2. Make the offer clear fast\nIf the buyer has to think too hard to understand the benefit, they leave. The page should explain the problem, the solution and why buying now makes sense.",
-                SlideRole.TIP3: "3. Choose products with real signals\nA nice looking product does not always sell. Check demand, competition and active ads with Dropradar before spending budget on a guess.",
-                SlideRole.TIP4: "4. Prepare answers before selling\nWhen the first question about shipping, sizing or returns arrives, do not improvise. Clear support lowers fear, refunds and account problems.",
-            },
-            "d": {
-                SlideRole.HOOK: "What I would review today before launching a Dropshipping store",
-                SlideRole.TIP1: "1. Do not scale a confusing test\nIf you do not know why you sold, raising budget only increases the chaos. Before scaling, identify which ad, product and page created the order.",
-                SlideRole.TIP2: "2. Trust is earned in seconds\nReviews, clear photos, honest shipping times and visible policies do more for conversion than a page full of exaggerated promises.",
-                SlideRole.TIP3: "3. Do not compete where everyone competes\nIf everyone sells the same thing, margin disappears. Use Dropradar to find angles and niches with less noise before copying the market.",
-                SlideRole.TIP4: "4. Protect the whole experience\nThe customer does not remember only the ad. They remember whether the purchase was clear, whether information arrived and whether the store felt real.",
             },
         }
         return self._compose_type_2_fixed(Language.EN, variants)
@@ -571,9 +507,6 @@ class ScriptGenerator:
         hooks = {
             "h1": "Como empezar en Dropshipping en 2026",
             "h2": "Como hacer Dropshipping en 2026",
-            "h4": "El stack basico para empezar Dropshipping",
-            "h5": "Herramientas para lanzar tu primera tienda",
-            "h6": "Empieza Dropshipping con un flujo simple",
             "h3": "Empieza",
         }
         payment_tool = random.choice(("PayPal", "Stripe"))
@@ -592,9 +525,6 @@ class ScriptGenerator:
         hooks = {
             "h1": "How to start Dropshipping in 2026",
             "h2": "How to do Dropshipping in 2026",
-            "h4": "The basic stack to start Dropshipping",
-            "h5": "Tools for launching your first store",
-            "h6": "Start Dropshipping with a simple workflow",
             "h3": "Start",
         }
         payment_tool = random.choice(("PayPal", "Stripe"))
