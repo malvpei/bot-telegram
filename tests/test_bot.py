@@ -201,4 +201,4 @@ def test_pool_status_distinguishes_raw_photos_from_usable_plan_photos():
 
     assert "Fotos aptas para planes: 0" in text
     assert "Fotos en disco sin usar: 2155" in text
-    assert "Tipo 1 aptas: 0 (0 cuentas viables)" in text
+    assert "Tipo 1 aptas: 0 (0 cuentas con stock minimo)" in text

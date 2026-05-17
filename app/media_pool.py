@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
-from app.config import DEFAULT_ACCOUNT_PICK_ATTEMPTS, Settings
+from app.config import Settings
 from app.instagram import InstagramCollector
 from app.models import ImageMetrics, Language, MediaCandidate, VideoPlan, VideoType
 from app.selector import ImageSelector
@@ -157,15 +157,14 @@ class MediaPoolService:
             skip_accounts=skip_accounts or [],
             used_media=used_media,
         )
-        ordered_accounts = self._ordered_accounts(
-            list(candidates_by_account),
+        ordered_accounts = self._ordered_accounts_for_plan(
+            candidates_by_account,
             pool=pool,
             video_type=video_type,
         )
         tried: list[str] = []
         last_error: str | None = None
-        max_attempts = self._max_account_attempts(len(ordered_accounts))
-        for account in ordered_accounts[:max_attempts]:
+        for account in ordered_accounts:
             tried.append(account)
             try:
                 plan = self.selector.create_plan(
@@ -179,12 +178,11 @@ class MediaPoolService:
                 continue
             return plan, tried
 
-        detail = f"\nÚltimo motivo: {last_error}" if last_error else ""
+        detail = f"\nUltimo motivo: {last_error}" if last_error else ""
         raise ValueError(
-            "No hay una cuenta viable en el pool para este tipo de video dentro "
-            f"del límite de búsqueda ({len(tried)}/{len(ordered_accounts)} cuentas probadas). "
-            "Ejecuta /download_pool para rellenarlo o sube ACCOUNT_PICK_ATTEMPTS si "
-            "quieres que busque durante más tiempo."
+            "No hay una cuenta del pool que pueda generar este tipo de video. "
+            f"Probe todas las cuentas locales disponibles ({len(tried)}/{len(ordered_accounts)}). "
+            "Ejecuta /download_pool para rellenarlo con mas fotos aptas."
             + detail
         )
 
@@ -330,18 +328,35 @@ class MediaPoolService:
         index = accounts.index(last_account)
         return accounts[index + 1 :] + accounts[: index + 1]
 
-    def _max_account_attempts(self, available_count: int) -> int:
-        configured = self.settings.account_pick_attempts
-        limit = configured if configured > 0 else DEFAULT_ACCOUNT_PICK_ATTEMPTS
-        max_attempts = min(available_count, max(1, limit))
-        if max_attempts < available_count:
-            LOGGER.info(
-                "Pool picker will try %d/%d account(s). Set ACCOUNT_PICK_ATTEMPTS "
-                "higher if you want a wider search.",
-                max_attempts,
-                available_count,
-            )
-        return max_attempts
+    def _ordered_accounts_for_plan(
+        self,
+        candidates_by_account: dict[str, list[MediaCandidate]],
+        *,
+        pool: dict[str, Any],
+        video_type: VideoType,
+    ) -> list[str]:
+        rotated = self._ordered_accounts(
+            list(candidates_by_account),
+            pool=pool,
+            video_type=video_type,
+        )
+        rotated_index = {account: index for index, account in enumerate(rotated)}
+        minimum = MIN_POOL_ITEMS_BY_TYPE[video_type]
+
+        return sorted(
+            rotated,
+            key=lambda account: (
+                self._usable_count_for_type(
+                    candidates_by_account[account],
+                    video_type,
+                ) < minimum,
+                -self._usable_count_for_type(
+                    candidates_by_account[account],
+                    video_type,
+                ),
+                rotated_index[account],
+            ),
+        )
 
     def _pool_ready(
         self,
@@ -383,11 +398,7 @@ class MediaPoolService:
             )
             result[video_type.value] = []
             for account, candidates in candidates_by_account.items():
-                usable_count = sum(
-                    1
-                    for candidate in candidates
-                    if self._candidate_counts_for_type(candidate, video_type)
-                )
+                usable_count = self._usable_count_for_type(candidates, video_type)
                 if usable_count < MIN_POOL_ITEMS_BY_TYPE[video_type]:
                     continue
                 result[video_type.value].append(account)
@@ -488,6 +499,17 @@ class MediaPoolService:
             for account in touched_accounts
             if account.lower() in touched
         }
+
+    def _usable_count_for_type(
+        self,
+        candidates: list[MediaCandidate],
+        video_type: VideoType,
+    ) -> int:
+        return sum(
+            1
+            for candidate in candidates
+            if self._candidate_counts_for_type(candidate, video_type)
+        )
 
     def _candidate_counts_for_type(
         self,

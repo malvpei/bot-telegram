@@ -712,14 +712,14 @@ def _format_pool_status(summary: dict) -> str:
         f"Fotos aptas para planes: {summary.get('total', 0)}\n"
         f"Fotos en disco sin usar: {summary.get('raw_total', summary.get('total', 0))}\n"
         f"Tipo 1 aptas: {by_type.get('1', 0)} "
-        f"({len(viable.get('1', []))} cuentas viables)\n"
+        f"({len(viable.get('1', []))} cuentas con stock minimo)\n"
         f"Tipo 2 aptas: {by_type.get('2', 0)} "
-        f"({len(viable.get('2', []))} cuentas viables)\n"
+        f"({len(viable.get('2', []))} cuentas con stock minimo)\n"
         f"Tipo 3 aptas: {by_type.get('3', 0)} "
-        f"({len(viable.get('3', []))} cuentas viables)"
+        f"({len(viable.get('3', []))} cuentas con stock minimo)"
     )
     if account_lines:
-        text += "\n\nPor cuenta viable:\n" + "\n".join(account_lines)
+        text += "\n\nPor cuenta con stock:\n" + "\n".join(account_lines)
     return text
 
 
@@ -742,13 +742,13 @@ def _format_pool_refill_summary(summary: dict) -> str:
             f"T3={after.get('by_type', {}).get('3', 0)}"
         ),
         (
-            "Cuentas viables: "
+            "Cuentas con stock minimo: "
             f"T1={len(summary.get('viable_accounts_after', {}).get('1', []))}, "
             f"T2={len(summary.get('viable_accounts_after', {}).get('2', []))}, "
             f"T3={len(summary.get('viable_accounts_after', {}).get('3', []))}"
         ),
         (
-            "Planes viables: "
+            "Stock suficiente por tipo: "
             f"T1={'si' if summary.get('viable_after', {}).get('1') else 'no'}, "
             f"T2={'si' if summary.get('viable_after', {}).get('2') else 'no'}, "
             f"T3={'si' if summary.get('viable_after', {}).get('3') else 'no'}"
@@ -778,7 +778,7 @@ def _format_pool_refill_summary(summary: dict) -> str:
     if not summary.get("ready"):
         lines.append("")
         lines.append(
-            "Aun no hay planes viables para todos los tipos. Ejecuta /download_pool "
+            "Aun no hay stock suficiente para todos los tipos. Ejecuta /download_pool "
             "otra vez cuando haya cuentas fuera de cooldown o revisa /pool."
         )
     return "\n".join(lines)

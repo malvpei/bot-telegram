@@ -65,6 +65,14 @@ class RequiresSixSelector(FakePlanSelector):
         )
 
 
+class OnlyGoodSelector(FakePlanSelector):
+    def create_plan(self, catalog, video_type, language):
+        account = next(iter(catalog))
+        if account != "good":
+            raise ValueError("not good")
+        return super().create_plan(catalog, video_type, language)
+
+
 class TypeCompatibilitySelector(FakePlanSelector):
     def _is_type_1_person_visible_media(self, candidate):
         return candidate.source_id.endswith(":TYPE1:0")
@@ -259,14 +267,14 @@ def test_pool_select_plan_never_mixes_accounts_for_one_video():
                 Language.ES,
             )
         except ValueError as error:
-            assert "No hay una cuenta viable" in str(error)
+            assert "No hay una cuenta del pool" in str(error)
         else:  # pragma: no cover - defensive assertion for readability
             raise AssertionError("pool picker must not mix accounts")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_select_plan_respects_account_attempt_limit():
+def test_pool_select_plan_tries_all_local_accounts_without_attempt_limit():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -274,11 +282,11 @@ def test_pool_select_plan_respects_account_attempt_limit():
             get_settings(),
             data_dir=root,
             state_dir=root / "state",
-            account_pick_attempts=2,
+            account_pick_attempts=1,
         )
         state = StateStore(settings.state_dir)
         items = []
-        accounts = ["alpha", "beta", "gamma"]
+        accounts = ["bad", "good"]
         for account in accounts:
             image_path = root / f"{account}.jpg"
             Image.new("RGB", (32, 32), (10, 20, 30)).save(image_path)
@@ -294,15 +302,13 @@ def test_pool_select_plan_respects_account_attempt_limit():
             settings,
             state,
             None,  # type: ignore[arg-type]
-            RequiresSixSelector(),  # type: ignore[arg-type]
+            OnlyGoodSelector(),  # type: ignore[arg-type]
         )
 
-        try:
-            service.select_plan(accounts, VideoType.TYPE_1, Language.ES)
-        except ValueError as error:
-            assert "2/3 cuentas probadas" in str(error)
-        else:  # pragma: no cover - defensive assertion for readability
-            raise AssertionError("pool picker should stop at the configured limit")
+        plan, tried = service.select_plan(accounts, VideoType.TYPE_3, Language.ES)
+
+        assert plan.chosen_account == "good"
+        assert tried == ["bad", "good"]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
