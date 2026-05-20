@@ -644,6 +644,50 @@ def test_pool_extra_image_excludes_landscape_exception_for_type_1():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_exclude_account_removes_items_and_blocks_future_selection():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        alpha_path = root / "alpha.jpg"
+        beta_path = root / "beta.jpg"
+        Image.new("RGB", (32, 32), (10, 20, 30)).save(alpha_path)
+        Image.new("RGB", (32, 32), (30, 20, 10)).save(beta_path)
+        state.write_media_pool(
+            {
+                "version": 1,
+                "cursor_by_type": {},
+                "items": [
+                    _pool_item("alpha", "alpha:POST1:0", alpha_path),
+                    _pool_item("alpha", "alpha:POST2:0", alpha_path),
+                    _pool_item("beta", "beta:POST1:0", beta_path),
+                ],
+            }
+        )
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        removed = service.exclude_account("alpha")
+        candidates = service._available_candidates_by_account(
+            state.read_media_pool(),
+            video_type=VideoType.TYPE_3,
+            usernames=["alpha", "beta"],
+            skip_accounts=[],
+        )
+
+        assert removed == 2
+        assert state.read_excluded_accounts() == {"alpha"}
+        assert "alpha" not in candidates
+        assert list(candidates) == ["beta"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _candidate(root: Path, source_id: str, dhash: str) -> MediaCandidate:
     path = root / (source_id.replace(":", "_") + ".jpg")
     Image.new("RGB", (32, 32), (100, 100, 100)).save(path)

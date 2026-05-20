@@ -37,6 +37,7 @@ class StateStore:
         self._script_history_path = self.state_dir / "script_history.json"
         self._jobs_log_path = self.state_dir / "jobs_log.json"
         self._media_pool_path = self.state_dir / "media_pool.json"
+        self._excluded_accounts_path = self.state_dir / "excluded_accounts.json"
         self._account_cooldowns_path = self.state_dir / "account_cooldowns.json"
         self._type_3_background_queue_path = self.state_dir / "type3_background_queue.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
@@ -310,6 +311,27 @@ class StateStore:
         with self._exclusive():
             self._write_json(self._media_pool_path, pool)
 
+    def read_excluded_accounts(self) -> set[str]:
+        with self._exclusive():
+            payload = self._read_json(self._excluded_accounts_path, [])
+        if not isinstance(payload, list):
+            return set()
+        return {
+            self._normalize_account_name(account)
+            for account in payload
+            if self._normalize_account_name(account)
+        }
+
+    def exclude_account(self, account: str) -> None:
+        normalized = self._normalize_account_name(account)
+        if not normalized:
+            return
+        with self._exclusive():
+            payload = self._read_json(self._excluded_accounts_path, [])
+            accounts = set(payload if isinstance(payload, list) else [])
+            accounts.add(normalized)
+            self._write_json(self._excluded_accounts_path, sorted(accounts))
+
     def read_account_cooldowns(self) -> dict[str, Any]:
         with self._exclusive():
             cooldowns = self._read_json(self._account_cooldowns_path, {})
@@ -485,6 +507,10 @@ class StateStore:
     @staticmethod
     def _bucket_key(video_type: VideoType, language: Language) -> str:
         return f"{video_type.value}:{language.value}"
+
+    @staticmethod
+    def _normalize_account_name(account: Any) -> str:
+        return str(account or "").strip().lstrip("@").lower()
 
     @staticmethod
     def _normalize_type_3_background_order(

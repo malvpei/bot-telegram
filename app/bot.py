@@ -479,8 +479,15 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if query.data == REGENERATE_SKIP_ACCOUNT:
+        service: VideoCreationService = context.application.bot_data["service"]
+        removed = await asyncio.to_thread(
+            service.exclude_account,
+            repeat_request["chosen_account"],
+        )
+        context.user_data.pop("repeat_request", None)
         await query.edit_message_text(
-            f"Paso @{repeat_request['chosen_account']} y busco la siguiente cuenta del pool."
+            f"Elimino @{repeat_request['chosen_account']} del pool "
+            f"({removed} fotos quitadas) y busco la siguiente cuenta."
         )
         await _execute_job(update, context, request)
     else:

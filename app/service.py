@@ -117,6 +117,10 @@ class VideoCreationService:
         with self._job_lock:
             return self._create_extra_image_locked(request)
 
+    def exclude_account(self, account: str) -> int:
+        with self._job_lock:
+            return self.pool.exclude_account(account)
+
     def sync_accounts(self, account_inputs: list[str]) -> dict[str, object]:
         with self._job_lock:
             usernames = extract_usernames(account_inputs, len(account_inputs) or 1)
@@ -140,6 +144,7 @@ class VideoCreationService:
     def refill_pool(self, account_inputs: list[str]) -> dict[str, object]:
         with self._job_lock:
             usernames = extract_usernames(account_inputs, len(account_inputs) or 1)
+            usernames = self._without_excluded_accounts(usernames)
             if not usernames:
                 raise ValueError("No se detectaron cuentas de Instagram válidas.")
             return self.pool.refill(usernames)
@@ -190,6 +195,7 @@ class VideoCreationService:
         usernames = extract_usernames(
             request.account_inputs, len(request.account_inputs) or 1
         )
+        usernames = self._without_excluded_accounts(usernames)
         if not usernames:
             raise ValueError("No se detectaron cuentas de Instagram vÃ¡lidas.")
 
@@ -288,6 +294,7 @@ class VideoCreationService:
         usernames = extract_usernames(
             request.account_inputs, len(request.account_inputs) or 1
         )
+        usernames = self._without_excluded_accounts(usernames)
         if not usernames:
             raise ValueError("No se detectó la cuenta de Instagram para repetir.")
         account = usernames[0]
@@ -481,6 +488,10 @@ class VideoCreationService:
             sample,
         )
         return shuffled
+
+    def _without_excluded_accounts(self, usernames: list[str]) -> list[str]:
+        excluded = self.state.read_excluded_accounts()
+        return [username for username in usernames if username.lower() not in excluded]
 
     def _max_account_attempts(self, available_count: int) -> int:
         configured = self.settings.account_pick_attempts

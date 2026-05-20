@@ -42,6 +42,12 @@ class MediaPoolService:
         self.selector = selector
 
     def refill(self, usernames: list[str]) -> dict[str, Any]:
+        excluded_accounts = self.state.read_excluded_accounts()
+        usernames = [
+            username
+            for username in usernames
+            if username.lower() not in excluded_accounts
+        ]
         target = max(1, self.settings.pool_target_images)
         pool = self._normalise_pool(self.state.read_media_pool())
         used_media = self.state.read_used_media()
@@ -192,6 +198,25 @@ class MediaPoolService:
         pool["updated_at"] = datetime.now(timezone.utc).isoformat()
         self.state.write_media_pool(pool)
 
+    def exclude_account(self, account: str) -> int:
+        normalized = account.strip().lstrip("@").lower()
+        if not normalized:
+            return 0
+        self.state.exclude_account(normalized)
+        pool = self._normalise_pool(self.state.read_media_pool())
+        before = len(pool["items"])
+        pool["items"] = [
+            item
+            for item in pool["items"]
+            if str(item.get("source_account") or "").strip().lstrip("@").lower()
+            != normalized
+        ]
+        removed = before - len(pool["items"])
+        if removed:
+            pool["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self.state.write_media_pool(pool)
+        return removed
+
     def pick_extra_image(
         self,
         account: str,
@@ -290,9 +315,12 @@ class MediaPoolService:
             used_media = self.state.read_used_media()
         allowed = {username.lower() for username in usernames}
         skipped = {account.lower() for account in skip_accounts}
+        excluded = self.state.read_excluded_accounts()
         by_account: dict[str, list[MediaCandidate]] = {}
         for item in pool["items"]:
             account = str(item.get("source_account") or "").lower()
+            if account in excluded:
+                continue
             if allowed and account not in allowed:
                 continue
             if account in skipped:
@@ -412,9 +440,13 @@ class MediaPoolService:
     ) -> dict[str, Any]:
         if used_media is None:
             used_media = self.state.read_used_media()
+        excluded = self.state.read_excluded_accounts()
         raw_total_seen: set[str] = set()
         raw_by_account: dict[str, int] = {}
         for item in pool["items"]:
+            account = str(item.get("source_account") or "").lower()
+            if account in excluded:
+                continue
             keys = list(self._item_keys(item))
             if not keys or self._keys_used(keys, used_media):
                 continue
@@ -423,7 +455,6 @@ class MediaPoolService:
             source_id = str(item.get("source_id") or "")
             if source_id:
                 raw_total_seen.add(source_id)
-            account = str(item.get("source_account") or "").lower()
             if account:
                 raw_by_account[account] = raw_by_account.get(account, 0) + 1
 
