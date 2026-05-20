@@ -982,7 +982,7 @@ def test_type_1_hook_candidate_must_pass_quality_gate(temp_workspace):
     assert hook_slide.media.source_id != candidates[0].source_id
 
 
-def test_type_1_accepts_clear_vertical_hook_when_face_detector_misses(temp_workspace):
+def test_type_1_generates_when_face_detector_misses_clear_vertical_photos(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "vertical_no_face"
     account_dir.mkdir()
@@ -1005,12 +1005,43 @@ def test_type_1_accepts_clear_vertical_hook_when_face_detector_misses(temp_works
         candidate.metrics.aspect_ratio = 0.72
 
     selector = ImageSelector(settings, state)
-    with pytest.raises(ValueError):
-        selector.create_plan(
-            {"vertical_no_face": candidates},
-            VideoType.TYPE_1,
-            Language.ES,
+    plan = selector.create_plan(
+        {"vertical_no_face": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    assert [slide.role for slide in plan.slides] == list(TYPE_1_ROLES)
+
+
+def test_type_1_can_use_multiple_images_from_same_carousel_when_needed(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "carousel_stock"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="carousel_stock", idx=i)
+        for i in range(9)
+    ]
+    for index, candidate in enumerate(candidates):
+        candidate.source_id = f"carousel_stock:POST{index // 3}:IMG{index}"
+        candidate.metrics = _metrics_stub(
+            quality=0.76,
+            daylight=0.7,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.18,
+            casual=0.14,
+            luxury=0.04,
+            portrait_focus=0.42,
         )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"carousel_stock": candidates}, VideoType.TYPE_1, Language.ES)
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    assert len(non_fixed) == 6
+    assert len({media.source_id for media in non_fixed}) == 6
 
 
 def test_type_3_uses_one_real_hook_and_one_background_for_all_tools(temp_workspace):

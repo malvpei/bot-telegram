@@ -216,10 +216,9 @@ class ImageSelector:
             role_scores: dict[SlideRole, float] = {}
 
             for role in non_fixed_roles:
-                exclude = self._exclude_ids_by_post(picked, available)
-                best = self._pick_best(
+                best = self._pick_best_with_post_preference(
                     available,
-                    exclude_ids=exclude,
+                    picked=picked,
                     score_fn=lambda media, current_role=role: self._score_type_1(
                         media, current_role
                     ),
@@ -250,6 +249,7 @@ class ImageSelector:
                     self._is_landscape_media(media)
                     and not self._is_type_1_person_visible_media(media)
                 ),
+                strict=False,
             ):
                 continue
 
@@ -320,10 +320,9 @@ class ImageSelector:
             role_scores: dict[SlideRole, float] = {}
 
             for role in non_fixed_roles:
-                exclude = self._exclude_ids_by_post(picked, available)
-                best = self._pick_best(
+                best = self._pick_best_with_post_preference(
                     available,
-                    exclude_ids=exclude,
+                    picked=picked,
                     score_fn=lambda media, current_role=role: self._score_type_2(
                         media, current_role
                     ),
@@ -552,6 +551,7 @@ class ImageSelector:
         score_fn: Callable[[MediaCandidate, SlideRole], float],
         label: str,
         landscape_fn: Callable[[MediaCandidate], bool] | None = None,
+        strict: bool = True,
     ) -> bool:
         if landscape_fn is None:
             landscape_fn = self._is_landscape_media
@@ -565,10 +565,9 @@ class ImageSelector:
         landscape_roles.sort(key=lambda role: role_scores.get(role, 0.0), reverse=True)
         for role in landscape_roles[1:]:
             original = picked[role]
-            exclude = self._exclude_ids_by_post(picked, available)
-            replacement = self._pick_best(
+            replacement = self._pick_best_with_post_preference(
                 available,
-                exclude_ids=exclude,
+                picked=picked,
                 score_fn=lambda media, current_role=role: (
                     0.0 if landscape_fn(media)
                     else score_fn(media, current_role)
@@ -581,7 +580,9 @@ class ImageSelector:
                     account,
                     original.source_id,
                 )
-                return False
+                if strict:
+                    return False
+                continue
             picked[role] = replacement.media
             role_scores[role] = replacement.score
             LOGGER.info(
@@ -627,10 +628,9 @@ class ImageSelector:
 
         for role in roles_to_replace:
             original = picked[role]
-            exclude = self._exclude_ids_by_post(picked, available)
-            replacement = self._pick_best(
+            replacement = self._pick_best_with_post_preference(
                 available,
-                exclude_ids=exclude,
+                picked=picked,
                 score_fn=lambda media, current_role=role: (
                     self._score_type_1(media, current_role)
                     if self._is_type_1_person_visible_media(media)
@@ -643,7 +643,7 @@ class ImageSelector:
                     account,
                     original.source_id,
                 )
-                return False
+                continue
             picked[role] = replacement.media
             role_scores[role] = replacement.score
             LOGGER.info(
@@ -667,11 +667,10 @@ class ImageSelector:
             or len(allowed_remaining) > 1
         ):
             LOGGER.info(
-                "tipo1 @%s: descartada, %d fotos sin persona visible",
+                "tipo1 @%s: genero con %d foto(s) sin persona detectada tras priorizar personas",
                 account,
                 len(remaining_without_person),
             )
-            return False
         return True
 
     def _move_type_1_landscape_exception_to_replaceable_role(
@@ -753,10 +752,9 @@ class ImageSelector:
 
         for role in roles_to_replace:
             original = picked[role]
-            exclude = self._exclude_ids_by_post(picked, available)
-            replacement = self._pick_best(
+            replacement = self._pick_best_with_post_preference(
                 available,
-                exclude_ids=exclude,
+                picked=picked,
                 score_fn=lambda media, current_role=role: (
                     0.0 if self._is_type_2_non_user_media(media)
                     else self._score_type_2(media, current_role)
@@ -1240,6 +1238,34 @@ class ImageSelector:
         ]
         return random.choice(top_candidates)
 
+    def _pick_best_with_post_preference(
+        self,
+        pool: list[MediaCandidate],
+        *,
+        picked: dict[SlideRole, MediaCandidate],
+        score_fn: Callable[[MediaCandidate], float],
+        accept_fn: Callable[[MediaCandidate], bool] | None = None,
+    ) -> CandidateScore | None:
+        best = self._pick_best(
+            pool,
+            exclude_ids=self._exclude_ids_by_post(picked, pool),
+            score_fn=score_fn,
+            accept_fn=accept_fn,
+        )
+        if best is not None:
+            return best
+        if not picked:
+            return None
+        LOGGER.info(
+            "No hay suficientes posts distintos; permito otra imagen del mismo carrusel"
+        )
+        return self._pick_best(
+            pool,
+            exclude_ids=self._exclude_exact_ids(picked),
+            score_fn=score_fn,
+            accept_fn=accept_fn,
+        )
+
     def _find_landscape_replacement(
         self,
         catalog: dict[str, list[MediaCandidate]],
@@ -1435,6 +1461,12 @@ class ImageSelector:
             for candidate in available
             if self._post_key(candidate) in picked_post_keys
         }
+
+    def _exclude_exact_ids(
+        self,
+        picked: dict[SlideRole, MediaCandidate],
+    ) -> set[str]:
+        return {media.source_id for media in picked.values()}
 
     def _is_extreme_luxury(self, media: MediaCandidate) -> bool:
         lowered = (media.caption or "").lower()
