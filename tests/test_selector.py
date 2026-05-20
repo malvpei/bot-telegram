@@ -193,6 +193,35 @@ def test_type_2_rejects_pool_without_visible_people(temp_workspace):
         selector.create_plan({"gamma": candidates}, VideoType.TYPE_2, Language.ES)
 
 
+def test_type_2_accepts_lifestyle_landscapes_when_user_detection_is_weak(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "lifestyle_landscape"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="lifestyle_landscape", idx=i)
+        for i in range(6)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.82,
+            daylight=0.75,
+            faces=0,
+            is_landscape=True,
+            outdoor=0.7,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"lifestyle_landscape": candidates},
+        VideoType.TYPE_2,
+        Language.ES,
+    )
+
+    assert plan.chosen_account == "lifestyle_landscape"
+    assert [slide.role for slide in plan.slides] == list(TYPE_2_ROLES)
+
+
 def test_type_1_never_uses_landscape_from_another_account(temp_workspace):
     settings, state = temp_workspace
     main_dir = settings.downloads_dir / "main"

@@ -347,7 +347,10 @@ class ImageSelector:
                 score_fn=self._score_type_2,
                 label="tipo2",
             ):
-                continue
+                LOGGER.info(
+                    "tipo2 @%s: acepto mas de una foto lifestyle porque no hay reemplazos mejores",
+                    account,
+                )
 
             if not self._enforce_type_2_user_visibility(
                 account,
@@ -356,7 +359,10 @@ class ImageSelector:
                 available,
                 replaceable_roles=TYPE_2_REPLACEABLE_FOR_LANDSCAPE,
             ):
-                continue
+                LOGGER.info(
+                    "tipo2 @%s: acepto plan lifestyle sin exigir usuario visible en todas las fotos",
+                    account,
+                )
 
             slides = self._build_slide_plans(
                 TYPE_2_ROLES,
@@ -1252,6 +1258,11 @@ class ImageSelector:
     def _score_type_2(self, media: MediaCandidate, role: SlideRole) -> float:
         metrics = media.metrics
         if metrics is None:
+            return 0.0
+        if (
+            not self._is_type_2_user_visible_media(media)
+            and not self._is_landscape_media(media)
+        ):
             return 0.0
         face_score = self._single_person_score(metrics)
         person_or_composition = max(
