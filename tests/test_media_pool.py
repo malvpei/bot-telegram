@@ -504,7 +504,7 @@ def test_pool_eligibility_uses_video_rules_with_downward_compatibility():
 
         assert object_types == []
         assert VideoType.TYPE_1.value in landscape_types
-        assert VideoType.TYPE_2.value in landscape_types
+        assert VideoType.TYPE_2.value not in landscape_types
         assert VideoType.TYPE_3.value not in landscape_types
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -533,7 +533,6 @@ def test_pool_eligibility_flows_from_higher_types_to_lower_types():
         ]
         assert service._eligible_types(type_3_photo) == [
             VideoType.TYPE_1.value,
-            VideoType.TYPE_2.value,
             VideoType.TYPE_3.value,
         ]
     finally:

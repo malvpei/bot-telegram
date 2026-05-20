@@ -516,6 +516,8 @@ class MediaPoolService:
         candidate: MediaCandidate,
         video_type: VideoType,
     ) -> bool:
+        if video_type == VideoType.TYPE_2:
+            return self.selector._is_type_2_user_visible_media(candidate)
         return any(
             self._candidate_matches_type_rules(candidate, source_type)
             for source_type in COMPATIBLE_SOURCE_TYPES_BY_REQUESTED[video_type]
@@ -597,6 +599,8 @@ class MediaPoolService:
         *,
         include_landscape_exceptions: bool,
     ) -> bool:
+        if video_type == VideoType.TYPE_2:
+            return self.selector._is_type_2_user_visible_media(candidate)
         if not include_landscape_exceptions:
             return not self.selector._is_landscape_media(candidate)
         return True

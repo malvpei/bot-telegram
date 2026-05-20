@@ -18,7 +18,7 @@ from app.models import (
     TYPE_3_ROLES,
     VideoType,
 )
-from app.selector import ImageSelector
+from app.selector import ImageSelector, TYPE_1_REPLACEABLE_FOR_LANDSCAPE
 from app.state import StateStore
 
 
@@ -193,7 +193,7 @@ def test_type_2_rejects_pool_without_visible_people(temp_workspace):
         selector.create_plan({"gamma": candidates}, VideoType.TYPE_2, Language.ES)
 
 
-def test_type_2_accepts_lifestyle_landscapes_when_user_detection_is_weak(temp_workspace):
+def test_type_2_rejects_lifestyle_landscapes_when_user_detection_is_weak(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "lifestyle_landscape"
     account_dir.mkdir()
@@ -212,14 +212,12 @@ def test_type_2_accepts_lifestyle_landscapes_when_user_detection_is_weak(temp_wo
         )
 
     selector = ImageSelector(settings, state)
-    plan = selector.create_plan(
-        {"lifestyle_landscape": candidates},
-        VideoType.TYPE_2,
-        Language.ES,
-    )
-
-    assert plan.chosen_account == "lifestyle_landscape"
-    assert [slide.role for slide in plan.slides] == list(TYPE_2_ROLES)
+    with pytest.raises(ValueError):
+        selector.create_plan(
+            {"lifestyle_landscape": candidates},
+            VideoType.TYPE_2,
+            Language.ES,
+        )
 
 
 def test_type_1_never_uses_landscape_from_another_account(temp_workspace):
@@ -347,6 +345,89 @@ def test_type_1_allows_at_most_one_landscape_without_person(temp_workspace):
     ]
     assert len(without_person) <= 1
     assert all(media.metrics.is_landscape for media in without_person)
+
+
+def test_type_1_allows_landscape_photos_when_person_is_visible(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "landscape_people"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(
+            account_dir,
+            username="landscape_people",
+            idx=i,
+            landscape=True,
+        )
+        for i in range(7)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.72,
+            daylight=0.68,
+            faces=1,
+            is_landscape=True,
+            outdoor=0.4,
+            casual=0.12,
+            luxury=0.04,
+            portrait_focus=0.5,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"landscape_people": candidates}, VideoType.TYPE_1, Language.ES)
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    assert all(selector._is_type_1_person_visible_media(media) for media in non_fixed)
+
+
+def test_type_1_moves_single_landscape_exception_to_secondary_role(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "movable_exception"
+    account_dir.mkdir()
+
+    scenic = _make_candidate(
+        account_dir,
+        username="movable_exception",
+        idx=0,
+        caption="mountain view",
+        landscape=True,
+    )
+    scenic.metrics = _metrics_stub(
+        quality=0.99,
+        daylight=0.95,
+        faces=0,
+        is_landscape=True,
+        outdoor=1.0,
+        casual=0.0,
+        luxury=0.04,
+        portrait_focus=0.0,
+    )
+    candidates = [scenic] + [
+        _make_candidate(account_dir, username="movable_exception", idx=i)
+        for i in range(1, 6)
+    ]
+    for candidate in candidates[1:]:
+        candidate.metrics = _metrics_stub(
+            quality=0.54,
+            daylight=0.52,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.08,
+            casual=0.08,
+            luxury=0.02,
+            portrait_focus=0.34,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"movable_exception": candidates}, VideoType.TYPE_1, Language.ES)
+
+    non_fixed_slides = [slide for slide in plan.slides if not slide.fixed_asset]
+    scenic_slide = next(
+        slide for slide in non_fixed_slides if slide.media.source_id == scenic.source_id
+    )
+    hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
+    assert scenic_slide.role in TYPE_1_REPLACEABLE_FOR_LANDSCAPE
+    assert selector._is_type_1_person_visible_media(hook_slide.media)
 
 
 def test_type_1_treats_scenic_vertical_photos_as_landscape_exceptions(temp_workspace):
@@ -678,6 +759,43 @@ def test_type_2_caps_landscape_dominant_images_to_one(temp_workspace):
         1 for media in non_fixed if selector._is_landscape_media(media)
     )
     assert landscape_count <= 1
+
+
+def test_type_2_prefers_people_over_higher_quality_landscapes(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "people_first"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="people_first", idx=i, caption="travel")
+        for i in range(6)
+    ]
+    for candidate in candidates[:4]:
+        candidate.metrics = _metrics_stub(
+            quality=0.58,
+            daylight=0.55,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.12,
+            casual=0.08,
+            portrait_focus=0.34,
+        )
+    for candidate in candidates[4:]:
+        candidate.metrics = _metrics_stub(
+            quality=0.99,
+            daylight=0.95,
+            faces=0,
+            is_landscape=True,
+            outdoor=1.0,
+            casual=0.0,
+            portrait_focus=0.0,
+        )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan({"people_first": candidates}, VideoType.TYPE_2, Language.ES)
+
+    non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    assert not any(selector._is_landscape_media(media) for media in non_fixed)
 
 
 def test_type_2_rejects_object_only_account(temp_workspace):
