@@ -30,6 +30,9 @@ REGENERATE_CANCEL = "regen:cancel"
 LOGGER = logging.getLogger(__name__)
 TELEGRAM_SEND_ATTEMPTS = 3
 TELEGRAM_SEND_RETRY_BASE_DELAY = 1.5
+TELEGRAM_TEXT_LIMIT = 4096
+POOL_SUMMARY_ACCOUNT_DETAIL_LIMIT = 12
+POOL_SUMMARY_ERROR_DETAIL_LIMIT = 4
 
 
 def run_bot() -> None:
@@ -217,7 +220,9 @@ async def download_pool_command(update: Update, context: ContextTypes.DEFAULT_TY
         summary = await asyncio.to_thread(service.refill_pool, accounts)
     except Exception as error:
         LOGGER.exception("Pool refill failed")
-        await status_message.edit_text(f"No pude rellenar el pool.\n\n{error}")
+        await status_message.edit_text(
+            _fit_telegram_text(f"No pude rellenar el pool.\n\n{error}")
+        )
         return
 
     await status_message.edit_text(_format_pool_refill_summary(summary))
@@ -765,37 +770,78 @@ def _format_pool_refill_summary(summary: dict) -> str:
         ),
     ]
     if added_by_account:
+        added_items = sorted(added_by_account.items())
         lines.append("")
         lines.append("Cuentas revisadas:")
-        for account, count in sorted(added_by_account.items()):
+        for account, count in added_items[:POOL_SUMMARY_ACCOUNT_DETAIL_LIMIT]:
             valid = summary.get("valid_by_account", {}).get(account, count)
             type_counts = summary.get("valid_by_type_by_account", {}).get(account, {})
             lines.append(
-                f"@{account}: {count} nuevas ({valid} guardadas; aptas para planes: "
+                f"@{_short_summary_value(account, 48)}: {count} nuevas "
+                f"({valid} guardadas; aptas para planes: "
                 f"T1={type_counts.get('1', 0)}, "
                 f"T2={type_counts.get('2', 0)}, "
                 f"T3={type_counts.get('3', 0)})"
             )
+        if len(added_items) > POOL_SUMMARY_ACCOUNT_DETAIL_LIMIT:
+            lines.append(
+                f"... y {len(added_items) - POOL_SUMMARY_ACCOUNT_DETAIL_LIMIT} "
+                "cuentas mas"
+            )
     if skipped:
         lines.append("")
         lines.append("En cooldown:")
-        lines.extend(f"@{account}" for account in skipped[:10])
+        lines.extend(
+            f"@{_short_summary_value(account, 64)}" for account in skipped[:10]
+        )
+        if len(skipped) > 10:
+            lines.append(f"... y {len(skipped) - 10} cuentas mas")
     if refreshed:
         lines.append("")
         lines.append("Refrescadas aunque estaban en cooldown por falta de stock:")
-        lines.extend(f"@{account}" for account in refreshed[:10])
+        lines.extend(
+            f"@{_short_summary_value(account, 64)}" for account in refreshed[:10]
+        )
+        if len(refreshed) > 10:
+            lines.append(f"... y {len(refreshed) - 10} cuentas mas")
     if errors:
+        error_items = sorted(errors.items())
         lines.append("")
         lines.append("Errores:")
-        for account, message in sorted(errors.items())[:8]:
-            lines.append(f"@{account}: {message}")
+        for account, message in error_items[:POOL_SUMMARY_ERROR_DETAIL_LIMIT]:
+            lines.append(
+                f"@{_short_summary_value(account, 48)}: "
+                f"{_short_summary_value(message, 180)}"
+            )
+        if len(error_items) > POOL_SUMMARY_ERROR_DETAIL_LIMIT:
+            lines.append(
+                f"... y {len(error_items) - POOL_SUMMARY_ERROR_DETAIL_LIMIT} "
+                "errores mas"
+            )
     if not summary.get("ready"):
         lines.append("")
         lines.append(
             "Aun no hay stock suficiente para todos los tipos. Ejecuta /download_pool "
             "otra vez cuando haya cuentas fuera de cooldown o revisa /pool."
         )
-    return "\n".join(lines)
+    return _fit_telegram_text("\n".join(lines))
+
+
+def _short_summary_value(value: object, limit: int) -> str:
+    text = " ".join(str(value).split())
+    if len(text) <= limit:
+        return text
+    return f"{text[: limit - 3].rstrip()}..."
+
+
+def _fit_telegram_text(text: str) -> str:
+    if len(text) <= TELEGRAM_TEXT_LIMIT:
+        return text
+    suffix = (
+        "\n\n... resumen recortado por el limite de Telegram. "
+        "Consulta /pool para ver el stock actual."
+    )
+    return f"{text[: TELEGRAM_TEXT_LIMIT - len(suffix)].rstrip()}{suffix}"
 
 
 async def _ensure_allowed(update: Update) -> bool:

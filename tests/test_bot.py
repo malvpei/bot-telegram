@@ -11,8 +11,10 @@ from app.bot import (
     REGENERATE_ACCEPT,
     REGENERATE_CANCEL,
     REGENERATE_SKIP_ACCOUNT,
+    TELEGRAM_TEXT_LIMIT,
     _ask_for_another_same_account,
     _clear_wizard_state,
+    _format_pool_refill_summary,
     _format_pool_status,
     _send_slides_text_then_image,
 )
@@ -202,3 +204,54 @@ def test_pool_status_distinguishes_raw_photos_from_usable_plan_photos():
     assert "Fotos aptas para planes: 0" in text
     assert "Fotos en disco sin usar: 2155" in text
     assert "Tipo 1 aptas: 0 (0 cuentas con stock minimo)" in text
+
+
+def test_pool_refill_summary_fits_telegram_limit_with_many_accounts():
+    accounts = {f"cuenta_{index:03d}": 1 for index in range(114)}
+    text = _format_pool_refill_summary(
+        {
+            "target": 100,
+            "before": {"total": 0},
+            "after": {
+                "total": 100,
+                "raw_total": 2246,
+                "by_type": {"1": 100, "2": 100, "3": 100},
+            },
+            "added": 100,
+            "pruned": 0,
+            "ready": True,
+            "ready_by_type": {"1": True, "2": True, "3": True},
+            "viable_accounts_after": {
+                "1": ["alpha"],
+                "2": ["alpha"],
+                "3": ["alpha"],
+            },
+            "added_by_account": accounts,
+            "valid_by_account": accounts,
+            "valid_by_type_by_account": {
+                account: {"1": 1, "2": 1, "3": 1} for account in accounts
+            },
+        }
+    )
+
+    assert len(text) <= TELEGRAM_TEXT_LIMIT
+    assert "... y 102 cuentas mas" in text
+    assert "Stock suficiente por tipo: T1=si, T2=si, T3=si" in text
+
+
+def test_pool_refill_summary_bounds_long_errors_and_account_names():
+    text = _format_pool_refill_summary(
+        {
+            "target": 100,
+            "after": {"by_type": {}},
+            "ready": False,
+            "errors": {
+                f"account_{index}" + "a" * 500: "error " + "x" * 10000
+                for index in range(30)
+            },
+        }
+    )
+
+    assert len(text) <= TELEGRAM_TEXT_LIMIT
+    assert "... y 26 errores mas" in text
+    assert "Aun no hay stock suficiente" in text
