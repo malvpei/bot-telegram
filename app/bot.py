@@ -209,7 +209,7 @@ async def download_pool_command(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     status_message = await update.effective_message.reply_text(
-        f"Rellenando pool hasta {settings.pool_target_images} fotos disponibles. "
+        f"Rellenando pool hasta {settings.pool_target_images} fotos aptas por tipo. "
         "Voy cuenta por cuenta y pongo cooldown despues de revisar cada una."
     )
     service: VideoCreationService = context.application.bot_data["service"]
@@ -735,12 +735,15 @@ def _format_pool_refill_summary(summary: dict) -> str:
     added_by_account = summary.get("added_by_account", {})
     errors = summary.get("errors", {})
     skipped = summary.get("skipped_cooldown", [])
+    refreshed = summary.get("refreshed_during_cooldown", [])
+    ready_by_type = summary.get("ready_by_type", summary.get("viable_after", {}))
     lines = [
         "Pool actualizado",
         f"Objetivo minimo de fotos aptas: {summary.get('target')}",
         f"Antes aptas: {summary.get('before', {}).get('total', 0)}",
         f"Ahora aptas: {after.get('total', 0)}",
         f"En disco sin usar: {after.get('raw_total', after.get('total', 0))}",
+        f"Retiradas por usadas/no aptas: {summary.get('pruned', 0)}",
         f"Nuevas guardadas: {summary.get('added', 0)}",
         (
             "Aptas por tipo: "
@@ -756,9 +759,9 @@ def _format_pool_refill_summary(summary: dict) -> str:
         ),
         (
             "Stock suficiente por tipo: "
-            f"T1={'si' if summary.get('viable_after', {}).get('1') else 'no'}, "
-            f"T2={'si' if summary.get('viable_after', {}).get('2') else 'no'}, "
-            f"T3={'si' if summary.get('viable_after', {}).get('3') else 'no'}"
+            f"T1={'si' if ready_by_type.get('1') else 'no'}, "
+            f"T2={'si' if ready_by_type.get('2') else 'no'}, "
+            f"T3={'si' if ready_by_type.get('3') else 'no'}"
         ),
     ]
     if added_by_account:
@@ -777,6 +780,10 @@ def _format_pool_refill_summary(summary: dict) -> str:
         lines.append("")
         lines.append("En cooldown:")
         lines.extend(f"@{account}" for account in skipped[:10])
+    if refreshed:
+        lines.append("")
+        lines.append("Refrescadas aunque estaban en cooldown por falta de stock:")
+        lines.extend(f"@{account}" for account in refreshed[:10])
     if errors:
         lines.append("")
         lines.append("Errores:")
