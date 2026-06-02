@@ -111,7 +111,7 @@ class ScriptGenerator:
     def _build_type_1_es(self) -> ScriptPackage:
         variants = {
             "a": {
-                SlideRole.HOOK: "Exactamente cuánto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejé...",
+                SlideRole.HOOK: "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo...",
                 SlideRole.OCTOBER: "Octubre - 0€\nLancé mi primera tienda supermotivado. Puse algo de dinero en anuncios, tuve un montón de vistas, pero nadie compró. Fue un buen golpe de realidad y perdí mi presupuesto.",
                 SlideRole.NOVEMBER: "Noviembre - 0€\nPausé los anuncios de golpe para no perder más dinero. Me pasé todo el mes tocando el diseño de la tienda e intentando conseguir más visitas orgánicas. Igualmente, seguía en 0 ventas.",
                 SlideRole.DECEMBER: "Diciembre - 0€\nLa campaña navideña pasó de largo. Veía a todo el mundo facturando y yo seguía atascado, sobrepensando qué producto lanzar por miedo a equivocarme otra vez.",
@@ -120,7 +120,7 @@ class ScriptGenerator:
                 SlideRole.MARCH: "Marzo - 2700€\nPor fin tengo ventas de forma constante. Estuve a punto de rendirme antes de aprender que lo que importa es la constancia y saber actuar sobre métricas y datos reales.",
             },
             "b": {
-                SlideRole.HOOK: "Exactamente cuánto facturé en mis primeros 6 meses en Dropshipping y por qué casi lo dejé...",
+                SlideRole.HOOK: "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo....",
                 SlideRole.OCTOBER: "Octubre - 0€\nEmpecé con muchas ganas, pero sin tener ni idea. Me pasé el mes montando la web y buscando productos que me parecieran buenos, pero no conseguí ni una sola venta.",
                 SlideRole.NOVEMBER: "Noviembre - 0€\nMe frustraba ver que pasaban las semanas y no avanzaba. Seguía retocando la tienda y mirando tutoriales, pero me daba miedo empezar con anuncios y perder dinero, así que me quedé estancado.",
                 SlideRole.DECEMBER: "Diciembre - 0€\nVeía a todo el mundo facturando por Navidad y yo seguía igual. Me sentía incapaz de encontrar un producto que funcionara y la presión de ver que otros lo conseguían me estaba quemando.",
@@ -201,7 +201,7 @@ class ScriptGenerator:
     def _build_type_1_en(self) -> ScriptPackage:
         variants = {
             "a": {
-                SlideRole.HOOK: "Exactly how much I made doing Dropshipping in these 6 months and why I almost quit...",
+                SlideRole.HOOK: "How much I made doing Dropshipping in these 6 months and why I almost quit...",
                 SlideRole.OCTOBER: "October - $0\nI launched my first store feeling super motivated. I put some money into ads, got a lot of views, but nobody bought. It was a real reality check and I lost my budget.",
                 SlideRole.NOVEMBER: "November - $0\nI paused the ads right away so I would not lose more money. I spent the whole month tweaking the store design and trying to get more organic traffic. Even so, I was still at 0 sales.",
                 SlideRole.DECEMBER: "December - $0\nThe Christmas season passed me by. I watched everyone else making money while I stayed stuck, overthinking which product to launch because I was scared of getting it wrong again.",
@@ -210,7 +210,7 @@ class ScriptGenerator:
                 SlideRole.MARCH: "March - $2700\nI finally have sales coming in consistently. I was close to giving up before learning that what really matters is consistency and knowing how to act on real metrics and data.",
             },
             "b": {
-                SlideRole.HOOK: "Exactly how much I made in revenue in my first 6 months of Dropshipping and why I almost quit...",
+                SlideRole.HOOK: "How much I made in revenue in my first 6 months of Dropshipping and why I almost quit...",
                 SlideRole.OCTOBER: "October - $0\nI started with a lot of excitement, but without really knowing anything. I spent the whole month building the website and looking for products that seemed good to me, but I did not get a single sale.",
                 SlideRole.NOVEMBER: "November - $0\nIt frustrated me to see the weeks go by without making progress. I kept tweaking the store and watching tutorials, but I was scared to start ads and lose money, so I stayed stuck.",
                 SlideRole.DECEMBER: "December - $0\nI watched everyone making money at Christmas while I stayed exactly the same. I felt unable to find a product that worked, and the pressure of seeing others succeed was burning me out.",
@@ -412,17 +412,17 @@ class ScriptGenerator:
     def _build_type_2_es(self) -> ScriptPackage:
         variants = {
             "a": {
-                SlideRole.HOOK: "Habría pagado por saber estas 4 cosas cuando empecé con Dropshipping",
+                SlideRole.HOOK: "Habría pagado por saber estas 4 cosas cuando empecé en Dropshipping",
                 SlideRole.TIP1: "1. Valida con poco presupuesto\nNo trates la publicidad como una apuesta. Invierte pequeñas sumas para testear qué anuncios funcionan y escala solo cuando los datos confirmen la rentabilidad.",
                 SlideRole.TIP2: "2. Cuida al cliente tras el pago\nLa venta no termina cuando recibes el dinero. Un soporte rápido y amable evita reclamaciones bancarias y asegura la continuidad de tu cuenta.",
                 SlideRole.TIP3: "3. Prioriza nichos sobre productos virales\nEvita la competencia saturada buscando soluciones para audiencias específicas. Usa Dropradar para validar productos con potencial y tener ventaja sobre tu competencia.",
-                SlideRole.TIP4: "4. Proyecta profesionalidad y transparencia\nLa venta no termina cuando recibes el dinero. Un soporte rápido y amable evita reclamaciones bancarias y asegura la continuidad de tu cuenta.",
+                SlideRole.TIP4: "4. Proyecta confianza y transparencia\Muestra tu producto real en uso, sé honesto con los tiempos de envío y destaca políticas de garantía claras, esta autenticidad elimina las dudas del espectador disparando tus conversiones.",
             },
             "b": {
                 SlideRole.HOOK: "Errores que veo en pequeños Dropshippers que están empezando",
-                SlideRole.TIP1: '1. Ten una tienda con aspecto "barato"\nSi tu web parece una plantilla de hace diez años, nadie confiará en ti. Añade reseñas, ofrece ofertas, sé sincero con los tiempos de envío e intenta reducirlos para conseguir ventas reales.',
-                SlideRole.TIP2: "2. Trata los anuncios como una tragaperras\nNo lances dinero a Facebook o TikTok esperando un milagro. Empieza con poco, prueba diferentes enfoques y usa el contenido orgánico para ver qué funciona antes de invertir fuerte.",
-                SlideRole.TIP3: "3. Vende lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
+                SlideRole.TIP1: '1. Teneruna tienda con aspecto "barato"\nSi tu web parece una plantilla de hace diez años, nadie confiará en ti. Añade reseñas, ofrece ofertas, sé sincero con los tiempos de envío e intenta reducirlos para conseguir ventas reales.',
+                SlideRole.TIP2: "2. Tratar los anuncios como una tragaperras\nNo lances dinero a Facebook o TikTok esperando un milagro. Empieza con poco, prueba diferentes enfoques y usa el contenido orgánico para ver qué funciona antes de invertir fuerte.",
+                SlideRole.TIP3: "3. Vender lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
                 SlideRole.TIP4: "4. Descuidar el trato con el comprador\nConseguir el pago es solo la mitad del trabajo. Si no ayudas al cliente tras la compra, tu reputación y tu cuenta bancaria lo pagarán. Una comunicación rápida evita devoluciones y protege tu negocio.",
             },
         }
@@ -435,7 +435,7 @@ class ScriptGenerator:
                 SlideRole.TIP1: "1. Validate with a small budget\nDo not treat advertising like a bet. Invest small amounts to test which ads work and scale only when the data confirms profitability.",
                 SlideRole.TIP2: "2. Take care of the customer after payment\nThe sale does not end when you receive the money. Fast, friendly support prevents bank claims and protects the continuity of your account.",
                 SlideRole.TIP3: "3. Prioritize niches over viral products\nAvoid saturated competition by looking for solutions for specific audiences. Use Dropradar to validate products with potential and gain an advantage over your competition.",
-                SlideRole.TIP4: "4. Project professionalism and transparency\nThe sale does not end when you receive the money. Fast, friendly support prevents bank claims and protects the continuity of your account.",
+                SlideRole.TIP4: "4. Project trust and transparency\nShow your real product in use, be honest about shipping times, and highlight clear guarantee policies. This authenticity eliminates viewer doubts, skyrocketing your conversions..",
             },
             "b": {
                 SlideRole.HOOK: "Mistakes I see small Dropshippers making when they are starting out",
