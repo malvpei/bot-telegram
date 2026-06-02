@@ -416,7 +416,7 @@ class ScriptGenerator:
                 SlideRole.TIP1: "1. Valida con poco presupuesto\nNo trates la publicidad como una apuesta. Invierte pequeñas sumas para testear qué anuncios funcionan y escala solo cuando los datos confirmen la rentabilidad.",
                 SlideRole.TIP2: "2. Cuida al cliente tras el pago\nLa venta no termina cuando recibes el dinero. Un soporte rápido y amable evita reclamaciones bancarias y asegura la continuidad de tu cuenta.",
                 SlideRole.TIP3: "3. Prioriza nichos sobre productos virales\nEvita la competencia saturada buscando soluciones para audiencias específicas. Usa Dropradar para validar productos con potencial y tener ventaja sobre tu competencia.",
-                SlideRole.TIP4: "4. Proyecta confianza y transparencia\Muestra tu producto real en uso, sé honesto con los tiempos de envío y destaca políticas de garantía claras, esta autenticidad elimina las dudas del espectador disparando tus conversiones.",
+                SlideRole.TIP4: "4. Proyecta confianza y transparencia\nMuestra tu producto real en uso, sé honesto con los tiempos de envío y destaca políticas de garantía claras, esta autenticidad elimina las dudas del espectador disparando tus conversiones.",
             },
             "b": {
                 SlideRole.HOOK: "Errores que veo en pequeños Dropshippers que están empezando",
