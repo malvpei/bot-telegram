@@ -257,7 +257,6 @@ class MediaPoolService:
             video_type=video_type,
             usernames=[account],
             skip_accounts=[],
-            include_landscape_exceptions=False,
             used_media=used_media,
         )
         candidates = candidates_by_account.get(account, [])
@@ -265,7 +264,11 @@ class MediaPoolService:
             raise ValueError(
                 f"No quedan fotos disponibles de @{account} en el pool."
             )
-        return self.selector.pick_extra_image(candidates, video_type)
+        return self.selector.pick_extra_image(
+            candidates,
+            video_type,
+            allow_plan_compatible_fallback=True,
+        )
 
     def stock_counts(self) -> dict[str, Any]:
         used_media = self.state.read_used_media()

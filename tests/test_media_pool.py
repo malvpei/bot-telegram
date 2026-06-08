@@ -752,7 +752,7 @@ def test_pool_item_with_type_2_eligibility_can_be_used_for_type_1_only_downwards
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_extra_image_excludes_landscape_exception_for_type_1():
+def test_pool_extra_image_prefers_non_landscape_person_for_type_1():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -794,6 +794,41 @@ def test_pool_extra_image_excludes_landscape_exception_for_type_1():
         picked = service.pick_extra_image("alpha", VideoType.TYPE_1)
 
         assert picked.source_id == "alpha:PERSON:0"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_extra_image_falls_back_to_plan_compatible_landscape_for_type_1():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        selector = ImageSelector(settings, state)
+        service = MediaPoolService(settings, state, None, selector)  # type: ignore[arg-type]
+        image_path = root / "landscape.jpg"
+        Image.new("RGB", (64, 32), (10, 20, 30)).save(image_path)
+        state.write_media_pool(
+            {
+                "version": 1,
+                "cursor_by_type": {},
+                "items": [
+                    _pool_item(
+                        "alpha",
+                        "alpha:LANDSCAPE:0",
+                        image_path,
+                        faces=0,
+                        is_landscape=True,
+                        quality=0.95,
+                        eligible_types=[VideoType.TYPE_1.value],
+                    ),
+                ],
+            }
+        )
+
+        picked = service.pick_extra_image("alpha", VideoType.TYPE_1)
+
+        assert picked.source_id == "alpha:LANDSCAPE:0"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

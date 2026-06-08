@@ -69,7 +69,7 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "Exactamente cuánto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejé..."
+        == "Exactamente cuánto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo..."
     )
     assert "Febrero - 800€" in first.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 2700€" in first.slides_by_role[SlideRole.MARCH]
@@ -79,7 +79,7 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Exactamente cuánto facturé en mis primeros 6 meses en Dropshipping y por qué casi lo dejé..."
+        == "Exactamente cuánto facturé en mis primeros 6 meses en Dropshipping y por qué casi lo dejo..."
     )
     assert "Febrero - 680€" in second.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 3100€" in second.slides_by_role[SlideRole.MARCH]
@@ -92,7 +92,7 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "Exactly how much I made doing Dropshipping in these 6 months and why I almost quit..."
+        == "Exactly how much I made doing Dropshipping in my firsy 6 months and why I almost quit..."
     )
     assert "February - $800" in first.slides_by_role[SlideRole.FEBRUARY]
     assert "March - $2700" in first.slides_by_role[SlideRole.MARCH]
@@ -102,7 +102,7 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Exactly how much I made in revenue in my first 6 months of Dropshipping and why I almost quit..."
+        == "Exactly how much I earned doing Dropshipping in my first 6 months and why I almost quit..."
     )
     assert "February - $680" in second.slides_by_role[SlideRole.FEBRUARY]
     assert "March - $3100" in second.slides_by_role[SlideRole.MARCH]

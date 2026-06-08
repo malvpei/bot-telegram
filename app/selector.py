@@ -160,6 +160,8 @@ class ImageSelector:
         self,
         media_items: list[MediaCandidate],
         video_type: VideoType,
+        *,
+        allow_plan_compatible_fallback: bool = False,
     ) -> MediaCandidate:
         self._prepare_candidates(media_items)
         available = [
@@ -174,6 +176,15 @@ class ImageSelector:
             exclude_ids=set(),
             score_fn=lambda media: self._score_extra_image(media, video_type),
         )
+        if best is None and allow_plan_compatible_fallback:
+            best = self._pick_best(
+                available,
+                exclude_ids=set(),
+                score_fn=lambda media: self._score_plan_compatible_extra_image(
+                    media,
+                    video_type,
+                ),
+            )
         if best is None:
             raise ValueError(
                 "No encontré otra imagen válida de esa cuenta sin repetir."
@@ -1430,6 +1441,32 @@ class ImageSelector:
                 self._score_type_1(media, SlideRole.MARCH),
             )
         if video_type == VideoType.TYPE_2:
+            return max(
+                self._score_type_2(media, SlideRole.HOOK),
+                self._score_type_2(media, SlideRole.TIP1),
+                self._score_type_2(media, SlideRole.TIP4),
+            )
+        return self._score_type_3_hook(media)
+
+    def _score_plan_compatible_extra_image(
+        self,
+        media: MediaCandidate,
+        video_type: VideoType,
+    ) -> float:
+        if video_type == VideoType.TYPE_1:
+            if not (
+                self._is_type_1_person_visible_media(media)
+                or self._is_landscape_media(media)
+            ):
+                return 0.0
+            return max(
+                self._score_type_1(media, SlideRole.HOOK),
+                self._score_type_1(media, SlideRole.OCTOBER),
+                self._score_type_1(media, SlideRole.MARCH),
+            )
+        if video_type == VideoType.TYPE_2:
+            if not self._is_type_2_user_visible_media(media):
+                return 0.0
             return max(
                 self._score_type_2(media, SlideRole.HOOK),
                 self._score_type_2(media, SlideRole.TIP1),

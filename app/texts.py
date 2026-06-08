@@ -111,7 +111,7 @@ class ScriptGenerator:
     def _build_type_1_es(self) -> ScriptPackage:
         variants = {
             "a": {
-                SlideRole.HOOK: "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo...",
+                SlideRole.HOOK: "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y por qué casi lo dejo...",
                 SlideRole.OCTOBER: "Octubre - 0€\nLancé mi primera tienda supermotivado. Puse algo de dinero en anuncios, tuve un montón de vistas, pero nadie compró. Fue un buen golpe de realidad y perdí mi presupuesto.",
                 SlideRole.NOVEMBER: "Noviembre - 0€\nPausé los anuncios de golpe para no perder más dinero. Me pasé todo el mes tocando el diseño de la tienda e intentando conseguir más visitas orgánicas. Igualmente, seguía en 0 ventas.",
                 SlideRole.DECEMBER: "Diciembre - 0€\nLa campaña navideña pasó de largo. Veía a todo el mundo facturando y yo seguía atascado, sobrepensando qué producto lanzar por miedo a equivocarme otra vez.",
@@ -126,7 +126,7 @@ class ScriptGenerator:
                 SlideRole.DECEMBER: "Diciembre - 0€\nVeía a todo el mundo facturando por Navidad y yo seguía igual. Me sentía incapaz de encontrar un producto que funcionara y la presión de ver que otros lo conseguían me estaba quemando.",
                 SlideRole.JANUARY: "Enero - 0€\nEstaba totalmente desmotivado. Pagar la cuota de Shopify sin vender nada me parecía tirar el dinero y estuve a un paso de cerrar la cuenta y olvidarme de todo.",
                 SlideRole.FEBRUARY: "Febrero - 680€\nVi a un dropshipper que sigo usando Dropradar y decidí darle una última oportunidad. Elegí un producto basándome en sus datos y métricas y, por primera vez, empecé a vender de verdad.",
-                SlideRole.MARCH: "Marzo - 3100€\nNo soy millonario, pero por fin tengo un negocio que funciona. Me alegro de no haberme rendido en enero; la clave era la constancia y dejar de adivinar qué producto iba a funcionar.",
+                SlideRole.MARCH: "Marzo - 3100€\nNo soy millonario, pero por fin tengo un negocio que funciona. Me alegro de no haberme rendido en enero la clave era la constancia y dejar de adivinar qué producto iba a funcionar.",
             },
         }
         return self._compose_type_1_fixed(language=Language.ES, variants=variants)
@@ -201,7 +201,7 @@ class ScriptGenerator:
     def _build_type_1_en(self) -> ScriptPackage:
         variants = {
             "a": {
-                SlideRole.HOOK: "How much I made doing Dropshipping in these 6 months and why I almost quit...",
+                SlideRole.HOOK: "How much I earned doing Dropshipping in my first 6 months and why I almost quit...",
                 SlideRole.OCTOBER: "October - $0\nI launched my first store feeling super motivated. I put some money into ads, got a lot of views, but nobody bought. It was a real reality check and I lost my budget.",
                 SlideRole.NOVEMBER: "November - $0\nI paused the ads right away so I would not lose more money. I spent the whole month tweaking the store design and trying to get more organic traffic. Even so, I was still at 0 sales.",
                 SlideRole.DECEMBER: "December - $0\nThe Christmas season passed me by. I watched everyone else making money while I stayed stuck, overthinking which product to launch because I was scared of getting it wrong again.",
@@ -210,13 +210,13 @@ class ScriptGenerator:
                 SlideRole.MARCH: "March - $2700\nI finally have sales coming in consistently. I was close to giving up before learning that what really matters is consistency and knowing how to act on real metrics and data.",
             },
             "b": {
-                SlideRole.HOOK: "How much I made in revenue in my first 6 months of Dropshipping and why I almost quit...",
+                SlideRole.HOOK: "How much I made doing Dropshipping in my first 6 months and why I almost quit...",
                 SlideRole.OCTOBER: "October - $0\nI started with a lot of excitement, but without really knowing anything. I spent the whole month building the website and looking for products that seemed good to me, but I did not get a single sale.",
                 SlideRole.NOVEMBER: "November - $0\nIt frustrated me to see the weeks go by without making progress. I kept tweaking the store and watching tutorials, but I was scared to start ads and lose money, so I stayed stuck.",
                 SlideRole.DECEMBER: "December - $0\nI watched everyone making money at Christmas while I stayed exactly the same. I felt unable to find a product that worked, and the pressure of seeing others succeed was burning me out.",
                 SlideRole.JANUARY: "January - $0\nI was completely unmotivated. Paying the Shopify fee without selling anything felt like throwing money away, and I was one step away from closing the account and forgetting about everything.",
                 SlideRole.FEBRUARY: "February - $680\nI saw a dropshipper I follow using Dropradar, and I decided to give it one last chance. I picked a product based on its data and metrics and, for the first time, I started selling for real.",
-                SlideRole.MARCH: "March - $3100\nI am not a millionaire, but I finally have a business that works. I am glad I did not give up in January; the key was consistency and stopping the guessing game about which product would work.",
+                SlideRole.MARCH: "March - $3100\nI am not a millionaire, but I finally have a business that works. I am glad I did not give up in January the key was consistency and stopping the guessing game about which product would work.",
             },
         }
         return self._compose_type_1_fixed(language=Language.EN, variants=variants)

@@ -365,7 +365,11 @@ class VideoCreationService:
             candidates = self.collector.collect_one(account, use_cache=False)
         except TypeError:
             candidates = self.collector.collect_one(account)
-        return self.selector.pick_extra_image(candidates, video_type)
+        return self.selector.pick_extra_image(
+            candidates,
+            video_type,
+            allow_plan_compatible_fallback=True,
+        )
 
     def _render_outputs(self, plan: VideoPlan, job_dir: Path) -> tuple[Path | None, Path]:
         LOGGER.info(

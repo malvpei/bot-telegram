@@ -625,6 +625,41 @@ def test_extra_image_requires_non_landscape_person_for_every_type(temp_workspace
         assert picked.source_id == person.source_id
 
 
+def test_extra_image_plan_compatible_fallback_allows_type_1_landscape(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "extra_fallback"
+    account_dir.mkdir()
+
+    landscape = _make_candidate(
+        account_dir,
+        username="extra_fallback",
+        idx=1,
+        landscape=True,
+    )
+    landscape.metrics = _metrics_stub(
+        quality=0.99,
+        daylight=0.95,
+        faces=0,
+        is_landscape=True,
+        outdoor=1.0,
+        casual=0.1,
+        portrait_focus=0.0,
+    )
+
+    selector = ImageSelector(settings, state)
+
+    with pytest.raises(ValueError):
+        selector.pick_extra_image([landscape], VideoType.TYPE_1)
+
+    picked = selector.pick_extra_image(
+        [landscape],
+        VideoType.TYPE_1,
+        allow_plan_compatible_fallback=True,
+    )
+
+    assert picked.source_id == landscape.source_id
+
+
 def test_type_2_allows_zero_landscapes_even_if_another_account_has_them(temp_workspace):
     settings, state = temp_workspace
     main_dir = settings.downloads_dir / "lifestyle"

@@ -56,7 +56,13 @@ class PlanWhenGoodSelector:
 
 
 class ExtraImageSelector:
-    def pick_extra_image(self, candidates, video_type):
+    def pick_extra_image(
+        self,
+        candidates,
+        video_type,
+        *,
+        allow_plan_compatible_fallback=False,
+    ):
         return candidates[0]
 
     def reservation_keys_for(self, media_items):
