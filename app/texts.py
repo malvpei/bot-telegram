@@ -128,6 +128,15 @@ class ScriptGenerator:
                 SlideRole.FEBRUARY: "Febrero - 680€\nVi a un dropshipper que sigo usando Dropradar y decidí darle una última oportunidad. Elegí un producto basándome en sus datos y métricas y, por primera vez, empecé a vender de verdad.",
                 SlideRole.MARCH: "Marzo - 3100€\nNo soy millonario, pero por fin tengo un negocio que funciona. Me alegro de no haberme rendido en enero la clave era la constancia y dejar de adivinar qué producto iba a funcionar.",
             },
+            "c": {
+                SlideRole.HOOK: "Exactamente cuánto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo.",
+                SlideRole.OCTOBER: "Octubre - 0€\nMe obsesioné con crear la marca perfecta. Pagué un logo, diseñé una web increíble y elegí productos que a mí me parecían bonitos. Mucho esfuerzo, cero ventas.",
+                SlideRole.NOVEMBER: "Noviembre - 0€\nPensé que la gente no confiaba en la tienda. Mejoré las descripciones, metí más fotos y gasté mis primeros euros en TikTok Ads. Mi presupuesto desapareció sin resultados.",
+                SlideRole.DECEMBER: "Diciembre - 74€\nEmpecé a subir productos al azar desde AliExpress a ver si sonaba la flauta. Cayeron tres ventas, pero los envíos eran carísimos y tardaban semanas. Trabajaba literalmente gratis.",
+                SlideRole.JANUARY: "Enero - 0€\nMe quedé sin un euro para publicidad. Estaba mentalmente agotado de intentar vender cosas que a nadie le interesaban. Tiré la toalla y dejé la tienda abandonada.",
+                SlideRole.FEBRUARY: "Febrero - 1220€\nYa resignado, vi en un foro a otros dropshippers hablando de usar Dropradar para ver qué productos tenían demanda real. Lo probé por pura frustración. Di con un ganador y las ventas explotaron el primer día.",
+                SlideRole.MARCH: "Marzo - 3100€\nNo soy rico ni viajo en jet privado. Pero escalando ese producto ganador al máximo, logré mi mayor facturación. Moraleja: vende lo que la gente ya está buscando, no lo que tú crees.",
+            },
         }
         return self._compose_type_1_fixed(language=Language.ES, variants=variants)
         hook_options = {
@@ -217,6 +226,15 @@ class ScriptGenerator:
                 SlideRole.JANUARY: "January - $0\nI was completely unmotivated. Paying the Shopify fee without selling anything felt like throwing money away, and I was one step away from closing the account and forgetting about everything.",
                 SlideRole.FEBRUARY: "February - $680\nI saw a dropshipper I follow using Dropradar, and I decided to give it one last chance. I picked a product based on its data and metrics and, for the first time, I started selling for real.",
                 SlideRole.MARCH: "March - $3100\nI am not a millionaire, but I finally have a business that works. I am glad I did not give up in January the key was consistency and stopping the guessing game about which product would work.",
+            },
+            "c": {
+                SlideRole.HOOK: "Exactly how much I made doing Dropshipping in my first 6 months and why I almost quit.",
+                SlideRole.OCTOBER: "October - 0€\nI became obsessed with creating the perfect brand. I paid for a logo, designed an incredible website, and chose products that I thought were pretty. A lot of effort, zero sales.",
+                SlideRole.NOVEMBER: "November - 0€\nI thought people didn't trust the store. I improved the descriptions, added more photos, and spent my first euros on TikTok Ads. My budget disappeared with no results.",
+                SlideRole.DECEMBER: "December - 74€\nI started uploading random products from AliExpress to see if I'd get lucky. I got three sales, but shipping was extremely expensive and took weeks. I was literally working for free.",
+                SlideRole.JANUARY: "January - 0€\nI ran out of money for advertising. I was mentally exhausted from trying to sell things that nobody was interested in. I threw in the towel and left the store abandoned.",
+                SlideRole.FEBRUARY: "February - 1220€\nAlready resigned, I saw other dropshippers in a forum talking about using Dropradar to see which products had real demand. I tried it out of pure frustration. I found a winner and sales exploded on the first day.",
+                SlideRole.MARCH: "March - 3100€\nI'm not rich and I don't travel in a private jet. But by scaling that winning product to the max, I achieved my highest revenue. Moral of the story: sell what people are already looking for, not what you think.",
             },
         }
         return self._compose_type_1_fixed(language=Language.EN, variants=variants)
@@ -425,6 +443,13 @@ class ScriptGenerator:
                 SlideRole.TIP3: "3. Vender lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
                 SlideRole.TIP4: "4. Descuidar el trato con el comprador\nConseguir el pago es solo la mitad del trabajo. Si no ayudas al cliente tras la compra, tu reputación y tu cuenta bancaria lo pagarán. Una comunicación rápida evita devoluciones y protege tu negocio.",
             },
+            "c": {
+                SlideRole.HOOK: "4 consejos de Dropshipping que me habrían ahorrado muchos errores",
+                SlideRole.TIP1: "1. No compitas tirando los precios por los suelos para conseguir tu primera venta rápida. Si tu margen de beneficio es minúsculo, cualquier pequeño gasto imprevisto en publicidad o en posibles devoluciones te dejará en números rojos. Mejor esfuérzate en construir una oferta irresistible alrededor de tu producto.",
+                SlideRole.TIP2: "2. Contacta siempre con tus proveedores para confirmar su capacidad antes de escalar una campaña publicitaria. De nada sirve que un anuncio funcione genial si la fábrica no tiene stock o tarda semanas en procesar pedidos, ya que acabarás lidiando con decenas de clientes exigiendo su dinero.",
+                SlideRole.TIP3: "3. Deja de intentar adivinar qué se va a vender basándote únicamente en tu intuición o en lo que te parece visualmente atractivo. El éxito llega cuando ofreces lo que el mercado ya está pidiendo a gritos, así que apóyate en herramientas como Dropradar para basarte en datos reales y encontrar productos ganadores.",
+                SlideRole.TIP4: "4. Tus anuncios de vídeo deben centrarse en el problema que resuelves y no en enumerar características técnicas aburridas. Aprovecha los tres primeros segundos para captar la atención del espectador mostrándole de forma visual y muy directa cómo tu artículo le va a hacer la vida más fácil.",
+            },
         }
         return self._compose_type_2_fixed(Language.ES, variants)
 
@@ -443,6 +468,13 @@ class ScriptGenerator:
                 SlideRole.TIP2: "2. Treating ads like a slot machine\nDo not throw money at Facebook or TikTok hoping for a miracle. Start small, test different angles and use organic content to see what works before investing heavily.",
                 SlideRole.TIP3: "3. Selling the same thing as everyone else\nViral products have too much competition and no margin. Look for niches that solve real problems and lean on tools like Dropradar to find profitable products.",
                 SlideRole.TIP4: "4. Neglecting the buyer experience\nGetting the payment is only half the job. If you do not help the customer after purchase, your reputation and your bank account will pay for it. Fast communication prevents refunds and protects your business.",
+            },
+            "c": {
+                SlideRole.HOOK: "4 Dropshipping lessons that would have saved me a lot of mistakes",
+                SlideRole.TIP1: "1. Don't compete by slashing prices to the ground just to get your first quick sale. If your profit margin is tiny, any small unexpected expense in advertising or potential returns will put you in the red. Instead, focus your efforts on building an irresistible offer around your product.",
+                SlideRole.TIP2: "2. Always contact your suppliers to confirm their capacity before scaling an advertising campaign. It is useless for an ad to perform great if the factory has no stock or takes weeks to process orders, as you will end up dealing with dozens of angry customers demanding their money back.",
+                SlideRole.TIP3: "3. Stop trying to guess what will sell based solely on your intuition or what you find visually appealing. Success comes when you offer what the market is already crying out for, so lean on tools like Dropradar to base your decisions on real data and find winning products.",
+                SlideRole.TIP4: "4. Your video ads should focus on the problem you solve rather than listing boring technical features. Use the first three seconds to grab the viewer's attention by showing them visually and very directly how your item is going to make their life easier.",
             },
         }
         return self._compose_type_2_fixed(Language.EN, variants)
@@ -489,9 +521,22 @@ class ScriptGenerator:
                     raise ValueError(
                         f"Tipo 2 ({role.value}): el texto contiene el carácter prohibido '{token}'."
                     )
-            if role != SlideRole.HOOK and "\n" not in slide:
+            if role == SlideRole.HOOK:
+                continue
+            expected_prefix = f"{role.value[-1]}."
+            if not slide.startswith(expected_prefix):
                 raise ValueError(
-                    f"Tipo 2 ({role.value}): el consejo debe separar título y texto."
+                    f"Tipo 2 ({role.value}): el consejo debe empezar por '{expected_prefix}'."
+                )
+            if "\n" in slide:
+                title, body = slide.split("\n", 1)
+                if not title.strip() or not body.strip():
+                    raise ValueError(
+                        f"Tipo 2 ({role.value}): el consejo debe tener título y texto."
+                    )
+            elif not slide[len(expected_prefix):].strip():
+                raise ValueError(
+                    f"Tipo 2 ({role.value}): el consejo debe tener texto."
                 )
         if "Dropradar" not in slides_by_role.get(SlideRole.TIP3, ""):
             raise ValueError("Tipo 2: el consejo 3 debe mencionar Dropradar.")

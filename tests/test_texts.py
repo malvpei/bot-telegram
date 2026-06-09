@@ -40,15 +40,17 @@ def test_type_1_es_has_seven_slides_and_dropradar_in_february(state_dir):
 
 def test_type_1_hooks_are_short_and_example_like(state_dir):
     generator = _make_generator(state_dir)
-    exact_count = 0
-    for _ in range(30):
+    hooks = set()
+    for _ in range(3):
         package = generator.generate(VideoType.TYPE_1, Language.ES)
+        generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, package.choice_key)
         hook = package.slides_by_role[SlideRole.HOOK]
-        if hook.startswith(("Exactamente cuanto", "Exactamente cuánto")):
-            exact_count += 1
         assert len(hook) <= 95
         assert "Dropshipping" in hook
-    assert exact_count >= 24
+        assert any(term in hook for term in ("gané", "facturé"))
+        hooks.add(hook)
+    assert len(hooks) == 3
+    assert any(hook.startswith(("Exactamente cuanto", "Exactamente cuánto")) for hook in hooks)
 
 
 def test_type_1_amounts_are_coherent(state_dir):
@@ -69,7 +71,7 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "Exactamente cuánto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo..."
+        == "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y por qué casi lo dejo..."
     )
     assert "Febrero - 800€" in first.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 2700€" in first.slides_by_role[SlideRole.MARCH]
@@ -79,10 +81,23 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Exactamente cuánto facturé en mis primeros 6 meses en Dropshipping y por qué casi lo dejo..."
+        == "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo...."
     )
     assert "Febrero - 680€" in second.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 3100€" in second.slides_by_role[SlideRole.MARCH]
+
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, second.choice_key)
+    third = generator.generate(VideoType.TYPE_1, Language.ES)
+    assert third.choice_key == "c"
+    assert (
+        third.slides_by_role[SlideRole.HOOK]
+        == "Exactamente cuánto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo."
+    )
+    assert "Febrero - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
+    assert "Marzo - 3100€" in third.slides_by_role[SlideRole.MARCH]
+
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, third.choice_key)
+    assert generator.generate(VideoType.TYPE_1, Language.ES).choice_key == "a"
 
 
 def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
@@ -92,7 +107,7 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "Exactly how much I made doing Dropshipping in my firsy 6 months and why I almost quit..."
+        == "How much I earned doing Dropshipping in my first 6 months and why I almost quit..."
     )
     assert "February - $800" in first.slides_by_role[SlideRole.FEBRUARY]
     assert "March - $2700" in first.slides_by_role[SlideRole.MARCH]
@@ -102,10 +117,23 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Exactly how much I earned doing Dropshipping in my first 6 months and why I almost quit..."
+        == "How much I made doing Dropshipping in my first 6 months and why I almost quit..."
     )
     assert "February - $680" in second.slides_by_role[SlideRole.FEBRUARY]
     assert "March - $3100" in second.slides_by_role[SlideRole.MARCH]
+
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.EN, second.choice_key)
+    third = generator.generate(VideoType.TYPE_1, Language.EN)
+    assert third.choice_key == "c"
+    assert (
+        third.slides_by_role[SlideRole.HOOK]
+        == "Exactly how much I made doing Dropshipping in my first 6 months and why I almost quit."
+    )
+    assert "February - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
+    assert "March - 3100€" in third.slides_by_role[SlideRole.MARCH]
+
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.EN, third.choice_key)
+    assert generator.generate(VideoType.TYPE_1, Language.EN).choice_key == "a"
 
 
 def test_type_2_es_has_five_slides_and_no_forbidden_punctuation(state_dir):
@@ -124,15 +152,19 @@ def test_type_2_tips_separate_title_and_body_and_hooks_are_fixed(state_dir):
     package = generator.generate(VideoType.TYPE_2, Language.ES)
 
     assert package.slides_by_role[SlideRole.HOOK] in {
-        "Habría pagado por saber estas 4 cosas cuando empecé con Dropshipping",
+        "Habría pagado por saber estas 4 cosas cuando empecé en Dropshipping",
         "Errores que veo en pequeños Dropshippers que están empezando",
+        "4 consejos de Dropshipping que me habrían ahorrado muchos errores",
     }
     for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
         slide = package.slides_by_role[role]
-        title, body = slide.split("\n", 1)
-        assert title
-        assert body
         assert slide.startswith(f"{role.value[-1]}.")
+        if "\n" in slide:
+            title, body = slide.split("\n", 1)
+            assert title
+            assert body
+        else:
+            assert slide[len(f"{role.value[-1]}."):].strip()
 
 
 def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
@@ -142,7 +174,7 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "Habría pagado por saber estas 4 cosas cuando empecé con Dropshipping"
+        == "Habría pagado por saber estas 4 cosas cuando empecé en Dropshipping"
     )
     assert first.slides_by_role[SlideRole.TIP1].startswith(
         "1. Valida con poco presupuesto\n"
@@ -158,6 +190,22 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert second.slides_by_role[SlideRole.TIP4].startswith(
         "4. Descuidar el trato con el comprador\n"
     )
+
+    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.ES, second.choice_key)
+    third = generator.generate(VideoType.TYPE_2, Language.ES)
+    assert third.choice_key == "c"
+    assert (
+        third.slides_by_role[SlideRole.HOOK]
+        == "4 consejos de Dropshipping que me habrían ahorrado muchos errores"
+    )
+    assert third.slides_by_role[SlideRole.TIP1].startswith(
+        "1. No compitas tirando los precios por los suelos"
+    )
+    assert "\n" not in third.slides_by_role[SlideRole.TIP1]
+    assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
+
+    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.ES, third.choice_key)
+    assert generator.generate(VideoType.TYPE_2, Language.ES).choice_key == "a"
 
 
 def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
@@ -183,6 +231,22 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
     assert second.slides_by_role[SlideRole.TIP4].startswith(
         "4. Neglecting the buyer experience\n"
     )
+
+    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, second.choice_key)
+    third = generator.generate(VideoType.TYPE_2, Language.EN)
+    assert third.choice_key == "c"
+    assert (
+        third.slides_by_role[SlideRole.HOOK]
+        == "4 Dropshipping lessons that would have saved me a lot of mistakes"
+    )
+    assert third.slides_by_role[SlideRole.TIP1].startswith(
+        "1. Don't compete by slashing prices to the ground"
+    )
+    assert "\n" not in third.slides_by_role[SlideRole.TIP1]
+    assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
+
+    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, third.choice_key)
+    assert generator.generate(VideoType.TYPE_2, Language.EN).choice_key == "a"
 
 
 def test_type_2_en_passes_punctuation_rule(state_dir):
@@ -226,14 +290,16 @@ def test_type_1_and_2_hooks_mention_money_and_dropshipping(
             assert any(term in hook for term in ("gané", "facturé"))
             continue
         if video_type == VideoType.TYPE_1 and language == Language.EN:
-            assert any(term in hook for term in ("made", "revenue"))
+            assert any(term in hook for term in ("earned", "made", "revenue"))
             continue
         if video_type == VideoType.TYPE_2:
             assert hook in {
-                "habría pagado por saber estas 4 cosas cuando empecé con dropshipping",
+                "habría pagado por saber estas 4 cosas cuando empecé en dropshipping",
                 "errores que veo en pequeños dropshippers que están empezando",
+                "4 consejos de dropshipping que me habrían ahorrado muchos errores",
                 "i would have paid to know these 4 things when i started dropshipping",
                 "mistakes i see small dropshippers making when they are starting out",
+                "4 dropshipping lessons that would have saved me a lot of mistakes",
             }
             continue
         assert any(term in hook for term in money_terms)
@@ -351,18 +417,36 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
 
 def test_lowercase_option_formats_slides_and_social_copy(state_dir):
     generator = _make_generator(state_dir)
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.EN, "b")
     package = generator.generate(
         VideoType.TYPE_1,
         Language.EN,
         lowercase_text=True,
     )
 
+    assert package.choice_key == "c"
     assert package.plain_text == package.plain_text.lower()
     assert all(slide == slide.lower() for slide in package.ordered_slides)
     assert all(text == text.lower() for text in package.slides_by_role.values())
     assert package.social_copy.title == package.social_copy.title.lower()
     assert package.social_copy.description == package.social_copy.description.lower()
     assert all(tag == tag.lower() for tag in package.social_copy.hashtags)
+
+
+def test_lowercase_option_formats_new_type_2_titleless_variant(state_dir):
+    generator = _make_generator(state_dir)
+    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, "b")
+
+    package = generator.generate(
+        VideoType.TYPE_2,
+        Language.EN,
+        lowercase_text=True,
+    )
+
+    assert package.choice_key == "c"
+    assert all(slide == slide.lower() for slide in package.ordered_slides)
+    assert "\n" not in package.slides_by_role[SlideRole.TIP1]
+    assert package.slides_by_role[SlideRole.TIP1].startswith("1. don't compete")
 
 
 def test_social_hashtags_force_literal_dropshipping():

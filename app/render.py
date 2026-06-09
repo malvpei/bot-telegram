@@ -506,6 +506,9 @@ class VideoRenderer:
     def _split_slide_text(self, text: str) -> tuple[str, str]:
         parts = text.split("\n", 1)
         if len(parts) == 1:
+            marker, _, rest = parts[0].strip().partition(" ")
+            if marker.endswith(".") and marker[:-1].isdigit() and rest:
+                return marker, rest
             return parts[0], ""
         return parts[0], parts[1]
 

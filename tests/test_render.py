@@ -13,6 +13,17 @@ from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoType
 from app.render import VideoRenderer
 
 
+def test_numbered_titleless_tip_splits_number_from_body_for_rendering():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+
+    title, body = renderer._split_slide_text(
+        "1. Don't compete by slashing prices to the ground just to get your first quick sale."
+    )
+
+    assert title == "1."
+    assert body.startswith("Don't compete by slashing prices")
+
+
 def test_type_3_tool_slide_uses_icon_asset():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
