@@ -77,6 +77,7 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
     "tiktok": 0.429,
 }
 TYPE_3_TEXT_STROKE_WIDTH = 3
+TYPE_3_BODY_FONT_SIZE = 56
 
 
 class VideoRenderer:
@@ -396,16 +397,7 @@ class VideoRenderer:
             bold=True,
             stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
         )
-        body_font = self._fit_prebroken_lines(
-            body_lines_raw,
-            draw,
-            max_width=width - 160,
-            max_height=int(height * 0.18),
-            base_size=54,
-            min_size=34,
-            bold=True,
-            stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
-        )
+        body_font = self._load_font(size=TYPE_3_BODY_FONT_SIZE, bold=True)
         title_lines = [title] if title else []
         body_lines = body_lines_raw
         title_height = self._block_height(

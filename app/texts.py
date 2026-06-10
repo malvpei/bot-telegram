@@ -557,12 +557,12 @@ class ScriptGenerator:
         payment_tool = random.choice(("PayPal", "Stripe"))
         marketing_tool = random.choice(("Instagram", "TikTok"))
         tools = {
-            SlideRole.TOOL_STORE: "1. Tienda\nConstruye tu tienda por solo 1€ - Usa Shopify",
+            SlideRole.TOOL_STORE: "1. Tienda\nConstruye tu tienda por 1€ - Usa Shopify",
             SlideRole.TOOL_PRODUCT_SEARCH: "2. Busqueda de productos\nEncuentra productos ganadores - Usa Dropradar",
-            SlideRole.TOOL_SCRIPTS: "3. Guiones\nSigue guiones para tus videos - Usa ChatGPT",
-            SlideRole.TOOL_PAYMENTS: f"4. Pagos\nGestiona tus pagos de forma segura - Usa {payment_tool}",
-            SlideRole.TOOL_EDITING: "5. Edicion\nEdita tus videos para mas calidad - Usa CapCut",
-            SlideRole.TOOL_MARKETING: f"6. Marketing\nPromocionate organicamente - Usa {marketing_tool}",
+            SlideRole.TOOL_SCRIPTS: "3. Guiones\nCrea guiones para tus videos - Usa ChatGPT",
+            SlideRole.TOOL_PAYMENTS: f"4. Pagos\nGestiona pagos seguros - Usa {payment_tool}",
+            SlideRole.TOOL_EDITING: "5. Edicion\nEdita videos con mas calidad - Usa CapCut",
+            SlideRole.TOOL_MARKETING: f"6. Marketing\nPromociona tu producto - Usa {marketing_tool}",
         }
         return self._compose_type_3(Language.ES, hooks, tools)
 

@@ -339,20 +339,20 @@ def test_type_3_has_tool_stack_without_hosting(state_dir):
     assert "hosting" not in full_text
     assert "hostinger" not in full_text
     assert package.slides_by_role[SlideRole.TOOL_STORE] == (
-        "1. Tienda\nConstruye tu tienda por solo 1€ - Usa Shopify"
+        "1. Tienda\nConstruye tu tienda por 1€ - Usa Shopify"
     )
     assert package.slides_by_role[SlideRole.TOOL_PRODUCT_SEARCH] == (
         "2. Busqueda de productos\nEncuentra productos ganadores - Usa Dropradar"
     )
     assert package.slides_by_role[SlideRole.TOOL_SCRIPTS] == (
-        "3. Guiones\nSigue guiones para tus videos - Usa ChatGPT"
+        "3. Guiones\nCrea guiones para tus videos - Usa ChatGPT"
     )
     assert _contains_exactly_one(
         package.slides_by_role[SlideRole.TOOL_PAYMENTS],
         ("paypal", "stripe"),
     )
     assert package.slides_by_role[SlideRole.TOOL_EDITING] == (
-        "5. Edicion\nEdita tus videos para mas calidad - Usa CapCut"
+        "5. Edicion\nEdita videos con mas calidad - Usa CapCut"
     )
     assert _contains_exactly_one(
         package.slides_by_role[SlideRole.TOOL_MARKETING],
