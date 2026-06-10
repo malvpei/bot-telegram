@@ -65,6 +65,17 @@ TYPE_3_ICON_VISUAL_SCALE: dict[str, float] = {
     "instagram": 0.94,
     "tiktok": 0.94,
 }
+TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
+    "shopify": 0.441,
+    "dropradar": 0.417,
+    "chatgpt": 0.434,
+    "paypal": 0.442,
+    "stripe": 0.442,
+    "canva": 0.434,
+    "capcut": 0.421,
+    "instagram": 0.429,
+    "tiktok": 0.429,
+}
 
 
 class VideoRenderer:
@@ -208,22 +219,28 @@ class VideoRenderer:
             return
         draw = ImageDraw.Draw(image)
         width, height = image.size
+        hook_with_year = self._split_type_3_hook_year(text)
+        if hook_with_year is not None:
+            self._draw_type_3_hook_year_layout(draw, hook_with_year, width, height)
+            return
+
         font, lines = self._fit_text(
             text,
             draw,
             max_width=width - 110,
             max_height=int(height * 0.34),
-            base_size=78,
+            base_size=66,
             min_size=42,
             bold=True,
             stroke_width=4,
         )
         text_height = self._block_height(lines, font, draw, stroke_width=4)
+        start_y = max(72, int(height * 0.29) - text_height // 2)
         self._draw_lines(
             draw,
             lines,
             font,
-            start_y=max(72, int(height * 0.32) - text_height // 2),
+            start_y=start_y,
             width=width,
             fill=(255, 255, 255),
             stroke_width=4,
@@ -242,14 +259,126 @@ class VideoRenderer:
             draw,
             arrow_lines,
             arrow_font,
-            start_y=max(
-                72,
-                int(height * 0.32) + text_height // 2 + int(height * 0.035),
-            ),
+            start_y=start_y + text_height + int(height * 0.02),
             width=width,
             fill=(255, 255, 255),
             stroke_width=4,
         )
+
+    def _split_type_3_hook_year(self, text: str) -> tuple[str, str] | None:
+        marker = "2026"
+        if marker not in text:
+            return None
+        prefix, _, _ = text.partition(marker)
+        prefix = " ".join(prefix.split()).strip()
+        if not prefix:
+            return None
+        return prefix, marker
+
+    def _draw_type_3_hook_year_layout(
+        self,
+        draw: ImageDraw.ImageDraw,
+        hook_parts: tuple[str, str],
+        width: int,
+        height: int,
+    ) -> None:
+        prefix, year = hook_parts
+        max_width = width - 110
+        badge_size = int(width * 0.058)
+        badge_gap = int(width * 0.008)
+        year_badges_width = badge_gap + (badge_size * 2) + badge_gap
+
+        size = 66
+        while size >= 42:
+            font = self._load_font(size=size, bold=True)
+            prefix_width, prefix_height = self._text_size(
+                draw, prefix, font, stroke_width=4
+            )
+            year_width, year_height = self._text_size(
+                draw, year, font, stroke_width=4
+            )
+            if (
+                prefix_width <= max_width
+                and year_width + year_badges_width <= max_width
+            ):
+                break
+            size -= 2
+        font = self._load_font(size=max(size, 42), bold=True)
+        prefix_width, prefix_height = self._text_size(
+            draw, prefix, font, stroke_width=4
+        )
+        year_width, year_height = self._text_size(
+            draw, year, font, stroke_width=4
+        )
+
+        line_gap = int(height * 0.010)
+        arrow_gap = int(height * 0.020)
+        arrow_font = self._load_font(size=max(42, int(size * 0.92)), bold=True)
+        arrow_width, arrow_height = self._text_size(
+            draw, ">>>", arrow_font, stroke_width=4
+        )
+        second_line_height = max(year_height, badge_size)
+        total_height = prefix_height + line_gap + second_line_height + arrow_gap + arrow_height
+        y = max(72, int(height * 0.314) - total_height // 2)
+
+        draw.text(
+            ((width - prefix_width) // 2, y),
+            prefix,
+            font=font,
+            fill=(255, 255, 255),
+            stroke_width=4,
+            stroke_fill=(0, 0, 0),
+        )
+        second_y = y + prefix_height + line_gap
+        total_second_width = year_width + year_badges_width
+        x = (width - total_second_width) // 2
+        draw.text(
+            (x, second_y),
+            year,
+            font=font,
+            fill=(255, 255, 255),
+            stroke_width=4,
+            stroke_fill=(0, 0, 0),
+        )
+        badge_y = second_y + max(0, (year_height - badge_size) // 2)
+        badge_x = x + year_width + badge_gap
+        for offset in (0, badge_size + badge_gap):
+            self._draw_type_3_check_badge(
+                draw,
+                badge_x + offset,
+                badge_y,
+                badge_size,
+            )
+        arrow_y = second_y + second_line_height + arrow_gap
+        draw.text(
+            ((width - arrow_width) // 2, arrow_y),
+            ">>>",
+            font=arrow_font,
+            fill=(255, 255, 255),
+            stroke_width=4,
+            stroke_fill=(0, 0, 0),
+        )
+
+    def _draw_type_3_check_badge(
+        self,
+        draw: ImageDraw.ImageDraw,
+        x: int,
+        y: int,
+        size: int,
+    ) -> None:
+        radius = max(6, size // 8)
+        draw.rounded_rectangle(
+            (x, y, x + size, y + size),
+            radius=radius,
+            fill=(120, 184, 83),
+        )
+        line_width = max(6, size // 8)
+        points = (
+            (x + int(size * 0.24), y + int(size * 0.54)),
+            (x + int(size * 0.42), y + int(size * 0.72)),
+            (x + int(size * 0.76), y + int(size * 0.28)),
+        )
+        draw.line(points, fill=(255, 255, 255), width=line_width, joint="curve")
 
     def _draw_type_3_tool_slide(self, image: Image.Image, slide: SlidePlan) -> None:
         draw = ImageDraw.Draw(image)
@@ -270,15 +399,15 @@ class VideoRenderer:
         body_font, body_lines = self._fit_text(
             body,
             draw,
-            max_width=width - 120,
+            max_width=width - 160,
             max_height=int(height * 0.18),
-            base_size=60,
+            base_size=54,
             min_size=34,
             bold=True,
             stroke_width=4,
         )
         title_height = self._block_height(title_lines, title_font, draw, stroke_width=4)
-        title_y = int(height * 0.29) - title_height // 2
+        title_y = int(height * 0.270) - title_height // 2
         self._draw_lines(
             draw,
             title_lines,
@@ -293,14 +422,15 @@ class VideoRenderer:
                 draw,
                 body_lines,
                 body_font,
-                start_y=max(70, title_y + title_height + int(height * 0.045)),
+                start_y=int(height * 0.32),
                 width=width,
                 fill=(255, 255, 255),
                 stroke_width=4,
             )
 
+        tool_key = self._type_3_tool_key(slide.role, slide.text)
         icon_box_size = int(width * 0.44)
-        icon_top = int(height * 0.43)
+        icon_top = int(height * TYPE_3_ICON_TOP_RATIO.get(tool_key, 0.434))
         self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
@@ -647,6 +777,17 @@ class VideoRenderer:
             bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=stroke_width)
             height += (bbox[3] - bbox[1]) + 16
         return max(height - 16, 0)
+
+    def _text_size(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        font: ImageFont.ImageFont,
+        *,
+        stroke_width: int,
+    ) -> tuple[int, int]:
+        bbox = draw.textbbox((0, 0), text or "A", font=font, stroke_width=stroke_width)
+        return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
     def _load_font(self, *, size: int, bold: bool) -> ImageFont.ImageFont:
         suffix = "Bold" if bold else "Regular"

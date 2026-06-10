@@ -80,7 +80,7 @@ def test_type_3_hook_still_renders_hook_text():
         slide = SlidePlan(
             index=1,
             role=SlideRole.HOOK,
-            text="This should be sent by Telegram",
+            text="How to do Dropshipping in 2026",
             media=_candidate(bg_path),
         )
 
