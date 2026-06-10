@@ -17,7 +17,7 @@ from telegram.ext import (
 
 from app.accounts import AccountsFileError, load_accounts
 from app.config import get_settings
-from app.models import Language, TYPE_3_ROLES, VideoRequest, VideoType
+from app.models import Language, SlideRole, TYPE_3_ROLES, VideoRequest, VideoType
 from app.service import VideoCreationService
 from app.state import StateStore
 
@@ -662,11 +662,11 @@ async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
     slides = list(slides)
     send_text = not _slides_have_type_3_embedded_text(slides)
 
-    # Type 1 and 2 still send text as Telegram messages. Type 3 renders the
-    # text directly into the images, matching the fixed-background template.
+    # Type 1 and 2 still send text as Telegram messages. In type 3, the hook
+    # remains a Telegram text, while tool slides carry embedded text.
     for slide in slides:
         raw = slide.text.strip() if slide.text else ""
-        if send_text and raw:
+        if raw and (send_text or slide.role == SlideRole.HOOK):
             title, body = _split_title_body(raw)
             if title:
                 await _send_message(context, chat_id, title)

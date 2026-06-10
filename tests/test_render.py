@@ -63,7 +63,7 @@ def test_type_3_tool_slide_uses_icon_asset():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_3_hook_still_renders_hook_text():
+def test_type_3_hook_still_does_not_render_hook_text():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -85,7 +85,7 @@ def test_type_3_hook_still_renders_hook_text():
         )
 
         still = renderer.render_slide_still(slide, VideoType.TYPE_3)
-        assert np.asarray(still).max() > 200
+        assert np.asarray(still).max() == 0
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

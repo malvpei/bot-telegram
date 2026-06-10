@@ -209,7 +209,7 @@ class VideoRenderer:
     ) -> np.ndarray:
         canvas = self._cover_image(source_image, progress).convert("RGBA")
         if slide.role == SlideRole.HOOK:
-            self._draw_type_3_hook_text(canvas, slide.text)
+            return np.asarray(canvas.convert("RGB"))
         else:
             self._draw_type_3_tool_slide(canvas, slide)
         return np.asarray(canvas.convert("RGB"))

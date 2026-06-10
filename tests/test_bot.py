@@ -62,14 +62,29 @@ async def _fast_sleep(delay: float) -> None:
     return None
 
 
-def test_type_3_embedded_text_sends_image_without_slide_messages():
+def test_type_3_sends_hook_text_but_not_tool_slide_messages():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
         image_path = root / "slide.jpg"
         Image.new("RGB", (10, 10), (0, 0, 0)).save(image_path)
         context = FakeContext()
-        slide = SlidePlan(
+        hook_slide = SlidePlan(
+            index=1,
+            role=SlideRole.HOOK,
+            text="Como empezar en Dropshipping en 2026",
+            media=MediaCandidate(
+                source_account="alpha",
+                source_id="hook",
+                local_path=image_path,
+                permalink="",
+                caption="",
+                width=10,
+                height=10,
+                created_at="",
+            ),
+        )
+        tool_slide = SlidePlan(
             index=4,
             role=SlideRole.TOOL_PAYMENTS,
             text="4. Payments\nManage payments securely\nUse Stripe",
@@ -98,9 +113,13 @@ def test_type_3_embedded_text_sends_image_without_slide_messages():
             fixed_asset=True,
         )
 
-        asyncio.run(_send_slides_text_then_image(context, 123, [slide]))
+        asyncio.run(_send_slides_text_then_image(context, 123, [hook_slide, tool_slide]))
 
-        assert context.bot.events == [("photo", "slide.jpg")]
+        assert context.bot.events == [
+            ("message", "Como empezar en Dropshipping en 2026"),
+            ("photo", "slide.jpg"),
+            ("photo", "slide.jpg"),
+        ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
