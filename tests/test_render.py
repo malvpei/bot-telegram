@@ -6,7 +6,7 @@ from pathlib import Path
 from uuid import uuid4
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageDraw
 
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoType
@@ -88,6 +88,34 @@ def test_type_3_hook_still_does_not_render_hook_text():
         assert np.asarray(still).max() == 0
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_body_line():
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
+
+    title_font = renderer._fit_single_line_text(
+        "2. Busqueda de productos",
+        draw,
+        max_width=1000,
+        base_size=72,
+        min_size=46,
+        bold=True,
+        stroke_width=3,
+    )
+    title_width, _ = renderer._text_size(
+        draw,
+        "2. Busqueda de productos",
+        title_font,
+        stroke_width=3,
+    )
+
+    assert title_width <= 1000
+    assert renderer._type_3_body_lines(
+        "Encuentra productos ganadores - Usa Dropradar",
+        "",
+    ) == ["Encuentra productos ganadores - Usa", "Dropradar"]
 
 
 def test_type_3_icon_fitting_removes_padding_and_uses_common_box():

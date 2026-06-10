@@ -76,6 +76,7 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
     "instagram": 0.429,
     "tiktok": 0.429,
 }
+TYPE_3_TEXT_STROKE_WIDTH = 3
 
 
 class VideoRenderer:
@@ -384,29 +385,35 @@ class VideoRenderer:
         draw = ImageDraw.Draw(image)
         width, height = image.size
         title, subtitle, cta = self._split_type_3_tool_text(slide.text)
-        body = "\n".join(piece for piece in (subtitle, cta) if piece)
+        body_lines_raw = self._type_3_body_lines(subtitle, cta)
 
-        title_font, title_lines = self._fit_text(
+        title_font = self._fit_single_line_text(
             title,
             draw,
-            max_width=width - 120,
-            max_height=int(height * 0.12),
+            max_width=width - 80,
             base_size=72,
-            min_size=42,
+            min_size=46,
             bold=True,
-            stroke_width=4,
+            stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
         )
-        body_font, body_lines = self._fit_text(
-            body,
+        body_font = self._fit_prebroken_lines(
+            body_lines_raw,
             draw,
             max_width=width - 160,
             max_height=int(height * 0.18),
             base_size=54,
             min_size=34,
             bold=True,
-            stroke_width=4,
+            stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
         )
-        title_height = self._block_height(title_lines, title_font, draw, stroke_width=4)
+        title_lines = [title] if title else []
+        body_lines = body_lines_raw
+        title_height = self._block_height(
+            title_lines,
+            title_font,
+            draw,
+            stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
+        )
         title_y = int(height * 0.270) - title_height // 2
         self._draw_lines(
             draw,
@@ -415,9 +422,9 @@ class VideoRenderer:
             start_y=max(70, title_y),
             width=width,
             fill=(255, 255, 255),
-            stroke_width=4,
+            stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
         )
-        if body:
+        if body_lines:
             self._draw_lines(
                 draw,
                 body_lines,
@@ -425,13 +432,74 @@ class VideoRenderer:
                 start_y=int(height * 0.32),
                 width=width,
                 fill=(255, 255, 255),
-                stroke_width=4,
+                stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
             )
 
         tool_key = self._type_3_tool_key(slide.role, slide.text)
         icon_box_size = int(width * 0.44)
         icon_top = int(height * TYPE_3_ICON_TOP_RATIO.get(tool_key, 0.434))
         self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
+
+    def _fit_single_line_text(
+        self,
+        text: str,
+        draw: ImageDraw.ImageDraw,
+        *,
+        max_width: int,
+        base_size: int,
+        min_size: int,
+        bold: bool,
+        stroke_width: int,
+    ) -> ImageFont.ImageFont:
+        size = base_size
+        while size >= min_size:
+            font = self._load_font(size=size, bold=bold)
+            line_width, _ = self._text_size(
+                draw,
+                text,
+                font,
+                stroke_width=stroke_width,
+            )
+            if line_width <= max_width:
+                return font
+            size -= 2
+        return self._load_font(size=min_size, bold=bold)
+
+    def _fit_prebroken_lines(
+        self,
+        lines: list[str],
+        draw: ImageDraw.ImageDraw,
+        *,
+        max_width: int,
+        max_height: int,
+        base_size: int,
+        min_size: int,
+        bold: bool,
+        stroke_width: int,
+    ) -> ImageFont.ImageFont:
+        size = base_size
+        while size >= min_size:
+            font = self._load_font(size=size, bold=bold)
+            height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+            widths = [
+                self._text_size(draw, line, font, stroke_width=stroke_width)[0]
+                for line in lines
+            ]
+            if height <= max_height and (not widths or max(widths) <= max_width):
+                return font
+            size -= 2
+        return self._load_font(size=min_size, bold=bold)
+
+    def _type_3_body_lines(self, subtitle: str, cta: str) -> list[str]:
+        raw = " ".join(piece for piece in (subtitle, cta) if piece).strip()
+        if not raw:
+            return []
+        for marker in (" - Usa ", " - Use "):
+            if marker in raw:
+                first, tool = raw.split(marker, 1)
+                verb = marker.strip()
+                return [f"{first.strip()} {verb}", tool.strip()]
+        return [raw]
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]
