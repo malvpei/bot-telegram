@@ -198,7 +198,7 @@ class VideoRenderer:
     ) -> np.ndarray:
         canvas = self._cover_image(source_image, progress).convert("RGBA")
         if slide.role == SlideRole.HOOK:
-            return np.asarray(canvas.convert("RGB"))
+            self._draw_type_3_hook_text(canvas, slide.text)
         else:
             self._draw_type_3_tool_slide(canvas, slide)
         return np.asarray(canvas.convert("RGB"))
@@ -223,16 +223,84 @@ class VideoRenderer:
             draw,
             lines,
             font,
-            start_y=max(72, int(height * 0.16) - text_height // 2),
+            start_y=max(72, int(height * 0.32) - text_height // 2),
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=4,
+        )
+        arrow_font, arrow_lines = self._fit_text(
+            ">>>",
+            draw,
+            max_width=width - 110,
+            max_height=int(height * 0.08),
+            base_size=72,
+            min_size=42,
+            bold=True,
+            stroke_width=4,
+        )
+        self._draw_lines(
+            draw,
+            arrow_lines,
+            arrow_font,
+            start_y=max(
+                72,
+                int(height * 0.32) + text_height // 2 + int(height * 0.035),
+            ),
             width=width,
             fill=(255, 255, 255),
             stroke_width=4,
         )
 
     def _draw_type_3_tool_slide(self, image: Image.Image, slide: SlidePlan) -> None:
+        draw = ImageDraw.Draw(image)
         width, height = image.size
+        title, subtitle, cta = self._split_type_3_tool_text(slide.text)
+        body = "\n".join(piece for piece in (subtitle, cta) if piece)
+
+        title_font, title_lines = self._fit_text(
+            title,
+            draw,
+            max_width=width - 120,
+            max_height=int(height * 0.12),
+            base_size=72,
+            min_size=42,
+            bold=True,
+            stroke_width=4,
+        )
+        body_font, body_lines = self._fit_text(
+            body,
+            draw,
+            max_width=width - 120,
+            max_height=int(height * 0.18),
+            base_size=60,
+            min_size=34,
+            bold=True,
+            stroke_width=4,
+        )
+        title_height = self._block_height(title_lines, title_font, draw, stroke_width=4)
+        title_y = int(height * 0.29) - title_height // 2
+        self._draw_lines(
+            draw,
+            title_lines,
+            title_font,
+            start_y=max(70, title_y),
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=4,
+        )
+        if body:
+            self._draw_lines(
+                draw,
+                body_lines,
+                body_font,
+                start_y=max(70, title_y + title_height + int(height * 0.045)),
+                width=width,
+                fill=(255, 255, 255),
+                stroke_width=4,
+            )
+
         icon_box_size = int(width * 0.44)
-        icon_top = int(height * 0.46)
+        icon_top = int(height * 0.43)
         self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:

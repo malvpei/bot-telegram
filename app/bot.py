@@ -17,7 +17,7 @@ from telegram.ext import (
 
 from app.accounts import AccountsFileError, load_accounts
 from app.config import get_settings
-from app.models import Language, VideoRequest, VideoType
+from app.models import Language, TYPE_3_ROLES, VideoRequest, VideoType
 from app.service import VideoCreationService
 from app.state import StateStore
 
@@ -659,13 +659,14 @@ async def _telegram_call_with_retries(call, **kwargs):
 
 
 async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
-    # For each slide send the title (first line) as one message, the body as
-    # a second message, and then the image. The hook has no title, so it goes
-    # in a single message. This keeps title and body visually separated in the
-    # Telegram chat, matching the format the user asked for.
+    slides = list(slides)
+    send_text = not _slides_have_type_3_embedded_text(slides)
+
+    # Type 1 and 2 still send text as Telegram messages. Type 3 renders the
+    # text directly into the images, matching the fixed-background template.
     for slide in slides:
         raw = slide.text.strip() if slide.text else ""
-        if raw:
+        if send_text and raw:
             title, body = _split_title_body(raw)
             if title:
                 await _send_message(context, chat_id, title)
@@ -703,6 +704,11 @@ def _split_title_body(text: str) -> tuple[str, str]:
     if len(parts) == 1:
         return parts[0].strip(), ""
     return parts[0].strip(), parts[1].strip()
+
+
+def _slides_have_type_3_embedded_text(slides) -> bool:
+    type_3_tool_roles = set(TYPE_3_ROLES[1:])
+    return any(slide.role in type_3_tool_roles for slide in slides)
 
 
 def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:

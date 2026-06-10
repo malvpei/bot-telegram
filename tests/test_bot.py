@@ -62,7 +62,7 @@ async def _fast_sleep(delay: float) -> None:
     return None
 
 
-def test_type_3_slide_text_is_sent_before_image():
+def test_type_3_embedded_text_sends_image_without_slide_messages():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -100,11 +100,7 @@ def test_type_3_slide_text_is_sent_before_image():
 
         asyncio.run(_send_slides_text_then_image(context, 123, [slide]))
 
-        assert context.bot.events == [
-            ("message", "4. Payments"),
-            ("message", "Manage payments securely\nUse Stripe"),
-            ("photo", "slide.jpg"),
-        ]
+        assert context.bot.events == [("photo", "slide.jpg")]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
