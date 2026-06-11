@@ -386,7 +386,6 @@ class VideoRenderer:
         draw = ImageDraw.Draw(image)
         width, height = image.size
         title, subtitle, cta = self._split_type_3_tool_text(slide.text)
-        body_lines_raw = self._type_3_body_lines(subtitle, cta)
 
         title_font = self._fit_single_line_text(
             title,
@@ -398,8 +397,14 @@ class VideoRenderer:
             stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
         )
         body_font = self._load_font(size=TYPE_3_BODY_FONT_SIZE, bold=True)
+        body_lines = self._type_3_body_lines(
+            subtitle,
+            cta,
+            draw=draw,
+            font=body_font,
+            max_width=width - 160,
+        )
         title_lines = [title] if title else []
-        body_lines = body_lines_raw
         title_height = self._block_height(
             title_lines,
             title_font,
@@ -482,16 +487,36 @@ class VideoRenderer:
             size -= 2
         return self._load_font(size=min_size, bold=bold)
 
-    def _type_3_body_lines(self, subtitle: str, cta: str) -> list[str]:
+    def _type_3_body_lines(
+        self,
+        subtitle: str,
+        cta: str,
+        *,
+        draw: ImageDraw.ImageDraw,
+        font: ImageFont.ImageFont,
+        max_width: int,
+    ) -> list[str]:
         raw = " ".join(piece for piece in (subtitle, cta) if piece).strip()
         if not raw:
             return []
-        for marker in (" - Usa ", " - Use "):
-            if marker in raw:
-                first, tool = raw.split(marker, 1)
-                verb = marker.strip()
-                return [f"{first.strip()} {verb}", tool.strip()]
-        return [raw]
+        lines: list[str] = []
+        current = ""
+        for word in raw.split():
+            trial = word if not current else f"{current} {word}"
+            trial_width, _ = self._text_size(
+                draw,
+                trial,
+                font,
+                stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
+            )
+            if trial_width <= max_width or not current:
+                current = trial
+                continue
+            lines.append(current)
+            current = word
+        if current:
+            lines.append(current)
+        return lines
 
     def _split_type_3_tool_text(self, text: str) -> tuple[str, str, str]:
         lines = [line.strip() for line in text.splitlines() if line.strip()]

@@ -112,10 +112,14 @@ def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_bod
     )
 
     assert title_width <= 1000
+    body_font = renderer._load_font(size=56, bold=True)
     assert renderer._type_3_body_lines(
         "Encuentra productos ganadores - Usa Dropradar",
         "",
-    ) == ["Encuentra productos ganadores - Usa", "Dropradar"]
+        draw=draw,
+        font=body_font,
+        max_width=920,
+    ) == ["Encuentra productos ganadores -", "Usa Dropradar"]
 
 
 def test_type_3_spanish_descriptions_share_fixed_body_size_without_clipping():
@@ -124,19 +128,28 @@ def test_type_3_spanish_descriptions_share_fixed_body_size_without_clipping():
     draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
     font = renderer._load_font(size=56, bold=True)
 
-    lines = [
-        "Construye tu tienda por 1€ - Usa",
-        "Encuentra productos ganadores - Usa",
-        "Crea guiones para tus videos - Usa",
-        "Gestiona pagos seguros - Usa",
-        "Edita videos con mas calidad - Usa",
-        "Promociona tu producto - Usa",
+    descriptions = [
+        "Construye tu tienda por 1€ - Usa Shopify",
+        "Encuentra productos ganadores - Usa Dropradar",
+        "Crea guiones para tus videos - Usa ChatGPT",
+        "Gestiona pagos seguros - Usa PayPal",
+        "Edita videos con mas calidad - Usa CapCut",
+        "Promociona tu producto - Usa TikTok",
     ]
 
-    assert all(
-        renderer._text_size(draw, line, font, stroke_width=3)[0] <= 1040
-        for line in lines
-    )
+    for description in descriptions:
+        lines = renderer._type_3_body_lines(
+            description,
+            "",
+            draw=draw,
+            font=font,
+            max_width=920,
+        )
+        assert lines
+        assert all(
+            renderer._text_size(draw, line, font, stroke_width=3)[0] <= 920
+            for line in lines
+        )
 
 
 def test_type_3_icon_fitting_removes_padding_and_uses_common_box():
