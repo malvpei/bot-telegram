@@ -17,12 +17,19 @@ from telegram.ext import (
 
 from app.accounts import AccountsFileError, load_accounts
 from app.config import get_settings
-from app.models import Language, SlideRole, TYPE_3_ROLES, VideoRequest, VideoType
+from app.models import (
+    Language,
+    SlideRole,
+    TYPE_3_ROLES,
+    VideoGender,
+    VideoRequest,
+    VideoType,
+)
 from app.service import VideoCreationService
 from app.state import StateStore
 
 
-TYPE_STATE, LANGUAGE_STATE, LOWERCASE_STATE = range(3)
+GENDER_STATE, TYPE_STATE, LANGUAGE_STATE, LOWERCASE_STATE = range(4)
 REGENERATE_ACCEPT = "regen:accept"
 REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
@@ -68,6 +75,9 @@ def run_bot() -> None:
             CommandHandler("wizard", create_command),
         ],
         states={
+            GENDER_STATE: [
+                CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:")
+            ],
             TYPE_STATE: [CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:")],
             LANGUAGE_STATE: [CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:")],
             LOWERCASE_STATE: [CallbackQueryHandler(wizard_lowercase, pattern=r"^wizard:lowercase:")],
@@ -78,8 +88,13 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("accounts", accounts_command))
+    application.add_handler(CommandHandler("accounts_women", accounts_women_command))
     application.add_handler(CommandHandler("sync", sync_command))
+    application.add_handler(CommandHandler("sync_women", sync_women_command))
     application.add_handler(CommandHandler("download_pool", download_pool_command))
+    application.add_handler(
+        CommandHandler("download_pool_women", download_pool_women_command)
+    )
     application.add_handler(CommandHandler("pool", pool_command))
     application.add_handler(CommandHandler("memory", memory_command))
     application.add_handler(wizard_handler)
@@ -95,14 +110,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     message = (
         "Este bot genera videos verticales desde las cuentas de Instagram que "
-        "hayas dejado en accounts.txt.\n\n"
+        "hayas dejado en accounts.txt o accounts_women.txt.\n\n"
         "Comandos:\n"
         "/memory - ver si la memoria persiste tras redeploy\n"
-        "/sync - descargar la biblioteca local de cuentas\n"
-        "/download_pool - rellenar el pool rapido de fotos\n"
+        "/sync - descargar la biblioteca local de cuentas de hombres\n"
+        "/sync_women - descargar la biblioteca local de cuentas de mujeres\n"
+        "/download_pool - rellenar el pool rapido de fotos de hombres\n"
+        "/download_pool_women - rellenar el pool rapido de fotos de mujeres\n"
         "/pool - ver stock del pool\n"
         "/create — elegir tipo e idioma y generar el video\n"
-        "/accounts — ver las cuentas cargadas\n"
+        "/accounts — ver las cuentas de hombres cargadas\n"
+        "/accounts_women — ver las cuentas de mujeres cargadas\n"
         "/cancel — cancelar el wizard actual"
     )
     await update.effective_message.reply_text(message)
@@ -115,18 +133,20 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = (
         "Flujo:\n"
         "1. /create\n"
-        "2. elige Tipo 1, Tipo 2 o Tipo 3\n"
-        "3. elige Español o English\n"
-        "4. elige si quieres textos normales o todo en minúscula\n"
-        "5. el bot elige imágenes ya guardadas y envía el video\n\n"
+        "2. elige Hombres o Mujeres\n"
+        "3. elige Tipo 1, Tipo 2 o Tipo 3\n"
+        "4. elige Español o English\n"
+        "5. elige si quieres textos normales o todo en minúscula\n"
+        "6. el bot elige imágenes ya guardadas y envía el video\n\n"
         "Tipos:\n"
         "1 = historia de 7 imágenes (slide 6 = imagen6.png, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = imagen6.png, tip3)\n"
         "3 = hook + herramientas para empezar dropshipping en 2026\n\n"
-        "Las cuentas se leen de accounts.txt (una por línea). Para cambiarlas "
-        "edita ese archivo y reinicia el bot (o solo guarda, el archivo se "
-        "relee en cada /create).\n\n"
-        "Usa /download_pool para precargar un lote de fotos aptas. "
+        "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
+        "accounts_women.txt (una por línea). Para cambiarlas edita el archivo "
+        "y guarda; se releen en cada /create.\n\n"
+        "Usa /download_pool para hombres y /download_pool_women para mujeres. "
+        "Ambos precargan un lote de fotos aptas. "
         "Despues /create elige desde ese pool local sin descargar en caliente.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
@@ -135,12 +155,27 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _accounts_command_for_gender(update, VideoGender.MALE)
+
+
+async def accounts_women_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    await _accounts_command_for_gender(update, VideoGender.FEMALE)
+
+
+async def _accounts_command_for_gender(
+    update: Update,
+    gender: VideoGender,
+) -> None:
     if not await _ensure_allowed(update):
         return
 
     settings = get_settings()
+    path = _accounts_path_for_gender(settings, gender)
     try:
-        accounts = load_accounts(settings.accounts_file)
+        accounts = load_accounts(path)
     except AccountsFileError as error:
         await update.effective_message.reply_text(str(error))
         return
@@ -148,23 +183,41 @@ async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     preview = "\n".join(f"- {entry}" for entry in accounts[:20])
     suffix = "" if len(accounts) <= 20 else f"\n... y {len(accounts) - 20} más"
     await update.effective_message.reply_text(
-        f"Cuentas cargadas ({len(accounts)}):\n{preview}{suffix}"
+        f"Cuentas de {_gender_label_plural(gender)} cargadas ({len(accounts)}):\n"
+        f"{preview}{suffix}"
     )
 
 
 async def sync_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _sync_command_for_gender(update, context, VideoGender.MALE)
+
+
+async def sync_women_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    await _sync_command_for_gender(update, context, VideoGender.FEMALE)
+
+
+async def _sync_command_for_gender(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    gender: VideoGender,
+) -> None:
     if not await _ensure_allowed(update):
         return
 
     settings = get_settings()
+    path = _accounts_path_for_gender(settings, gender)
     try:
-        accounts = load_accounts(settings.accounts_file)
+        accounts = load_accounts(path)
     except AccountsFileError as error:
         await update.effective_message.reply_text(str(error))
         return
 
     status_message = await update.effective_message.reply_text(
-        f"Sincronizando {len(accounts)} cuentas. Las que ya tengan carpeta local no se descargan de nuevo."
+        f"Sincronizando {len(accounts)} cuentas de {_gender_label_plural(gender)}. "
+        "Las que ya tengan carpeta local no se descargan de nuevo."
     )
     service: VideoCreationService = context.application.bot_data["service"]
     try:
@@ -201,18 +254,35 @@ async def sync_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 
 async def download_pool_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await _download_pool_command_for_gender(update, context, VideoGender.MALE)
+
+
+async def download_pool_women_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    await _download_pool_command_for_gender(update, context, VideoGender.FEMALE)
+
+
+async def _download_pool_command_for_gender(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    gender: VideoGender,
+) -> None:
     if not await _ensure_allowed(update):
         return
 
     settings = get_settings()
+    path = _accounts_path_for_gender(settings, gender)
     try:
-        accounts = load_accounts(settings.accounts_file)
+        accounts = load_accounts(path)
     except AccountsFileError as error:
         await update.effective_message.reply_text(str(error))
         return
 
     status_message = await update.effective_message.reply_text(
-        f"Rellenando pool hasta {settings.pool_target_images} fotos aptas por tipo. "
+        f"Rellenando pool de {_gender_label_plural(gender)} hasta "
+        f"{settings.pool_target_images} fotos aptas por tipo. "
         "Voy cuenta por cuenta y pongo cooldown despues de revisar cada una."
     )
     service: VideoCreationService = context.application.bot_data["service"]
@@ -247,11 +317,8 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
     marker = store.ensure_persistence_marker()
     snapshot = store.memory_snapshot(recent_limit=10)
-    try:
-        accounts = load_accounts(settings.accounts_file)
-        accounts_line = f"{len(accounts)} desde {settings.accounts_file}"
-    except AccountsFileError as error:
-        accounts_line = f"error leyendo {settings.accounts_file}: {error}"
+    accounts_line = _accounts_status_line(settings, VideoGender.MALE)
+    women_accounts_line = _accounts_status_line(settings, VideoGender.FEMALE)
 
     recent = snapshot["recent_accounts"]
     recent_line = ", ".join(f"@{account}" for account in recent) if recent else "-"
@@ -284,7 +351,8 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"State: {snapshot['state_dir']}\n"
         f"Persistent Storage: {storage_line}\n"
         f"Marker: {marker_id} ({marker_status}, creado {created_at})\n"
-        f"Cuentas cargadas: {accounts_line}\n"
+        f"Cuentas hombres: {accounts_line}\n"
+        f"Cuentas mujeres: {women_accounts_line}\n"
         f"Posts con foto por cuenta: {settings.max_posts_per_account}\n"
         f"Cache de cuentas: {cache_line}\n"
         f"Fotos bloqueadas: {snapshot['used_media_count']}\n"
@@ -302,12 +370,66 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return ConversationHandler.END
 
     settings = get_settings()
-    try:
-        accounts = load_accounts(settings.accounts_file)
-    except AccountsFileError as error:
-        await update.effective_message.reply_text(str(error))
+    accounts_by_gender = _load_accounts_by_gender(settings)
+    context.user_data["accounts_by_gender"] = {
+        gender.value: accounts
+        for gender, accounts in accounts_by_gender.items()
+    }
+
+    if not any(accounts_by_gender.values()):
+        await update.effective_message.reply_text(
+            "No encontré cuentas cargadas en accounts.txt ni en accounts_women.txt."
+        )
         return ConversationHandler.END
 
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    f"Hombres ({len(accounts_by_gender[VideoGender.MALE])})",
+                    callback_data="wizard:gender:male",
+                ),
+                InlineKeyboardButton(
+                    f"Mujeres ({len(accounts_by_gender[VideoGender.FEMALE])})",
+                    callback_data="wizard:gender:female",
+                ),
+            ]
+        ]
+    )
+    await update.effective_message.reply_text(
+        "¿Qué protagonista quieres para el video?",
+        reply_markup=keyboard,
+    )
+    return GENDER_STATE
+
+
+async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    raw_gender = query.data.rsplit(":", maxsplit=1)[-1]
+    try:
+        gender = VideoGender(raw_gender)
+    except ValueError:
+        await query.edit_message_text("Opción no reconocida. Lanza /create otra vez.")
+        return ConversationHandler.END
+
+    accounts_by_gender = context.user_data.get("accounts_by_gender")
+    if not isinstance(accounts_by_gender, dict):
+        await query.edit_message_text(
+            "Perdí las cuentas cargadas. Lanza /create otra vez."
+        )
+        return ConversationHandler.END
+
+    accounts = list(accounts_by_gender.get(gender.value) or [])
+    if not accounts:
+        path = _accounts_path_for_gender(get_settings(), gender)
+        await query.edit_message_text(
+            f"No hay cuentas de {_gender_label_plural(gender)} en {path}. "
+            "Añade enlaces, guarda el archivo y lanza /create otra vez."
+        )
+        return ConversationHandler.END
+
+    context.user_data["video_gender"] = gender.value
     context.user_data["accounts_snapshot"] = accounts
 
     keyboard = InlineKeyboardMarkup(
@@ -319,8 +441,9 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             ]
         ]
     )
-    await update.effective_message.reply_text(
-        f"Tengo {len(accounts)} cuentas cargadas. ¿Qué tipo de video quieres generar?",
+    await query.edit_message_text(
+        f"Tengo {len(accounts)} cuentas de {_gender_label_plural(gender)} cargadas. "
+        "¿Qué tipo de video quieres generar?",
         reply_markup=keyboard,
     )
     return TYPE_STATE
@@ -401,6 +524,7 @@ async def wizard_lowercase(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         return ConversationHandler.END
 
     raw_type = context.user_data.get("video_type")
+    raw_gender = context.user_data.get("video_gender", VideoGender.MALE.value)
     accounts = context.user_data.get("accounts_snapshot")
     if not raw_type or not accounts:
         await query.edit_message_text(
@@ -415,6 +539,13 @@ async def wizard_lowercase(update: Update, context: ContextTypes.DEFAULT_TYPE) -
             "Tipo no válido. Lanza /create otra vez."
         )
         return ConversationHandler.END
+    try:
+        gender = VideoGender(raw_gender)
+    except ValueError:
+        await query.edit_message_text(
+            "Protagonista no válido. Lanza /create otra vez."
+        )
+        return ConversationHandler.END
 
     request = VideoRequest(
         chat_id=update.effective_chat.id,
@@ -422,12 +553,14 @@ async def wizard_lowercase(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         video_type=video_type,
         language=language,
         account_inputs=list(accounts),
+        gender=gender,
         lowercase_text=lowercase_text,
     )
 
     lowercase_line = "todo en minúscula" if lowercase_text else "formato normal"
     await query.edit_message_text(
-        f"Preparando video tipo {video_type.value} en {language.value} "
+        f"Preparando video de {_gender_label_plural(gender)} tipo "
+        f"{video_type.value} en {language.value} "
         f"con {len(accounts)} cuentas ({lowercase_line})."
     )
     await _execute_job(update, context, request)
@@ -469,6 +602,9 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             video_type=VideoType(repeat_request["video_type"]),
             language=Language(repeat_request["language"]),
             account_inputs=account_inputs,
+            gender=VideoGender(
+                repeat_request.get("video_gender", VideoGender.MALE.value)
+            ),
             skip_accounts=(
                 [repeat_request["chosen_account"]]
                 if query.data == REGENERATE_SKIP_ACCOUNT
@@ -505,6 +641,7 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             video_type=request.video_type,
             language=request.language,
             account_inputs=[repeat_request["chosen_account"]],
+            gender=request.gender,
             lowercase_text=request.lowercase_text,
         )
         await _execute_extra_image(update, context, extra_request)
@@ -531,6 +668,7 @@ async def _execute_job(
 
     header = (
         f"Cuenta elegida: @{result.chosen_account}\n"
+        f"Protagonista: {_gender_label_plural(request.gender)}\n"
         f"Tipo: {result.video_type.value}\n"
         f"Idioma: {result.language.value}"
     )
@@ -545,6 +683,7 @@ async def _execute_job(
             "requested_accounts": request.account_inputs,
             "video_type": result.video_type.value,
             "language": result.language.value,
+            "video_gender": request.gender.value,
             "lowercase_text": request.lowercase_text,
         }
         await _ask_for_another_same_account(context, chat.id, result.chosen_account)
@@ -594,6 +733,7 @@ async def _execute_extra_image(
             "requested_accounts": request.account_inputs,
             "video_type": request.video_type.value,
             "language": request.language.value,
+            "video_gender": request.gender.value,
             "lowercase_text": request.lowercase_text,
         }
         await _ask_for_another_same_account(context, chat.id, media.source_account)
@@ -712,9 +852,42 @@ def _slides_have_type_3_embedded_text(slides) -> bool:
 
 
 def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop("accounts_by_gender", None)
     context.user_data.pop("accounts_snapshot", None)
+    context.user_data.pop("video_gender", None)
     context.user_data.pop("video_type", None)
     context.user_data.pop("language", None)
+
+
+def _accounts_path_for_gender(settings, gender: VideoGender):
+    if gender == VideoGender.FEMALE:
+        return settings.women_accounts_file
+    return settings.accounts_file
+
+
+def _gender_label_plural(gender: VideoGender) -> str:
+    return "mujeres" if gender == VideoGender.FEMALE else "hombres"
+
+
+def _load_accounts_by_gender(settings) -> dict[VideoGender, list[str]]:
+    accounts_by_gender: dict[VideoGender, list[str]] = {}
+    for gender in VideoGender:
+        try:
+            accounts_by_gender[gender] = load_accounts(
+                _accounts_path_for_gender(settings, gender)
+            )
+        except AccountsFileError:
+            accounts_by_gender[gender] = []
+    return accounts_by_gender
+
+
+def _accounts_status_line(settings, gender: VideoGender) -> str:
+    path = _accounts_path_for_gender(settings, gender)
+    try:
+        accounts = load_accounts(path)
+    except AccountsFileError as error:
+        return f"error leyendo {path}: {error}"
+    return f"{len(accounts)} desde {path}"
 
 
 def _format_pool_status(summary: dict) -> str:

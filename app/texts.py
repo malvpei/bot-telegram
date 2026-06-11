@@ -12,6 +12,7 @@ from app.models import (
     TYPE_1_ROLES,
     TYPE_2_ROLES,
     TYPE_3_ROLES,
+    VideoGender,
     VideoType,
 )
 from app.state import StateStore
@@ -22,6 +23,30 @@ from app.state import StateStore
 FORBIDDEN_TYPE_2_TOKENS: tuple[str, ...] = (";", "；", "—", "–", "ー", "―")
 SOCIAL_DESCRIPTION_TARGET_MIN = 500
 SOCIAL_DESCRIPTION_TARGET_MAX = 3500
+FEMALE_ES_REPLACEMENTS: tuple[tuple[str, str], ...] = (
+    ("supermotivado", "supermotivada"),
+    ("desmotivado", "desmotivada"),
+    ("motivado", "motivada"),
+    ("frustrado", "frustrada"),
+    ("agotado", "agotada"),
+    ("resignado", "resignada"),
+    ("estancado", "estancada"),
+    ("atascado", "atascada"),
+    ("perdido", "perdida"),
+    ("rallado", "rallada"),
+    ("millonario", "millonaria"),
+    ("rico", "rica"),
+    ("convencido", "convencida"),
+    ("ocupado", "ocupada"),
+    ("mí mismo", "mí misma"),
+    ("mi mismo", "mi misma"),
+    ("yo solo", "yo sola"),
+    ("Yo solo", "Yo sola"),
+    (
+        "No soy un caso extraordinario, soy un caso medianamente constante",
+        "No soy una persona extraordinaria, soy una persona medianamente constante",
+    ),
+)
 
 
 def _hash_signature(parts: list[str]) -> str:
@@ -46,6 +71,7 @@ class ScriptGenerator:
         video_type: VideoType,
         language: Language,
         *,
+        gender: VideoGender = VideoGender.MALE,
         lowercase_text: bool = False,
     ) -> ScriptPackage:
         builder = self._builder_for(video_type, language)
@@ -59,23 +85,46 @@ class ScriptGenerator:
                 continue
             if package.signature in known_signatures:
                 continue
-            return self._format_package(package, lowercase_text=lowercase_text)
+            return self._format_package(
+                package,
+                language=language,
+                gender=gender,
+                lowercase_text=lowercase_text,
+            )
 
         # Final guarantee: at least don't repeat the *immediately* previous
         # video, even if everything historic is exhausted.
         for _ in range(self.MAX_ATTEMPTS):
             package = builder()
             if package.signature != last_signature:
-                return self._format_package(package, lowercase_text=lowercase_text)
+                return self._format_package(
+                    package,
+                    language=language,
+                    gender=gender,
+                    lowercase_text=lowercase_text,
+                )
 
         # Truly exhausted; surface as exception so caller can react instead of
         # silently violating the "no two equal in a row" rule.
         if package is None:
             package = builder()
-        return self._format_package(package, lowercase_text=lowercase_text)
+        return self._format_package(
+            package,
+            language=language,
+            gender=gender,
+            lowercase_text=lowercase_text,
+        )
 
     @staticmethod
-    def _format_package(package: ScriptPackage, *, lowercase_text: bool) -> ScriptPackage:
+    def _format_package(
+        package: ScriptPackage,
+        *,
+        language: Language,
+        gender: VideoGender,
+        lowercase_text: bool,
+    ) -> ScriptPackage:
+        if gender == VideoGender.FEMALE:
+            package = ScriptGenerator._feminize_package(package, language)
         if not lowercase_text:
             return package
         slides_by_role = {
@@ -96,6 +145,45 @@ class ScriptGenerator:
             choice_key=package.choice_key,
             social_choice_key=package.social_choice_key,
         )
+
+    @staticmethod
+    def _feminize_package(
+        package: ScriptPackage,
+        language: Language,
+    ) -> ScriptPackage:
+        if language != Language.ES:
+            return package
+
+        slides_by_role = {
+            role: ScriptGenerator._feminize_text_es(text)
+            for role, text in package.slides_by_role.items()
+        }
+        ordered_slides = [
+            ScriptGenerator._feminize_text_es(text)
+            for text in package.ordered_slides
+        ]
+        return ScriptPackage(
+            slides_by_role=slides_by_role,
+            ordered_slides=ordered_slides,
+            signature=package.signature,
+            plain_text=ScriptGenerator._feminize_text_es(package.plain_text),
+            social_copy=SocialCopy(
+                title=ScriptGenerator._feminize_text_es(package.social_copy.title),
+                description=ScriptGenerator._feminize_text_es(
+                    package.social_copy.description
+                ),
+                hashtags=list(package.social_copy.hashtags),
+            ),
+            choice_key=package.choice_key,
+            social_choice_key=package.social_choice_key,
+        )
+
+    @staticmethod
+    def _feminize_text_es(text: str) -> str:
+        adapted = text
+        for masculine, feminine in FEMALE_ES_REPLACEMENTS:
+            adapted = adapted.replace(masculine, feminine)
+        return adapted
 
     def _builder_for(self, video_type: VideoType, language: Language):
         if video_type == VideoType.TYPE_1:

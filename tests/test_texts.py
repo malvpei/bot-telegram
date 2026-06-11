@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 import app.texts as texts_module
-from app.models import Language, SlideRole, TYPE_3_ROLES, VideoType
+from app.models import Language, SlideRole, TYPE_3_ROLES, VideoGender, VideoType
 from app.state import StateStore
 from app.texts import FORBIDDEN_TYPE_2_TOKENS, ScriptGenerator
 
@@ -76,7 +76,11 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert "Febrero - 800€" in first.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 2700€" in first.slides_by_role[SlideRole.MARCH]
 
-    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, first.choice_key)
+    generator.state.set_last_text_choice(
+        VideoType.TYPE_1,
+        Language.ES,
+        first.choice_key,
+    )
     second = generator.generate(VideoType.TYPE_1, Language.ES)
     assert second.choice_key == "b"
     assert (
@@ -98,6 +102,33 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
 
     generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, third.choice_key)
     assert generator.generate(VideoType.TYPE_1, Language.ES).choice_key == "a"
+
+
+def test_type_1_es_female_gender_adapts_self_references(state_dir):
+    generator = _make_generator(state_dir)
+
+    first = generator.generate(
+        VideoType.TYPE_1,
+        Language.ES,
+        gender=VideoGender.FEMALE,
+    )
+
+    assert "supermotivada" in first.slides_by_role[SlideRole.OCTOBER]
+    assert "supermotivado" not in first.slides_by_role[SlideRole.OCTOBER]
+    assert "convencida" in first.social_copy.description
+    assert "convencido" not in first.social_copy.description
+
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, first.choice_key)
+    second = generator.generate(
+        VideoType.TYPE_1,
+        Language.ES,
+        gender=VideoGender.FEMALE,
+    )
+
+    march = second.slides_by_role[SlideRole.MARCH]
+    assert "No soy millonaria" in march
+    assert "no haberme rendido" in march
+    assert "millonario" not in march
 
 
 def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):

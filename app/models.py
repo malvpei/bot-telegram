@@ -11,6 +11,11 @@ class VideoType(str, Enum):
     TYPE_3 = "3"
 
 
+class VideoGender(str, Enum):
+    MALE = "male"
+    FEMALE = "female"
+
+
 class Language(str, Enum):
     ES = "es"
     EN = "en"
@@ -77,6 +82,7 @@ class VideoRequest:
     video_type: VideoType
     language: Language
     account_inputs: list[str]
+    gender: VideoGender = VideoGender.MALE
     skip_accounts: list[str] = field(default_factory=list)
     lowercase_text: bool = False
 

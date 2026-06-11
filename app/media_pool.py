@@ -270,15 +270,20 @@ class MediaPoolService:
             allow_plan_compatible_fallback=True,
         )
 
-    def stock_counts(self) -> dict[str, Any]:
+    def stock_counts(self, usernames: list[str] | None = None) -> dict[str, Any]:
         used_media = self.state.read_used_media()
         return self._stock_counts(
             self._normalise_pool(self.state.read_media_pool()),
             used_media=used_media,
+            usernames=usernames,
         )
 
-    def is_low_stock(self, video_type: VideoType | None = None) -> bool:
-        counts = self.stock_counts()
+    def is_low_stock(
+        self,
+        video_type: VideoType | None = None,
+        usernames: list[str] | None = None,
+    ) -> bool:
+        counts = self.stock_counts(usernames)
         threshold = max(1, self.settings.pool_low_stock_threshold)
         if video_type is None:
             return int(counts["total"]) <= threshold

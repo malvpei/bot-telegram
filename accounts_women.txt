@@ -1,0 +1,2 @@
+# Instagram accounts for women videos.
+# Add one URL or username per line, exactly like accounts.txt.

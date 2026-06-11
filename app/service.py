@@ -213,6 +213,7 @@ class VideoCreationService:
             script_package = self.script_generator.generate(
                 request.video_type,
                 request.language,
+                gender=request.gender,
                 lowercase_text=request.lowercase_text,
             )
 
@@ -253,6 +254,7 @@ class VideoCreationService:
                     language=request.language,
                     video_path=str(video_path) if video_path is not None else None,
                     script_path=str(script_path),
+                    gender=request.gender.value,
                 )
             )
             if plan.type_3_background_id and plan.type_3_background_candidates:
@@ -279,12 +281,17 @@ class VideoCreationService:
             fallback_accounts=plan.fallback_accounts,
             slides=list(plan.slides),
             pool_remaining=(
-                int(self.pool.stock_counts()["by_type"].get(request.video_type.value, 0))
+                int(
+                    self.pool.stock_counts(usernames)["by_type"].get(
+                        request.video_type.value,
+                        0,
+                    )
+                )
                 if hasattr(self, "pool")
                 else 0
             ),
             pool_low_stock=(
-                self.pool.is_low_stock(request.video_type)
+                self.pool.is_low_stock(request.video_type, usernames)
                 if hasattr(self, "pool")
                 else False
             ),
@@ -337,6 +344,7 @@ class VideoCreationService:
                     language=request.language,
                     video_path=None,
                     script_path=str(normalized.local_path),
+                    gender=request.gender.value,
                 )
             )
         except Exception:

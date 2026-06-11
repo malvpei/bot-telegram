@@ -491,8 +491,9 @@ class StateStore:
         language: Language,
         video_path: str | None,
         script_path: str,
+        gender: str | None = None,
     ) -> dict[str, Any]:
-        return {
+        record = {
             "job_id": job_id,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "chosen_account": chosen_account,
@@ -503,6 +504,9 @@ class StateStore:
             "video_path": video_path,
             "script_path": script_path,
         }
+        if gender:
+            record["gender"] = gender
+        return record
 
     @staticmethod
     def _bucket_key(video_type: VideoType, language: Language) -> str:

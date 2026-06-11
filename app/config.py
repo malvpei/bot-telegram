@@ -78,6 +78,7 @@ class Settings:
     instagram_session_path: Path
     fixed_image_path: Path
     accounts_file: Path
+    women_accounts_file: Path
     max_posts_per_account: int
     width: int
     height: int
@@ -125,6 +126,11 @@ def get_settings() -> Settings:
     )
 
     accounts_file = _env_path("ACCOUNTS_FILE", root_dir / "accounts.txt", root_dir)
+    women_accounts_file = _env_path(
+        "WOMEN_ACCOUNTS_FILE",
+        root_dir / "accounts_women.txt",
+        root_dir,
+    )
 
     return Settings(
         root_dir=root_dir,
@@ -142,6 +148,7 @@ def get_settings() -> Settings:
         instagram_session_path=instagram_session_path,
         fixed_image_path=fixed_image_path,
         accounts_file=accounts_file,
+        women_accounts_file=women_accounts_file,
         max_posts_per_account=_env_int("MAX_POSTS_PER_ACCOUNT", 100),
         width=_env_int("VIDEO_WIDTH", 1080),
         height=_env_int("VIDEO_HEIGHT", 1920),
