@@ -1,2 +1,11 @@
 # Instagram accounts for women videos.
 # Add one URL or username per line, exactly like accounts.txt.
+https://www.instagram.com/arianeyba/
+https://www.instagram.com/aneth_casiquee4/
+https://www.instagram.com/aylen_zunino/
+https://www.instagram.com/mpaulaa19__/
+https://www.instagram.com/camilatelleez/
+https://www.instagram.com/val__zarate.15/
+https://www.instagram.com/ayleenleonn/
+https://www.instagram.com/evelynluzmilag/
+https://www.instagram.com/lindasilverio_/
