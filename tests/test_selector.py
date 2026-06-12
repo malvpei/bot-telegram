@@ -18,7 +18,11 @@ from app.models import (
     TYPE_3_ROLES,
     VideoType,
 )
-from app.selector import ImageSelector, TYPE_1_REPLACEABLE_FOR_LANDSCAPE
+from app.selector import (
+    ImageSelector,
+    TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
+    TYPE_2_TIP3_FIXED_IMAGE_NAME,
+)
 from app.state import StateStore
 
 
@@ -32,6 +36,11 @@ def temp_workspace():
     fixed_dir.mkdir()
     fixed_image_path = fixed_dir / "imagen6.png"
     _write_sample_image(fixed_image_path, color=(120, 120, 120), landscape=False)
+    _write_sample_image(
+        fixed_dir / TYPE_2_TIP3_FIXED_IMAGE_NAME,
+        color=(80, 90, 100),
+        landscape=False,
+    )
     type3_backgrounds = root / "tipo3" / "fondocolores"
     type3_backgrounds.mkdir(parents=True)
     for index, color in enumerate(((50, 80, 120), (120, 60, 80), (80, 120, 70))):
@@ -173,6 +182,7 @@ def test_type_2_plan_fixed_tip3_and_hook_requires_face(temp_workspace):
     tip3_slide = next(slide for slide in plan.slides if slide.role == SlideRole.TIP3)
     assert tip3_slide.fixed_asset is True
     assert tip3_slide.media.source_account == "fixed"
+    assert tip3_slide.media.source_id == "fixed:tip3_dropradar"
 
 
 def test_type_2_rejects_pool_without_visible_people(temp_workspace):

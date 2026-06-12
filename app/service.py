@@ -26,7 +26,7 @@ from app.models import (
 )
 from app.r2_storage import R2StorageClient
 from app.render import VideoRenderer
-from app.selector import ImageSelector
+from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.state import StateStore
 from app.texts import ScriptGenerator
 
@@ -291,6 +291,14 @@ class VideoCreationService:
             warnings.append(
                 "Falta la imagen fija obligatoria: "
                 f"{self.settings.fixed_image_path}"
+            )
+        type_2_tip3_fixed_path = (
+            self.settings.fixed_assets_dir / TYPE_2_TIP3_FIXED_IMAGE_NAME
+        )
+        if not type_2_tip3_fixed_path.exists():
+            warnings.append(
+                "Falta la imagen fija obligatoria para el consejo 3 del tipo 2: "
+                f"{type_2_tip3_fixed_path}"
             )
         if not self.settings.fonts_dir.exists():
             LOGGER.info(

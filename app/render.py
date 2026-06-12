@@ -585,10 +585,10 @@ class VideoRenderer:
             max_width=width - edge_margin * 2 - padding_x * 2,
             base_size=72,
             min_size=46,
-            bold=True,
+            bold=False,
             stroke_width=0,
         )
-        body_font = self._load_font(size=TYPE_3_BODY_FONT_SIZE, bold=True)
+        body_font = self._load_font(size=TYPE_3_BODY_FONT_SIZE, bold=False)
         body_lines = self._type_3_body_lines(
             subtitle,
             cta,
@@ -1140,7 +1140,7 @@ class VideoRenderer:
             self._draw_hook_text(image, slide.text)
             return
 
-        self._draw_caption_card_text(image, slide.text)
+        self._draw_caption_card_text(image, slide.text, slide=slide)
 
     def _draw_hook_text(self, image: Image.Image, text: str) -> None:
         draw = ImageDraw.Draw(image)
@@ -1179,7 +1179,13 @@ class VideoRenderer:
             stroke_width=stroke_width,
         )
 
-    def _draw_caption_card_text(self, image: Image.Image, text: str) -> None:
+    def _draw_caption_card_text(
+        self,
+        image: Image.Image,
+        text: str,
+        *,
+        slide: SlidePlan | None = None,
+    ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
         first_line, body = self._split_slide_text(text)
@@ -1195,9 +1201,9 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.18),
-            base_size=self._scaled_text_size(52, minimum=20),
+            base_size=self._scaled_text_size(50, minimum=20),
             min_size=self._scaled_text_size(34, minimum=15),
-            bold=True,
+            bold=False,
             stroke_width=0,
         )
         body_font, body_lines = self._fit_text(
@@ -1205,9 +1211,9 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.40),
-            base_size=self._scaled_text_size(48, minimum=18),
+            base_size=self._scaled_text_size(47, minimum=18),
             min_size=self._scaled_text_size(32, minimum=14),
-            bold=True,
+            bold=False,
             stroke_width=0,
         )
 
@@ -1246,7 +1252,7 @@ class VideoRenderer:
             image,
             block_width=block_width,
             block_height=total_height,
-            preferred_centers=(0.54, 0.44, 0.64, 0.34, 0.74, 0.26),
+            preferred_centers=self._caption_preferred_centers(slide),
         )
 
         y = start_y
@@ -1275,6 +1281,18 @@ class VideoRenderer:
                 )
             if index < len(groups) - 1:
                 y += block_gap
+
+    def _caption_preferred_centers(
+        self,
+        slide: SlidePlan | None,
+    ) -> tuple[float, ...]:
+        if (
+            slide is not None
+            and slide.fixed_asset
+            and slide.role in {SlideRole.FEBRUARY, SlideRole.TIP3}
+        ):
+            return (0.24, 0.20, 0.30, 0.16, 0.36)
+        return (0.54, 0.44, 0.64, 0.34, 0.74, 0.26)
 
     def _scaled_text_size(self, base_size: int, *, minimum: int) -> int:
         return max(minimum, _scale_x(base_size, self.settings.width))

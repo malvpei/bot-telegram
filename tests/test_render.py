@@ -190,9 +190,9 @@ def test_type_1_title_is_only_slightly_larger_than_body():
         draw,
         max_width=800,
         max_height=300,
-        base_size=52,
+        base_size=50,
         min_size=34,
-        bold=True,
+        bold=False,
         stroke_width=0,
     )
     body_font, _body_lines = renderer._fit_text(
@@ -200,13 +200,55 @@ def test_type_1_title_is_only_slightly_larger_than_body():
         draw,
         max_width=800,
         max_height=300,
-        base_size=48,
+        base_size=47,
         min_size=32,
-        bold=True,
+        bold=False,
         stroke_width=0,
     )
 
     assert 0 < title_font.size - body_font.size <= 4
+
+
+def test_fixed_laptop_slide_places_caption_above_screen(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "fixed_laptop.jpg"
+        canvas = np.full((640, 360, 3), (16, 18, 20), dtype=np.uint8)
+        canvas[330:520, 50:330, :] = (185, 205, 195)
+        Image.fromarray(canvas).save(image_path)
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            width=360,
+            height=640,
+            fonts_dir=root / "fonts",
+        )
+        renderer = VideoRenderer(settings)
+        monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+        slide = SlidePlan(
+            index=3,
+            role=SlideRole.TIP3,
+            text=(
+                "3. Prioriza nichos\n"
+                "Usa Dropradar para validar productos con potencial."
+            ),
+            media=_candidate(image_path),
+            fixed_asset=True,
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_2)
+        pixels = np.asarray(still)
+        white = (
+            (pixels[..., 0] > 235)
+            & (pixels[..., 1] > 235)
+            & (pixels[..., 2] > 235)
+        )
+        ys, _xs = np.where(white)
+
+        assert ys.max() < 330
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_safe_text_position_avoids_face_region(monkeypatch):

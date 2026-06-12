@@ -91,6 +91,7 @@ EXTREME_LUXURY_KEYWORDS = {
 }
 HEIC_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1")
 TYPE_3_BACKGROUND_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+TYPE_2_TIP3_FIXED_IMAGE_NAME = "tip3_dropradar.jpg"
 
 # Slots whose image can be swapped for a landscape without breaking the
 # month-by-month narrative or the fixed slots. Hook stays put, fixed slot is
@@ -134,6 +135,7 @@ class ImageSelector:
         self._people_detector = cv2.HOGDescriptor()
         self._people_detector.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
         self._fixed_media_cache: MediaCandidate | None = None
+        self._type_2_tip3_fixed_media_cache: MediaCandidate | None = None
         self._type_3_backgrounds_cache: tuple[MediaCandidate, ...] | None = None
 
     # ------------------------------------------------------------------
@@ -307,7 +309,7 @@ class ImageSelector:
         catalog: dict[str, list[MediaCandidate]],
         language: Language,
     ) -> VideoPlan:
-        fixed_image = self._build_fixed_media()
+        fixed_image = self._build_type_2_tip3_fixed_media()
         ranked: list[tuple[float, VideoPlan]] = []
 
         for account, raw_candidates in catalog.items():
@@ -1611,6 +1613,33 @@ class ImageSelector:
         )
         candidate.metrics = self._analyze_image(candidate)
         self._fixed_media_cache = candidate
+        return candidate
+
+    def _build_type_2_tip3_fixed_media(self) -> MediaCandidate:
+        if self._type_2_tip3_fixed_media_cache is not None:
+            return self._type_2_tip3_fixed_media_cache
+
+        fixed_path = self.settings.fixed_assets_dir / TYPE_2_TIP3_FIXED_IMAGE_NAME
+        if not fixed_path.exists():
+            raise FileNotFoundError(
+                "No encuentro la imagen fija requerida para el consejo 3 "
+                f"del tipo 2 en {fixed_path}. "
+                f"Coloca {TYPE_2_TIP3_FIXED_IMAGE_NAME} en assets/fixed/."
+            )
+        with Image.open(fixed_path) as fixed_image:
+            width, height = fixed_image.size
+        candidate = MediaCandidate(
+            source_account="fixed",
+            source_id="fixed:tip3_dropradar",
+            local_path=fixed_path,
+            permalink="fixed://tip3_dropradar",
+            caption=TYPE_2_TIP3_FIXED_IMAGE_NAME,
+            width=width,
+            height=height,
+            created_at="fixed",
+        )
+        candidate.metrics = self._analyze_image(candidate)
+        self._type_2_tip3_fixed_media_cache = candidate
         return candidate
 
     def _type_3_backgrounds(self) -> tuple[MediaCandidate, ...]:
