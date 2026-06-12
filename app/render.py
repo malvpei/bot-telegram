@@ -92,6 +92,11 @@ TEXT_CARD_SHADOW = (0, 0, 0, 60)
 TEXT_FACE_AVOID_WEIGHT = 80.0
 TEXT_HEAD_AVOID_WEIGHT = 34.0
 TEXT_BODY_AVOID_WEIGHT = 2.0
+TEXT_CARD_EDGE_MARGIN = 92
+TEXT_CARD_PADDING_X = 22
+TEXT_CARD_PADDING_Y = 8
+TEXT_CARD_LINE_OVERLAP = 3
+TEXT_CARD_GROUP_GAP = 20
 TYPE_4_TITLE_LINES: dict[Language, tuple[str, str]] = {
     Language.ES: ("Empieza tu negocio online", "en 24h"),
     Language.EN: ("Start your online business", "in 24h"),
@@ -569,14 +574,15 @@ class VideoRenderer:
         draw = ImageDraw.Draw(image)
         width, height = image.size
         title, subtitle, cta = self._split_type_3_tool_text(slide.text)
-        padding_x = _scale_x(30, width)
-        padding_y = _scale_y(13, height)
-        line_gap = _scale_y(8, height)
+        edge_margin = _scale_x(TEXT_CARD_EDGE_MARGIN, width)
+        padding_x = _scale_x(TEXT_CARD_PADDING_X, width)
+        padding_y = _scale_y(TEXT_CARD_PADDING_Y, height)
+        connected_line_gap = -_scale_y(TEXT_CARD_LINE_OVERLAP, height)
 
         title_font = self._fit_single_line_text(
             title,
             draw,
-            max_width=width - _scale_x(140, width) - padding_x * 2,
+            max_width=width - edge_margin * 2 - padding_x * 2,
             base_size=72,
             min_size=46,
             bold=True,
@@ -588,7 +594,7 @@ class VideoRenderer:
             cta,
             draw=draw,
             font=body_font,
-            max_width=width - _scale_x(160, width) - padding_x * 2,
+            max_width=width - edge_margin * 2 - padding_x * 2,
         )
         title_lines = [title] if title else []
         title_height = self._pill_lines_height(
@@ -596,7 +602,7 @@ class VideoRenderer:
             title_font,
             draw,
             padding_y=padding_y,
-            line_gap=line_gap,
+            line_gap=0,
         )
         title_y = int(height * 0.270) - title_height // 2
         self._draw_pill_lines(
@@ -607,10 +613,10 @@ class VideoRenderer:
             canvas_width=width,
             padding_x=padding_x,
             padding_y=padding_y,
-            line_gap=line_gap,
+            line_gap=0,
         )
         if body_lines:
-            self._draw_pill_lines(
+            self._draw_connected_pill_lines(
                 draw,
                 body_lines,
                 body_font,
@@ -618,7 +624,7 @@ class VideoRenderer:
                 canvas_width=width,
                 padding_x=padding_x,
                 padding_y=padding_y,
-                line_gap=line_gap,
+                line_gap=connected_line_gap,
             )
 
         tool_key = self._type_3_tool_key(slide.role, slide.text)
@@ -1177,14 +1183,19 @@ class VideoRenderer:
         draw = ImageDraw.Draw(image)
         width, height = image.size
         first_line, body = self._split_slide_text(text)
-        max_text_width = width - _scale_x(140, width)
+        edge_margin = _scale_x(TEXT_CARD_EDGE_MARGIN, width)
+        padding_x = _scale_x(TEXT_CARD_PADDING_X, width)
+        padding_y = _scale_y(TEXT_CARD_PADDING_Y, height)
+        connected_line_gap = -_scale_y(TEXT_CARD_LINE_OVERLAP, height)
+        block_gap = _scale_y(TEXT_CARD_GROUP_GAP, height)
+        max_text_width = max(1, width - (edge_margin * 2) - (padding_x * 2))
 
         title_font, title_lines = self._fit_text(
             first_line,
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.18),
-            base_size=self._scaled_text_size(54, minimum=20),
+            base_size=self._scaled_text_size(52, minimum=20),
             min_size=self._scaled_text_size(34, minimum=15),
             bold=True,
             stroke_width=0,
@@ -1194,22 +1205,17 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.40),
-            base_size=self._scaled_text_size(50, minimum=18),
+            base_size=self._scaled_text_size(48, minimum=18),
             min_size=self._scaled_text_size(32, minimum=14),
             bold=True,
             stroke_width=0,
         )
 
-        padding_x = _scale_x(30, width)
-        padding_y = _scale_y(13, height)
-        line_gap = _scale_y(8, height)
-        block_gap = _scale_y(24, height)
-
-        groups: list[tuple[list[str], ImageFont.ImageFont]] = []
+        groups: list[tuple[list[str], ImageFont.ImageFont, int, bool]] = []
         if first_line.strip():
-            groups.append((title_lines, title_font))
+            groups.append((title_lines, title_font, 0, False))
         if body.strip():
-            groups.append((body_lines, body_font))
+            groups.append((body_lines, body_font, connected_line_gap, True))
         if not groups:
             return
 
@@ -1221,11 +1227,11 @@ class VideoRenderer:
                 padding_y=padding_y,
                 line_gap=line_gap,
             )
-            for lines, font in groups
+            for lines, font, line_gap, _connected in groups
         ]
         total_height = sum(group_heights) + block_gap * max(0, len(groups) - 1)
         block_width = min(
-            width - _scale_x(80, width),
+            width - (edge_margin * 2),
             max(
                 self._pill_lines_width(
                     lines,
@@ -1233,7 +1239,7 @@ class VideoRenderer:
                     draw,
                     padding_x=padding_x,
                 )
-                for lines, font in groups
+                for lines, font, _line_gap, _connected in groups
             ),
         )
         start_y = self._safe_text_start_y(
@@ -1244,17 +1250,29 @@ class VideoRenderer:
         )
 
         y = start_y
-        for index, (lines, font) in enumerate(groups):
-            y = self._draw_pill_lines(
-                draw,
-                lines,
-                font,
-                start_y=y,
-                canvas_width=width,
-                padding_x=padding_x,
-                padding_y=padding_y,
-                line_gap=line_gap,
-            )
+        for index, (lines, font, line_gap, connected) in enumerate(groups):
+            if connected:
+                y = self._draw_connected_pill_lines(
+                    draw,
+                    lines,
+                    font,
+                    start_y=y,
+                    canvas_width=width,
+                    padding_x=padding_x,
+                    padding_y=padding_y,
+                    line_gap=line_gap,
+                )
+            else:
+                y = self._draw_pill_lines(
+                    draw,
+                    lines,
+                    font,
+                    start_y=y,
+                    canvas_width=width,
+                    padding_x=padding_x,
+                    padding_y=padding_y,
+                    line_gap=line_gap,
+                )
             if index < len(groups) - 1:
                 y += block_gap
 
@@ -1333,6 +1351,55 @@ class VideoRenderer:
             draw.text((text_x, text_y), line, font=font, fill=TEXT_CARD_TEXT)
             y += box_height + line_gap
         return y - line_gap
+
+    def _draw_connected_pill_lines(
+        self,
+        draw: ImageDraw.ImageDraw,
+        lines: list[str],
+        font: ImageFont.ImageFont,
+        *,
+        start_y: int,
+        canvas_width: int,
+        padding_x: int,
+        padding_y: int,
+        line_gap: int,
+    ) -> int:
+        boxes: list[tuple[tuple[int, int, int, int], tuple[int, int], str]] = []
+        y = start_y
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=0)
+            line_width = bbox[2] - bbox[0]
+            line_height = bbox[3] - bbox[1]
+            box_width = line_width + padding_x * 2
+            box_height = line_height + padding_y * 2
+            x = (canvas_width - box_width) // 2
+            box = (x, y, x + box_width, y + box_height)
+            text_pos = (x + padding_x - bbox[0], y + padding_y - bbox[1])
+            boxes.append((box, text_pos, line))
+            y += box_height + line_gap
+
+        if not boxes:
+            return start_y
+
+        radius = max(5, _scale_x(9, canvas_width))
+        shadow_offset = max(1, _scale_x(2, canvas_width))
+        for box, _text_pos, _line in boxes:
+            shadow_box = (
+                box[0],
+                box[1] + shadow_offset,
+                box[2],
+                box[3] + shadow_offset,
+            )
+            draw.rounded_rectangle(
+                shadow_box,
+                radius=radius,
+                fill=TEXT_CARD_SHADOW,
+            )
+        for box, _text_pos, _line in boxes:
+            draw.rounded_rectangle(box, radius=radius, fill=TEXT_CARD_FILL)
+        for _box, text_pos, line in boxes:
+            draw.text(text_pos, line, font=font, fill=TEXT_CARD_TEXT)
+        return boxes[-1][0][3]
 
     def _block_width(
         self,

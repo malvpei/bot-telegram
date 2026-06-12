@@ -133,6 +133,82 @@ def test_type_1_still_embeds_caption_cards(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_caption_body_background_is_connected_and_keeps_side_margin(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "source.jpg"
+        Image.new("RGB", (360, 640), (25, 30, 35)).save(image_path)
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            width=360,
+            height=640,
+            fonts_dir=root / "fonts",
+        )
+        renderer = VideoRenderer(settings)
+        monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+        slide = SlidePlan(
+            index=2,
+            role=SlideRole.OCTOBER,
+            text=(
+                "octubre - 0€\n"
+                "lance mi primera tienda supermotivado. puse algo de dinero "
+                "en anuncios, tuve un monton de vistas, pero nadie compro."
+            ),
+            media=_candidate(image_path),
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_1)
+        pixels = np.asarray(still)
+        white = (
+            (pixels[..., 0] > 235)
+            & (pixels[..., 1] > 235)
+            & (pixels[..., 2] > 235)
+        )
+        ys, xs = np.where(white)
+
+        assert xs.min() >= 24
+        assert xs.max() <= still.width - 24
+
+        lower_half = white[still.height // 2 :, :]
+        row_counts = lower_half.sum(axis=1)
+        rows = np.where(row_counts > 24)[0]
+        connected_rows = row_counts[rows.min() : rows.max() + 1]
+        assert connected_rows.min() > 0
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_1_title_is_only_slightly_larger_than_body():
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
+
+    title_font, _title_lines = renderer._fit_text(
+        "1. Valida con poco presupuesto",
+        draw,
+        max_width=800,
+        max_height=300,
+        base_size=52,
+        min_size=34,
+        bold=True,
+        stroke_width=0,
+    )
+    body_font, _body_lines = renderer._fit_text(
+        "No trates la publicidad como una apuesta.",
+        draw,
+        max_width=800,
+        max_height=300,
+        base_size=48,
+        min_size=32,
+        bold=True,
+        stroke_width=0,
+    )
+
+    assert 0 < title_font.size - body_font.size <= 4
+
+
 def test_safe_text_position_avoids_face_region(monkeypatch):
     settings = replace(get_settings(), width=360, height=640)
     renderer = VideoRenderer(settings)
