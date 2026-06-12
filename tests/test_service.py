@@ -108,6 +108,17 @@ class EmptyExtraPool:
         raise ValueError("No quedan fotos disponibles")
 
 
+class EmptyPlanPool:
+    def __init__(self) -> None:
+        self.noted: list[tuple[str, VideoType]] = []
+
+    def select_plan(self, usernames, video_type, language, *, skip_accounts=None):
+        raise ValueError("pool empty")
+
+    def note_account_used(self, account: str, video_type: VideoType) -> None:
+        self.noted.append((account, video_type))
+
+
 class FakeR2Storage:
     is_configured = True
 
@@ -591,6 +602,71 @@ def test_picker_keeps_searching_beyond_first_failed_accounts(monkeypatch):
         assert plan.chosen_account == "good"
         assert tried == ["bad1", "bad2", "bad3", "good"]
         assert service.collector.seen == tried
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_plan_picker_falls_back_to_dynamic_when_pool_has_no_plan(monkeypatch):
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), account_pick_attempts=0)
+        service.state = StateStore(root / "state")
+        service.pool = EmptyPlanPool()
+        service.collector = FakeCollector()
+        service.selector = PlanWhenGoodSelector()
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        plan, tried = service._pick_and_reserve_plan(
+            ["bad", "good"],
+            request,
+            "job-1",
+        )
+
+        assert plan.chosen_account == "good"
+        assert tried == ["bad", "good"]
+        assert service.collector.seen == ["bad", "good"]
+        assert service.pool.noted == [("good", VideoType.TYPE_1)]
+        assert service.state.any_media_used(["good:1"])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_dynamic_picker_respects_skipped_accounts(monkeypatch):
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), account_pick_attempts=0)
+        service.state = StateStore(root / "state")
+        service.collector = FakeCollector()
+        service.selector = PlanWhenGoodSelector()
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            account_inputs=[],
+            skip_accounts=["bad"],
+        )
+
+        plan, tried = service._pick_account_with_plan(
+            ["bad", "good"],
+            request,
+        )
+
+        assert plan.chosen_account == "good"
+        assert tried == ["good"]
+        assert service.collector.seen == ["good"]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

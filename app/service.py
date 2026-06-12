@@ -638,20 +638,19 @@ class VideoCreationService:
         conflicts: list[str] = []
         all_tried: list[str] = []
         for attempt in range(1, 4):
-            if hasattr(self, "pool"):
-                plan, tried = self.pool.select_plan(
-                    usernames,
-                    request.video_type,
-                    request.language,
-                    skip_accounts=request.skip_accounts,
-                )
-            else:
-                plan, tried = self._pick_account_with_plan(usernames, request)
+            collected_for_pool: dict[str, list[MediaCandidate]] = {}
+            plan, tried, plan_source = self._pick_plan_prefer_pool(
+                usernames,
+                request,
+                collected_for_pool=collected_for_pool,
+            )
             all_tried = _merge_preserving_order(all_tried, tried)
             already_used = self.state.reserve_media(plan.used_media_ids, job_id)
             if not already_used:
                 if hasattr(self, "pool"):
                     self.pool.note_account_used(plan.chosen_account, request.video_type)
+                if plan_source == "dynamic":
+                    self._warm_pool_from_dynamic_candidates(collected_for_pool, plan)
                 return plan, all_tried
             conflicts.extend(already_used)
             LOGGER.warning(
@@ -666,13 +665,62 @@ class VideoCreationService:
             + ", ".join(dict.fromkeys(conflicts))
         )
 
+    def _pick_plan_prefer_pool(
+        self,
+        usernames: list[str],
+        request: VideoRequest,
+        *,
+        collected_for_pool: dict[str, list[MediaCandidate]],
+    ) -> tuple[VideoPlan, list[str], str]:
+        if hasattr(self, "pool"):
+            try:
+                plan, tried = self.pool.select_plan(
+                    usernames,
+                    request.video_type,
+                    request.language,
+                    skip_accounts=request.skip_accounts,
+                )
+                return plan, tried, "pool"
+            except ValueError as error:
+                LOGGER.info(
+                    "Pool has no viable plan for type %s; falling back to dynamic fetch: %s",
+                    request.video_type.value,
+                    error,
+                )
+
+        plan, tried = self._pick_account_with_plan(
+            usernames,
+            request,
+            collected_by_account=collected_for_pool,
+        )
+        return plan, tried, "dynamic"
+
     def _pick_account_with_plan(
-        self, usernames: list[str], request: VideoRequest
-    ):
+        self,
+        usernames: list[str],
+        request: VideoRequest,
+        *,
+        collected_by_account: dict[str, list[MediaCandidate]] | None = None,
+    ) -> tuple[VideoPlan, list[str]]:
         # Shuffle all accounts and try them one by one. The account choice is
         # intentionally pure random; if a picked account cannot produce the
         # requested video, the next random account gets a chance.
-        ordered = self._ordered_accounts_for_pick(usernames, request.video_type)
+        skipped = {
+            account.strip().lstrip("@").lower()
+            for account in request.skip_accounts
+            if account.strip().lstrip("@")
+        }
+        ordered = [
+            username
+            for username in self._ordered_accounts_for_pick(
+                usernames, request.video_type
+            )
+            if username.lower() not in skipped
+        ]
+        if not ordered:
+            raise InstagramCollectorError(
+                "No quedan cuentas disponibles despues de aplicar los descartes."
+            )
         max_attempts = self._max_account_attempts(len(ordered))
         tried: list[str] = []
         errors: list[str] = []
@@ -685,6 +733,8 @@ class VideoCreationService:
                 LOGGER.warning("@%s descartada (fetch): %s", username, error)
                 errors.append(f"@{username}: {error}")
                 continue
+            if collected_by_account is not None:
+                collected_by_account[username] = candidates
 
             try:
                 plan = self.selector.create_plan(
@@ -712,6 +762,32 @@ class VideoCreationService:
             f"(de {len(usernames)} disponibles).\n"
             + "\n".join(errors)
         )
+
+    def _warm_pool_from_dynamic_candidates(
+        self,
+        collected_by_account: dict[str, list[MediaCandidate]],
+        plan: VideoPlan,
+    ) -> None:
+        if not hasattr(self, "pool") or not hasattr(self.pool, "add_candidates"):
+            return
+        candidates = collected_by_account.get(plan.chosen_account, [])
+        if not candidates:
+            return
+        try:
+            added = self.pool.add_candidates(candidates)
+        except Exception as error:  # noqa: BLE001
+            LOGGER.info(
+                "No pude calentar el pool con @%s tras fallback dinamico: %s",
+                plan.chosen_account,
+                error,
+            )
+            return
+        if added:
+            LOGGER.info(
+                "Dynamic fallback warmed pool with %d extra item(s) from @%s",
+                added,
+                plan.chosen_account,
+            )
 
     def _ordered_accounts_for_pick(
         self,

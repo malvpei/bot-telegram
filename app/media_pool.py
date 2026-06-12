@@ -62,39 +62,54 @@ class MediaPoolService:
         skipped_cooldown: list[str] = []
         refreshed_during_cooldown: list[str] = []
         scraped: list[str] = []
+        fresh_limit = max(
+            0,
+            int(getattr(self.settings, "pool_refill_max_fresh_accounts", 0)),
+        )
+        fresh_limit_reached = False
+        fresh_attempts = 0
 
         for username in usernames:
             if self._pool_ready(pool, usernames, target, used_media=used_media):
                 break
             cooldown_until = self._cooldown_until(cooldowns, username)
-            if cooldown_until is not None and cooldown_until > now:
-                cached_candidates = self._cached_candidates(username)
-                if cached_candidates:
-                    valid_candidates = self._valid_pool_candidates(
-                        cached_candidates,
-                        used_media=used_media,
+
+            cached_candidates = self._cached_candidates(username)
+            if cached_candidates:
+                added, valid = self._add_candidates_to_pool(
+                    pool,
+                    cached_candidates,
+                    used_media=used_media,
+                    usernames=usernames,
+                    target=target,
+                )
+                if added:
+                    added_by_account[username] = (
+                        added_by_account.get(username, 0) + added
                     )
-                    added = self._merge_candidates_into_pool(pool, valid_candidates)
-                    if added:
-                        added_by_account[username] = (
-                            added_by_account.get(username, 0) + added
-                        )
-                        valid_by_account[username] = (
-                            valid_by_account.get(username, 0) + len(valid_candidates)
-                        )
-                        if self._pool_ready(
-                            pool,
-                            usernames,
-                            target,
-                            used_media=used_media,
-                        ):
-                            continue
+                    valid_by_account[username] = (
+                        valid_by_account.get(username, 0) + valid
+                    )
+                if self._pool_ready(pool, usernames, target, used_media=used_media):
+                    continue
+
+            if cooldown_until is not None and cooldown_until > now:
                 LOGGER.info(
-                    "@%s en cooldown, pero la cache no basta para completar el stock; "
-                    "refresco porque el pool sigue incompleto",
+                    "@%s en cooldown; uso cache local y salto red en este refill",
                     username,
                 )
-                refreshed_during_cooldown.append(username)
+                skipped_cooldown.append(username)
+                continue
+
+            if fresh_limit and fresh_attempts >= fresh_limit:
+                LOGGER.info(
+                    "Pool refill fresh-account limit reached (%d); stopping this run",
+                    fresh_limit,
+                )
+                fresh_limit_reached = True
+                break
+
+            fresh_attempts += 1
             try:
                 candidates = self.collector.collect_one(username, use_cache=False)
             except Exception as error:  # noqa: BLE001
@@ -103,14 +118,16 @@ class MediaPoolService:
                 continue
 
             scraped.append(username)
-            valid_candidates = self._valid_pool_candidates(
+            added, valid = self._add_candidates_to_pool(
+                pool,
                 candidates,
                 used_media=used_media,
+                usernames=usernames,
+                target=target,
             )
-            added = self._merge_candidates_into_pool(pool, valid_candidates)
             added_by_account[username] = added_by_account.get(username, 0) + added
             valid_by_account[username] = (
-                valid_by_account.get(username, 0) + len(valid_candidates)
+                valid_by_account.get(username, 0) + valid
             )
 
             scraped_at = now.isoformat()
@@ -122,7 +139,7 @@ class MediaPoolService:
                 cooldown_until=cooldown_until_text,
                 scraped_at=scraped_at,
                 added_count=added,
-                valid_count=len(valid_candidates),
+                valid_count=valid,
                 total_count=len(candidates),
             )
             cooldowns[username] = {"cooldown_until": cooldown_until_text}
@@ -168,6 +185,9 @@ class MediaPoolService:
                 added_by_account,
                 used_media=used_media,
             ),
+            "fresh_limit": fresh_limit,
+            "fresh_limit_reached": fresh_limit_reached,
+            "fresh_attempts": fresh_attempts,
             "scraped": scraped,
             "skipped_cooldown": skipped_cooldown,
             "refreshed_during_cooldown": refreshed_during_cooldown,
@@ -216,9 +236,24 @@ class MediaPoolService:
         raise ValueError(
             "No hay una cuenta del pool que pueda generar este tipo de video. "
             f"Probe todas las cuentas locales disponibles ({len(tried)}/{len(ordered_accounts)}). "
-            "Ejecuta /download_pool para rellenarlo con mas fotos aptas."
+            "Se puede usar busqueda dinamica fuera del pool para encontrar mas fotos."
             + detail
         )
+
+    def add_candidates(self, candidates: list[MediaCandidate]) -> int:
+        if not candidates:
+            return 0
+        pool = self._normalise_pool(self.state.read_media_pool())
+        used_media = self.state.read_used_media()
+        added, _ = self._add_candidates_to_pool(
+            pool,
+            candidates,
+            used_media=used_media,
+        )
+        if added:
+            pool["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self.state.write_media_pool(pool)
+        return added
 
     def note_account_used(self, account: str, video_type: VideoType) -> None:
         pool = self._normalise_pool(self.state.read_media_pool())
@@ -336,6 +371,66 @@ class MediaPoolService:
             seen_keys.update(keys)
             added += 1
         return added
+
+    def _add_candidates_to_pool(
+        self,
+        pool: dict[str, Any],
+        candidates: list[MediaCandidate],
+        *,
+        used_media: dict[str, Any],
+        usernames: list[str] | None = None,
+        target: int | None = None,
+    ) -> tuple[int, int]:
+        items = pool["items"]
+        seen_keys: set[str] = set()
+        for item in items:
+            seen_keys.update(self._item_keys(item))
+
+        added = 0
+        valid = 0
+        check_readiness = usernames is not None and target is not None
+        ready = (
+            self._pool_ready(pool, usernames or [], target or 0, used_media=used_media)
+            if check_readiness
+            else False
+        )
+        for candidate in candidates:
+            if ready:
+                break
+
+            known_keys = self._candidate_known_keys(candidate)
+            if known_keys and (
+                self._keys_used(list(known_keys), used_media)
+                or self._keys_conflict(seen_keys, known_keys)
+            ):
+                continue
+
+            self.selector._prepare_candidates([candidate])
+            if candidate.metrics is None:
+                continue
+            keys = self.selector.reservation_keys_for([candidate])
+            if not keys:
+                continue
+            incoming = set(keys)
+            if self._keys_used(keys, used_media) or self._keys_conflict(
+                seen_keys, incoming
+            ):
+                continue
+            eligible_types = self._eligible_types(candidate)
+            if not eligible_types:
+                continue
+            items.append(self._candidate_to_item(candidate, eligible_types))
+            seen_keys.update(incoming)
+            valid += 1
+            added += 1
+            if check_readiness:
+                ready = self._pool_ready(
+                    pool,
+                    usernames or [],
+                    target or 0,
+                    used_media=used_media,
+                )
+        return added, valid
 
     def _available_candidates_by_account(
         self,
@@ -737,6 +832,14 @@ class MediaPoolService:
         keys.update(str(key) for key in item.get("content_fingerprints") or [] if key)
         if item.get("content_fingerprint"):
             keys.add(str(item["content_fingerprint"]))
+        keys.discard("")
+        return keys
+
+    def _candidate_known_keys(self, candidate: MediaCandidate) -> set[str]:
+        keys = {candidate.source_id}
+        keys.update(candidate.content_fingerprints)
+        if candidate.content_fingerprint:
+            keys.add(candidate.content_fingerprint)
         keys.discard("")
         return keys
 

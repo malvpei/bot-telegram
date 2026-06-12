@@ -180,7 +180,40 @@ def test_pool_refill_uses_cached_candidates_during_cooldown():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_refill_refreshes_cooldown_account_when_cached_stock_is_already_in_pool():
+def test_pool_refill_uses_cached_candidates_before_network_without_cooldown():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+            pool_target_images=1,
+        )
+        state = StateStore(settings.state_dir)
+        dhashes = ("1", "e", "3", "c", "5", "a")
+        candidates = [
+            _candidate(root, f"alpha:POST{index}:0", f"dhash:{digit * 16}")
+            for index, digit in enumerate(dhashes)
+        ]
+        collector = CachedOnlyCollector(candidates)
+        service = MediaPoolService(
+            settings,
+            state,
+            collector,
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        summary = service.refill(["alpha"])
+
+        assert summary["added"] == 6
+        assert summary["scraped"] == []
+        assert collector.collect_called is False
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_refill_skips_cooldown_account_when_cached_stock_is_already_in_pool():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -223,14 +256,15 @@ def test_pool_refill_refreshes_cooldown_account_when_cached_stock_is_already_in_
 
         summary = service.refill(["alpha"])
 
-        assert collector.seen == ["alpha:False"]
-        assert summary["refreshed_during_cooldown"] == ["alpha"]
-        assert summary["added"] == 1
+        assert collector.seen == []
+        assert summary["skipped_cooldown"] == ["alpha"]
+        assert summary["refreshed_during_cooldown"] == []
+        assert summary["added"] == 0
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_refill_combines_cached_and_fresh_stock_when_cache_is_not_enough():
+def test_pool_refill_uses_cached_stock_and_skips_fresh_fetch_during_cooldown():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -261,9 +295,89 @@ def test_pool_refill_combines_cached_and_fresh_stock_when_cache_is_not_enough():
 
         summary = service.refill(["alpha"])
 
+        assert collector.seen == []
+        assert summary["skipped_cooldown"] == ["alpha"]
+        assert summary["refreshed_during_cooldown"] == []
+        assert summary["added"] == 1
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_refill_combines_cached_and_fresh_stock_without_cooldown():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+            pool_target_images=10,
+        )
+        state = StateStore(settings.state_dir)
+        cached = _candidate(root, "alpha:CACHED:0", "dhash:1111111111111111")
+        fresh = _candidate(root, "alpha:FRESH:0", "dhash:eeeeeeeeeeeeeeee")
+        collector = RefreshingCollector([cached], [fresh])
+        service = MediaPoolService(
+            settings,
+            state,
+            collector,
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        summary = service.refill(["alpha"])
+
         assert collector.seen == ["alpha:False"]
-        assert summary["refreshed_during_cooldown"] == ["alpha"]
+        assert summary["skipped_cooldown"] == []
         assert summary["added"] == 2
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_refill_stops_after_fresh_account_limit():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+
+    class FreshCollector:
+        def __init__(self) -> None:
+            self.seen: list[str] = []
+
+        def _load_cached_account(self, username: str):
+            return []
+
+        def collect_one(self, username: str, *, use_cache: bool = True):
+            self.seen.append(f"{username}:{use_cache}")
+            return [
+                _candidate(
+                    root,
+                    f"{username}:FRESH:0",
+                    f"dhash:{format(len(self.seen), 'x') * 16}",
+                )
+            ]
+
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+            pool_target_images=10,
+            pool_refill_max_fresh_accounts=1,
+        )
+        state = StateStore(settings.state_dir)
+        collector = FreshCollector()
+        service = MediaPoolService(
+            settings,
+            state,
+            collector,
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        summary = service.refill(["alpha", "beta", "gamma"])
+
+        assert collector.seen == ["alpha:False"]
+        assert summary["scraped"] == ["alpha"]
+        assert summary["fresh_attempts"] == 1
+        assert summary["fresh_limit"] == 1
+        assert summary["fresh_limit_reached"] is True
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -304,6 +418,29 @@ def test_pool_select_plan_can_skip_current_account():
 
         assert plan.chosen_account == "beta"
         assert tried == ["beta"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_can_add_candidates_without_full_refill():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        candidate = _candidate(root, "alpha:POST1:0", "dhash:1111111111111111")
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        added = service.add_candidates([candidate])
+        pool = state.read_media_pool()
+
+        assert added == 1
+        assert pool["items"][0]["source_id"] == "alpha:POST1:0"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

@@ -89,3 +89,14 @@ def test_r2_settings_are_loaded_from_env(monkeypatch):
         assert settings.r2_input_prefix == "inputs/videos"
     finally:
         get_settings.cache_clear()
+
+
+def test_pool_refill_fresh_account_limit_env(monkeypatch):
+    monkeypatch.setenv("POOL_REFILL_MAX_FRESH_ACCOUNTS", "3")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.pool_refill_max_fresh_accounts == 3
+    finally:
+        get_settings.cache_clear()

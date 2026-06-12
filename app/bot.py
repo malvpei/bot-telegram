@@ -129,8 +129,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/memory - ver si la memoria persiste tras redeploy\n"
         "/sync - descargar la biblioteca local de cuentas de hombres\n"
         "/sync_women - descargar la biblioteca local de cuentas de mujeres\n"
-        "/download_pool - rellenar el pool rapido de fotos de hombres\n"
-        "/download_pool_women - rellenar el pool rapido de fotos de mujeres\n"
+        "/download_pool - precalentar el pool rapido de fotos de hombres\n"
+        "/download_pool_women - precalentar el pool rapido de fotos de mujeres\n"
         "/pool - ver stock del pool\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
         "/create — elegir tipo e idioma y generar el video\n"
@@ -155,7 +155,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "3. elige Tipo 1, Tipo 2 o Tipo 3\n"
         "4. elige Español o English\n"
         "5. elige si quieres textos normales o todo en minúscula\n"
-        "6. el bot elige imágenes ya guardadas y envía el video\n\n"
+        "6. el bot usa el pool si hay stock o busca dinamicamente si falta\n\n"
         "Tipos:\n"
         "1 = historia de 7 imágenes (slide 6 = imagen6.png, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = imagen6.png, tip3)\n"
@@ -163,9 +163,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
         "accounts_women.txt (una por línea). Para cambiarlas edita el archivo "
         "y guarda; se releen en cada /create.\n\n"
-        "Usa /download_pool para hombres y /download_pool_women para mujeres. "
-        "Ambos precargan un lote de fotos aptas. "
-        "Despues /create elige desde ese pool local sin descargar en caliente.\n\n"
+        "/create usa primero el pool local si hay fotos aptas. "
+        "Si no hay stock, busca dinamicamente en las cuentas y guarda "
+        "las fotos validas sobrantes para acelerar los siguientes videos. "
+        "/download_pool y /download_pool_women quedan como precalentamiento opcional.\n\n"
         "Usa /template_video [prefijo-r2] para coger un MP4 de R2 y "
         "aplicarle la plantilla fija de herramientas. El MP4 final sale sin audio.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
@@ -306,7 +307,9 @@ async def _download_pool_command_for_gender(
     status_message = await update.effective_message.reply_text(
         f"Rellenando pool de {_gender_label_plural(gender)} hasta "
         f"{settings.pool_target_images} fotos aptas por tipo. "
-        "Voy cuenta por cuenta y pongo cooldown despues de revisar cada una."
+        "Primero uso cache/local y luego reviso "
+        f"hasta {settings.pool_refill_max_fresh_accounts or 'todas las'} "
+        "cuentas frescas por tanda."
     )
     service: VideoCreationService = context.application.bot_data["service"]
     try:
@@ -776,7 +779,10 @@ async def _execute_job(
     chat = update.effective_chat
     status_message = await context.bot.send_message(
         chat_id=chat.id,
-        text="Estoy seleccionando imágenes de la biblioteca local y montando el video. Esto puede tardar un poco.",
+        text=(
+            "Estoy seleccionando imagenes. Uso el pool si hay stock; "
+            "si no, busco dinamicamente una cuenta viable."
+        ),
     )
     service: VideoCreationService = context.application.bot_data["service"]
 
@@ -815,7 +821,8 @@ async def _execute_job(
                 (
                     "Aviso: el pool se esta quedando bajo "
                     f"({result.pool_remaining} fotos disponibles). "
-                    "Ejecuta /download_pool cuando quieras rellenarlo."
+                    "Puedes precalentarlo con /download_pool, pero /create "
+                    "tambien puede buscar dinamicamente si hace falta."
                 ),
             )
     except TelegramError as error:
@@ -1082,6 +1089,15 @@ def _format_pool_refill_summary(summary: dict) -> str:
         f"Retiradas por usadas/no aptas: {summary.get('pruned', 0)}",
         f"Nuevas guardadas: {summary.get('added', 0)}",
         (
+            "Cuentas frescas revisadas: "
+            f"{summary.get('fresh_attempts', len(summary.get('scraped', [])))}"
+            + (
+                f"/{summary.get('fresh_limit')}"
+                if summary.get("fresh_limit")
+                else ""
+            )
+        ),
+        (
             "Aptas por tipo: "
             f"T1={after.get('by_type', {}).get('1', 0)}, "
             f"T2={after.get('by_type', {}).get('2', 0)}, "
@@ -1121,7 +1137,7 @@ def _format_pool_refill_summary(summary: dict) -> str:
             )
     if skipped:
         lines.append("")
-        lines.append("En cooldown:")
+        lines.append("En cooldown (saltadas sin red para no alargar):")
         lines.extend(
             f"@{_short_summary_value(account, 64)}" for account in skipped[:10]
         )
@@ -1135,6 +1151,12 @@ def _format_pool_refill_summary(summary: dict) -> str:
         )
         if len(refreshed) > 10:
             lines.append(f"... y {len(refreshed) - 10} cuentas mas")
+    if summary.get("fresh_limit_reached"):
+        lines.append("")
+        lines.append(
+            "Paré aqui para que /download_pool no se alargue demasiado. "
+            "Puedes lanzarlo otra vez para precalentar otra tanda."
+        )
     if errors:
         error_items = sorted(errors.items())
         lines.append("")
@@ -1152,8 +1174,9 @@ def _format_pool_refill_summary(summary: dict) -> str:
     if not summary.get("ready"):
         lines.append("")
         lines.append(
-            "Aun no hay stock suficiente para todos los tipos. Ejecuta /download_pool "
-            "otra vez cuando haya cuentas fuera de cooldown o revisa /pool."
+            "Aun no hay stock suficiente para todos los tipos, pero /create "
+            "puede buscar dinamicamente si el pool no alcanza. Ejecuta "
+            "/download_pool solo cuando quieras precalentar mas fotos."
         )
     return _fit_telegram_text("\n".join(lines))
 
