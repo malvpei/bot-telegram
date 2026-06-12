@@ -81,9 +81,9 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
 TYPE_3_TEXT_STROKE_WIDTH = 3
 TYPE_3_BODY_FONT_SIZE = 56
 TYPE_4_TARGET_SECONDS = 7.5
-TYPE_4_TEXT_STROKE_WIDTH = 2
-TYPE_4_LABEL_FONT_SIZE = 40
-TYPE_4_LABEL_MIN_FONT_SIZE = 28
+TYPE_4_TEXT_STROKE_WIDTH = 3
+TYPE_4_LABEL_FONT_SIZE = 38
+TYPE_4_LABEL_MIN_FONT_SIZE = 26
 TYPE_4_TEMPLATE_ROWS: tuple[
     tuple[str, str, str, int, int, int, int, int, int, int, int, int, int],
     ...
@@ -920,7 +920,7 @@ class VideoRenderer:
             max_width=width - _scale_x(name_x + 40, width),
             base_size=_scale_y(name_size, height),
             min_size=_scale_y(32, height),
-            bold=True,
+            bold=False,
             stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
         )
         draw.text(
@@ -1252,7 +1252,22 @@ class VideoRenderer:
                 except OSError:
                     continue
 
-        for candidate in SYSTEM_FONT_CANDIDATES:
+        system_candidates = (
+            SYSTEM_FONT_CANDIDATES
+            if bold
+            else (
+                "DejaVuSans.ttf",
+                "arial.ttf",
+                "Arial.ttf",
+                "Helvetica.ttf",
+                "/System/Library/Fonts/Helvetica.ttc",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+                "DejaVuSans-Bold.ttf",
+                "arialbd.ttf",
+                "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+            )
+        )
+        for candidate in system_candidates:
             try:
                 return ImageFont.truetype(candidate, size=size)
             except OSError:
