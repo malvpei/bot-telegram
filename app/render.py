@@ -81,7 +81,7 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
 TYPE_3_TEXT_STROKE_WIDTH = 3
 TYPE_3_BODY_FONT_SIZE = 56
 TYPE_4_TARGET_SECONDS = 7.5
-TYPE_4_TEXT_STROKE_WIDTH = 4
+TYPE_4_TEXT_STROKE_WIDTH = 3
 TYPE_4_TEMPLATE_ROWS: tuple[
     tuple[str, str, str, int, int, int, int, int, int, int, int, int, int],
     ...
@@ -105,7 +105,7 @@ TYPE_4_TEMPLATE_ROWS: tuple[
     ("Guiones:", "chatgpt", "ChatGPT", 96, 818, 211, 82, 354, 789, 142, 539, 846, 47),
     ("Pagos:", "stripe", "Stripe", 98, 981, 176, 82, 359, 961, 130, 549, 1008, 48),
     ("Organico:", "tiktok", "TikTok", 94, 1144, 232, 88, 372, 1138, 118, 554, 1179, 47),
-    ("Ads:", "meta_ads", "Meta Ads", 120, 1329, 127, 82, 306, 1322, 170, 507, 1363, 45),
+    ("Ads:", "meta_ads", "Meta Ads", 120, 1329, 127, 82, 306, 1300, 170, 507, 1363, 45),
     ("Edicion:", "capcut", "CapCut", 92, 1504, 216, 82, 368, 1476, 130, 542, 1530, 47),
 )
 
@@ -816,7 +816,10 @@ class VideoRenderer:
             stroke_fill=(0, 0, 0),
         )
         second_y = y + first_height + line_gap
-        second_x = (width - second_width) // 2
+        badge_size = _scale_x(58, width)
+        badge_gap = _scale_x(20, width)
+        second_group_width = second_width + badge_gap + badge_size
+        second_x = (width - second_group_width) // 2
         draw.text(
             (second_x, second_y),
             second_line,
@@ -825,8 +828,7 @@ class VideoRenderer:
             stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
             stroke_fill=(0, 0, 0),
         )
-        badge_size = _scale_x(58, width)
-        badge_x = second_x + second_width + _scale_x(20, width)
+        badge_x = second_x + second_width + badge_gap
         badge_y = second_y + max(0, (second_height - badge_size) // 2) + _scale_y(2, height)
         self._draw_type_3_check_badge(draw, badge_x, badge_y, badge_size)
 

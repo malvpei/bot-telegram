@@ -7,6 +7,7 @@ from app.config import Settings
 
 
 R2_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
+R2_ACCESS_KEY_ID_LENGTH = 32
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,12 @@ class R2StorageClient:
             raise R2StorageError(
                 "Falta configurar R2. Necesito R2_BUCKET, R2_ACCESS_KEY_ID, "
                 "R2_SECRET_ACCESS_KEY y R2_ACCOUNT_ID o R2_ENDPOINT_URL."
+            )
+        if len(self.settings.r2_access_key_id) != R2_ACCESS_KEY_ID_LENGTH:
+            raise R2StorageError(
+                "R2_ACCESS_KEY_ID no es válido: debe tener 32 caracteres. "
+                "En Coolify pega el valor de 'ID de clave de acceso' de las "
+                "credenciales S3 de R2, no el valor del token ni un placeholder."
             )
         if self._client is not None:
             return self._client
