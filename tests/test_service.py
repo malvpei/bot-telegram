@@ -20,6 +20,8 @@ class FakeRenderer:
         self.render_called = False
         self.write_script_called = False
         self.template_input_video: Path | None = None
+        self.template_language = None
+        self.render_slide_still_calls: list[VideoType] = []
 
     def render(self, plan: VideoPlan, job_dir: Path):
         self.render_called = True
@@ -33,10 +35,12 @@ class FakeRenderer:
         return script_path
 
     def render_slide_still(self, slide: SlidePlan, video_type: VideoType) -> Image.Image:
+        self.render_slide_still_calls.append(video_type)
         return Image.new("RGB", (72, 128), (40, 80, 120))
 
-    def render_template_video(self, input_video: Path, job_dir: Path) -> Path:
+    def render_template_video(self, input_video: Path, job_dir: Path, language=None) -> Path:
         self.template_input_video = input_video
+        self.template_language = language
         job_dir.mkdir(parents=True, exist_ok=True)
         output_path = job_dir / "template_video.mp4"
         output_path.write_bytes(b"video")
@@ -185,6 +189,10 @@ def test_type_3_outputs_skip_full_video_render():
         assert script_path.exists()
         assert service.renderer.write_script_called is True
         assert service.renderer.render_called is False
+        assert service.renderer.render_slide_still_calls == [
+            VideoType.TYPE_3,
+            VideoType.TYPE_3,
+        ]
         assert plan.slides[0].media.local_path.name == "slide_01.jpg"
         assert plan.slides[1].media.local_path.name == "slide_02.jpg"
         assert plan.slides[0].media.local_path.exists()
@@ -235,6 +243,7 @@ def test_type_1_outputs_skip_full_video_render():
         assert script_path.exists()
         assert service.renderer.render_called is False
         assert service.renderer.write_script_called is True
+        assert service.renderer.render_slide_still_calls == [VideoType.TYPE_1]
         assert plan.slides[0].media.local_path.name == "slide_01.jpg"
         assert plan.slides[0].media.local_path.exists()
     finally:
@@ -268,6 +277,39 @@ def test_create_template_video_picks_video_from_configured_folder():
         assert result.video_path.exists()
         assert result.social_copy.hashtag_line.startswith("#")
         assert service.renderer.template_input_video == chosen
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_create_template_video_can_render_english_version(monkeypatch):
+    monkeypatch.setattr("app.service.random.choice", lambda values: values[0])
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        source_dir = root / "template_videos"
+        source_dir.mkdir()
+        (source_dir / "source.mp4").write_bytes(b"fake")
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            template_videos_dir=source_dir,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = FakeRenderer()
+        service.state = StateStore(root / "state")
+        service._job_lock = Lock()
+
+        result = service.create_template_video(language=Language.EN)
+
+        assert result.video_path.exists()
+        assert service.renderer.template_language == Language.EN
+        assert result.social_copy.title == (
+            "Tools to start dropshipping without overcomplicating it"
+        )
+        assert result.social_copy.description.startswith("If you want to launch")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

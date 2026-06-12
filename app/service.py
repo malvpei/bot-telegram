@@ -16,6 +16,7 @@ from app.instagram import InstagramCollector, InstagramCollectorError, extract_u
 from app.media_pool import MediaPoolService
 from app.models import (
     GenerationResult,
+    Language,
     MediaCandidate,
     SocialCopy,
     TemplateVideoResult,
@@ -32,94 +33,184 @@ from app.texts import ScriptGenerator
 
 LOGGER = logging.getLogger(__name__)
 VIDEO_TEMPLATE_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
-TEMPLATE_VIDEO_SOCIAL_COPIES = (
-    SocialCopy(
-        title="Herramientas para empezar dropshipping sin complicarte",
-        description=(
-            "Si quieres lanzar una tienda online, no necesitas mil apps: necesitas "
-            "un stack claro. Investiga productos, monta la tienda, prepara anuncios, "
-            "cobra bien y edita contenido que se pueda publicar rapido."
+TEMPLATE_VIDEO_SOCIAL_COPIES: dict[Language, tuple[SocialCopy, ...]] = {
+    Language.ES: (
+        SocialCopy(
+            title="Herramientas para empezar dropshipping sin complicarte",
+            description=(
+                "Si quieres lanzar una tienda online, no necesitas mil apps: necesitas "
+                "un stack claro. Investiga productos, monta la tienda, prepara anuncios, "
+                "cobra bien y edita contenido que se pueda publicar rapido."
+            ),
+            hashtags=[
+                "#dropshipping",
+                "#ecommerce",
+                "#shopify",
+                "#herramientas",
+                "#dropradar",
+                "#metaads",
+                "#tiktokmarketing",
+                "#capcut",
+            ],
         ),
-        hashtags=[
-            "#dropshipping",
-            "#ecommerce",
-            "#shopify",
-            "#herramientas",
-            "#dropradar",
-            "#metaads",
-            "#tiktokmarketing",
-            "#capcut",
-        ],
-    ),
-    SocialCopy(
-        title="El stack basico para lanzar una tienda online",
-        description=(
-            "Estas herramientas cubren lo esencial: encontrar productos con demanda, "
-            "crear la tienda, aceptar pagos, grabar contenido y testear anuncios. "
-            "Menos ruido, mas ejecucion."
+        SocialCopy(
+            title="El stack basico para lanzar una tienda online",
+            description=(
+                "Estas herramientas cubren lo esencial: encontrar productos con demanda, "
+                "crear la tienda, aceptar pagos, grabar contenido y testear anuncios. "
+                "Menos ruido, mas ejecucion."
+            ),
+            hashtags=[
+                "#tiendaonline",
+                "#dropshippingespana",
+                "#shopify",
+                "#stripe",
+                "#chatgpt",
+                "#ecommerce",
+                "#negocioonline",
+            ],
         ),
-        hashtags=[
-            "#tiendaonline",
-            "#dropshippingespana",
-            "#shopify",
-            "#stripe",
-            "#chatgpt",
-            "#ecommerce",
-            "#negocioonline",
-        ],
-    ),
-    SocialCopy(
-        title="Tu flujo de trabajo para vender online",
-        description=(
-            "Empieza por validar producto, escribe angulos de venta, prepara creativos "
-            "cortos y mide resultados. Con las herramientas correctas, el proceso se "
-            "vuelve mucho mas facil de repetir."
+        SocialCopy(
+            title="Tu flujo de trabajo para vender online",
+            description=(
+                "Empieza por validar producto, escribe angulos de venta, prepara creativos "
+                "cortos y mide resultados. Con las herramientas correctas, el proceso se "
+                "vuelve mucho mas facil de repetir."
+            ),
+            hashtags=[
+                "#dropshipping",
+                "#marketingdigital",
+                "#metaads",
+                "#tiktokads",
+                "#capcut",
+                "#emprenderonline",
+                "#ecommerce",
+            ],
         ),
-        hashtags=[
-            "#dropshipping",
-            "#marketingdigital",
-            "#metaads",
-            "#tiktokads",
-            "#capcut",
-            "#emprenderonline",
-            "#ecommerce",
-        ],
-    ),
-    SocialCopy(
-        title="Herramientas que aceleran tu primer lanzamiento",
-        description=(
-            "No se trata de usar mas plataformas, sino de usar las correctas para cada "
-            "parte del lanzamiento: producto, tienda, pagos, creatividad y trafico. "
-            "Asi evitas improvisar cuando toca publicar."
+        SocialCopy(
+            title="Herramientas que aceleran tu primer lanzamiento",
+            description=(
+                "No se trata de usar mas plataformas, sino de usar las correctas para cada "
+                "parte del lanzamiento: producto, tienda, pagos, creatividad y trafico. "
+                "Asi evitas improvisar cuando toca publicar."
+            ),
+            hashtags=[
+                "#dropshippingtips",
+                "#shopifyespana",
+                "#dropradar",
+                "#stripe",
+                "#chatgpt",
+                "#negociosonline",
+                "#ventas",
+            ],
         ),
-        hashtags=[
-            "#dropshippingtips",
-            "#shopifyespana",
-            "#dropradar",
-            "#stripe",
-            "#chatgpt",
-            "#negociosonline",
-            "#ventas",
-        ],
-    ),
-    SocialCopy(
-        title="La base para crear contenido y vender con dropshipping",
-        description=(
-            "Una buena idea necesita sistema: analiza productos, estructura la oferta, "
-            "edita videos verticales y prueba anuncios con datos. Este stack te da una "
-            "base sencilla para empezar."
+        SocialCopy(
+            title="La base para crear contenido y vender con dropshipping",
+            description=(
+                "Una buena idea necesita sistema: analiza productos, estructura la oferta, "
+                "edita videos verticales y prueba anuncios con datos. Este stack te da una "
+                "base sencilla para empezar."
+            ),
+            hashtags=[
+                "#dropshipping",
+                "#contenidovertical",
+                "#capcut",
+                "#tiktokmarketing",
+                "#metaads",
+                "#shopify",
+                "#ecommercebusiness",
+            ],
         ),
-        hashtags=[
-            "#dropshipping",
-            "#contenidovertical",
-            "#capcut",
-            "#tiktokmarketing",
-            "#metaads",
-            "#shopify",
-            "#ecommercebusiness",
-        ],
     ),
-)
+    Language.EN: (
+        SocialCopy(
+            title="Tools to start dropshipping without overcomplicating it",
+            description=(
+                "If you want to launch an online store, you do not need dozens of apps. "
+                "You need a clear stack: research products, build the store, prepare ads, "
+                "set up payments and edit content you can publish fast."
+            ),
+            hashtags=[
+                "#dropshipping",
+                "#ecommerce",
+                "#shopify",
+                "#businesstools",
+                "#dropradar",
+                "#metaads",
+                "#tiktokmarketing",
+                "#capcut",
+            ],
+        ),
+        SocialCopy(
+            title="The basic stack to launch your online store",
+            description=(
+                "These tools cover the essentials: finding products with demand, creating "
+                "the store, accepting payments, producing content and testing ads. Less "
+                "noise, more execution."
+            ),
+            hashtags=[
+                "#onlinestore",
+                "#dropshippingtips",
+                "#shopify",
+                "#stripe",
+                "#chatgpt",
+                "#ecommerce",
+                "#onlinebusiness",
+            ],
+        ),
+        SocialCopy(
+            title="Your workflow for selling online",
+            description=(
+                "Start by validating the product, write strong selling angles, prepare "
+                "short creatives and measure the results. With the right tools, the "
+                "process becomes much easier to repeat."
+            ),
+            hashtags=[
+                "#dropshipping",
+                "#digitalmarketing",
+                "#metaads",
+                "#tiktokads",
+                "#capcut",
+                "#onlinebusiness",
+                "#ecommerce",
+            ],
+        ),
+        SocialCopy(
+            title="Tools that speed up your first launch",
+            description=(
+                "It is not about using more platforms. It is about using the right ones "
+                "for each step: product research, store, payments, creative production "
+                "and traffic. That way you are not improvising when it is time to post."
+            ),
+            hashtags=[
+                "#dropshippingtips",
+                "#shopifystore",
+                "#dropradar",
+                "#stripe",
+                "#chatgpt",
+                "#onlinebusiness",
+                "#sales",
+            ],
+        ),
+        SocialCopy(
+            title="The base for creating content and selling with dropshipping",
+            description=(
+                "A good idea needs a system: analyze products, structure the offer, edit "
+                "vertical videos and test ads with data. This stack gives you a simple "
+                "foundation to start."
+            ),
+            hashtags=[
+                "#dropshipping",
+                "#shortformcontent",
+                "#capcut",
+                "#tiktokmarketing",
+                "#metaads",
+                "#shopify",
+                "#ecommercebusiness",
+            ],
+        ),
+    ),
+}
 
 
 def _merge_preserving_order(existing: list[str], new_items: list[str]) -> list[str]:
@@ -251,8 +342,13 @@ class VideoCreationService:
     def pool_status(self) -> dict[str, object]:
         return self.pool.stock_counts()
 
-    def create_template_video(self, source: str | None = None) -> TemplateVideoResult:
+    def create_template_video(
+        self,
+        source: str | None = None,
+        language: Language = Language.ES,
+    ) -> TemplateVideoResult:
         with self._job_lock:
+            template_language = self._template_video_language(language)
             job_id = self._build_job_id()
             job_dir = self.settings.outputs_dir / job_id
             if getattr(self, "r2_storage", None) is not None and self.r2_storage.is_configured:
@@ -263,11 +359,15 @@ class VideoCreationService:
             else:
                 source_dir = self._resolve_template_video_dir(source)
                 source_video, queue_restarted = self._pick_template_video(source_dir)
-            output_path = self.renderer.render_template_video(source_video, job_dir)
+            output_path = self.renderer.render_template_video(
+                source_video,
+                job_dir,
+                template_language,
+            )
             self._cleanup_old_outputs()
             return TemplateVideoResult(
                 video_path=output_path,
-                social_copy=random.choice(TEMPLATE_VIDEO_SOCIAL_COPIES),
+                social_copy=random.choice(TEMPLATE_VIDEO_SOCIAL_COPIES[template_language]),
                 queue_restarted=queue_restarted,
             )
 
@@ -637,6 +737,14 @@ class VideoCreationService:
             )
         return max_attempts
 
+    @staticmethod
+    def _template_video_language(language: Language) -> Language:
+        try:
+            parsed = Language(language)
+        except (TypeError, ValueError):
+            return Language.ES
+        return parsed if parsed in TEMPLATE_VIDEO_SOCIAL_COPIES else Language.ES
+
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
@@ -729,15 +837,9 @@ class VideoCreationService:
                 continue
             out_path = slides_dir / f"slide_{slide.index:02d}.jpg"
             try:
-                if plan.video_type == VideoType.TYPE_3:
-                    normalized = self.renderer.render_slide_still(
-                        slide, plan.video_type
-                    ).convert("RGB")
-                else:
-                    with Image.open(source_path) as image:
-                        normalized = _cover_resize(
-                            image.convert("RGB"), target_width, target_height
-                        )
+                normalized = self.renderer.render_slide_still(
+                    slide, plan.video_type
+                ).convert("RGB")
                 normalized.save(out_path, format="JPEG", quality=92)
             except OSError as error:
                 LOGGER.warning(

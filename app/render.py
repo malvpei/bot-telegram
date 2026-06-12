@@ -6,13 +6,14 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import cv2
 import imageio.v2 as imageio
 import imageio_ffmpeg
 import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 from app.config import Settings
-from app.models import SlidePlan, SlideRole, VideoPlan, VideoType
+from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
 
 
 LOGGER = logging.getLogger(__name__)
@@ -78,20 +79,50 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
     "instagram": 0.429,
     "tiktok": 0.429,
 }
-TYPE_3_TEXT_STROKE_WIDTH = 3
-TYPE_3_BODY_FONT_SIZE = 56
+TYPE_3_TEXT_STROKE_WIDTH = 4
+TYPE_3_BODY_FONT_SIZE = 58
 TYPE_4_TARGET_SECONDS = 7.5
 TYPE_4_TITLE_STROKE_WIDTH = 4
 TYPE_4_TEXT_STROKE_WIDTH = 3
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
+TEXT_CARD_FILL = (255, 255, 255, 246)
+TEXT_CARD_TEXT = (8, 8, 8)
+TEXT_CARD_SHADOW = (0, 0, 0, 60)
+TEXT_FACE_AVOID_WEIGHT = 80.0
+TEXT_HEAD_AVOID_WEIGHT = 34.0
+TEXT_BODY_AVOID_WEIGHT = 2.0
+TYPE_4_TITLE_LINES: dict[Language, tuple[str, str]] = {
+    Language.ES: ("Empieza tu negocio online", "en 24h"),
+    Language.EN: ("Start your online business", "in 24h"),
+}
+TYPE_4_TEMPLATE_LABELS: dict[Language, dict[str, str]] = {
+    Language.ES: {
+        "store": "Tienda:",
+        "products": "Productos\nganadores:",
+        "scripts": "Guiones:",
+        "payments": "Pagos:",
+        "organic": "Organico:",
+        "ads": "Ads:",
+        "editing": "Edicion:",
+    },
+    Language.EN: {
+        "store": "Store:",
+        "products": "Winning\nproducts:",
+        "scripts": "Scripts:",
+        "payments": "Payments:",
+        "organic": "Organic:",
+        "ads": "Ads:",
+        "editing": "Editing:",
+    },
+}
 TYPE_4_TEMPLATE_ROWS: tuple[
     tuple[str, str, str, int, int, int, int, int, int, int, int, int, int],
     ...
 ] = (
-    ("Tienda:", "shopify", "Shopify", 95, 456, 205, 91, 368, 431, 142, 568, 475, 50),
+    ("store", "shopify", "Shopify", 95, 456, 205, 91, 368, 431, 142, 568, 475, 50),
     (
-        "Productos\nganadores:",
+        "products",
         "dropradar",
         "Dropradar",
         83,
@@ -105,11 +136,11 @@ TYPE_4_TEMPLATE_ROWS: tuple[
         663,
         50,
     ),
-    ("Guiones:", "chatgpt", "ChatGPT", 96, 818, 211, 82, 354, 789, 142, 539, 846, 47),
-    ("Pagos:", "stripe", "Stripe", 98, 981, 176, 82, 359, 961, 130, 549, 1008, 48),
-    ("Organico:", "tiktok", "TikTok", 94, 1144, 232, 88, 372, 1138, 118, 554, 1179, 47),
-    ("Ads:", "meta_ads", "Meta Ads", 120, 1329, 127, 82, 306, 1300, 170, 507, 1363, 45),
-    ("Edicion:", "capcut", "CapCut", 92, 1504, 216, 82, 368, 1476, 130, 542, 1530, 47),
+    ("scripts", "chatgpt", "ChatGPT", 96, 818, 211, 82, 354, 789, 142, 539, 846, 47),
+    ("payments", "stripe", "Stripe", 98, 981, 176, 82, 359, 961, 130, 549, 1008, 48),
+    ("organic", "tiktok", "TikTok", 94, 1144, 232, 88, 372, 1138, 118, 554, 1179, 47),
+    ("ads", "meta_ads", "Meta Ads", 120, 1329, 127, 82, 306, 1300, 170, 507, 1363, 45),
+    ("editing", "capcut", "CapCut", 92, 1504, 216, 82, 368, 1476, 130, 542, 1530, 47),
 )
 
 
@@ -132,6 +163,11 @@ class VideoRenderer:
         self._font_dir = settings.fonts_dir
         self._type_3_icons_dir = settings.root_dir / "tipo3" / "iconos"
         self._type_4_icons_dir = settings.root_dir / "tipo4" / "iconos"
+        self._face_detector = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        self._people_detector = cv2.HOGDescriptor()
+        self._people_detector.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
 
     def render(self, plan: VideoPlan, job_dir: Path) -> tuple[Path, Path]:
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -206,11 +242,17 @@ class VideoRenderer:
         frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
         return Image.fromarray(frame)
 
-    def render_template_video(self, input_video: Path, job_dir: Path) -> Path:
+    def render_template_video(
+        self,
+        input_video: Path,
+        job_dir: Path,
+        language: Language = Language.ES,
+    ) -> Path:
         job_dir.mkdir(parents=True, exist_ok=True)
         overlay_path = job_dir / "template_overlay.png"
         output_path = job_dir / "template_video.mp4"
-        self.build_type_4_template_overlay().save(overlay_path)
+        template_language = self._type_4_language(language)
+        self.build_type_4_template_overlay(template_language).save(overlay_path)
 
         width = self.settings.width
         height = self.settings.height
@@ -283,16 +325,21 @@ class VideoRenderer:
         hours, minutes, seconds = match.groups()
         return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
 
-    def build_type_4_template_overlay(self) -> Image.Image:
+    def build_type_4_template_overlay(
+        self,
+        language: Language = Language.ES,
+    ) -> Image.Image:
+        template_language = self._type_4_language(language)
         image = Image.new(
             "RGBA",
             (self.settings.width, self.settings.height),
             (0, 0, 0, 0),
         )
         draw = ImageDraw.Draw(image)
-        self._draw_type_4_title(draw, image.width, image.height)
+        self._draw_type_4_title(draw, image.width, image.height, template_language)
+        labels = TYPE_4_TEMPLATE_LABELS[template_language]
         for row in TYPE_4_TEMPLATE_ROWS:
-            self._draw_type_4_template_row(image, draw, row)
+            self._draw_type_4_template_row(image, draw, row, labels)
         return image
 
     def write_script(self, plan: VideoPlan, job_dir: Path) -> Path:
@@ -346,6 +393,7 @@ class VideoRenderer:
     ) -> np.ndarray:
         canvas = self._cover_image(source_image, progress).convert("RGBA")
         if slide.role == SlideRole.HOOK:
+            self._draw_hook_text(canvas, slide.text)
             return np.asarray(canvas.convert("RGB"))
         else:
             self._draw_type_3_tool_slide(canvas, slide)
@@ -521,15 +569,18 @@ class VideoRenderer:
         draw = ImageDraw.Draw(image)
         width, height = image.size
         title, subtitle, cta = self._split_type_3_tool_text(slide.text)
+        padding_x = _scale_x(30, width)
+        padding_y = _scale_y(13, height)
+        line_gap = _scale_y(8, height)
 
         title_font = self._fit_single_line_text(
             title,
             draw,
-            max_width=width - 80,
+            max_width=width - _scale_x(140, width) - padding_x * 2,
             base_size=72,
             min_size=46,
             bold=True,
-            stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
+            stroke_width=0,
         )
         body_font = self._load_font(size=TYPE_3_BODY_FONT_SIZE, bold=True)
         body_lines = self._type_3_body_lines(
@@ -537,34 +588,37 @@ class VideoRenderer:
             cta,
             draw=draw,
             font=body_font,
-            max_width=width - 160,
+            max_width=width - _scale_x(160, width) - padding_x * 2,
         )
         title_lines = [title] if title else []
-        title_height = self._block_height(
+        title_height = self._pill_lines_height(
             title_lines,
             title_font,
             draw,
-            stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
+            padding_y=padding_y,
+            line_gap=line_gap,
         )
         title_y = int(height * 0.270) - title_height // 2
-        self._draw_lines(
+        self._draw_pill_lines(
             draw,
             title_lines,
             title_font,
             start_y=max(70, title_y),
-            width=width,
-            fill=(255, 255, 255),
-            stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
+            canvas_width=width,
+            padding_x=padding_x,
+            padding_y=padding_y,
+            line_gap=line_gap,
         )
         if body_lines:
-            self._draw_lines(
+            self._draw_pill_lines(
                 draw,
                 body_lines,
                 body_font,
                 start_y=int(height * 0.32),
-                width=width,
-                fill=(255, 255, 255),
-                stroke_width=TYPE_3_TEXT_STROKE_WIDTH,
+                canvas_width=width,
+                padding_x=padding_x,
+                padding_y=padding_y,
+                line_gap=line_gap,
             )
 
         tool_key = self._type_3_tool_key(slide.role, slide.text)
@@ -787,16 +841,24 @@ class VideoRenderer:
             return options[0]
         return "tool"
 
+    @staticmethod
+    def _type_4_language(language: Language) -> Language:
+        try:
+            parsed = Language(language)
+        except (TypeError, ValueError):
+            return Language.ES
+        return parsed if parsed in TYPE_4_TITLE_LINES else Language.ES
+
     def _draw_type_4_title(
         self,
         draw: ImageDraw.ImageDraw,
         width: int,
         height: int,
+        language: Language,
     ) -> None:
         font = self._load_font(size=_scale_y(66, height), bold=True)
         line_gap = _scale_y(4, height)
-        first_line = "Empieza tu negocio online"
-        second_line = "en 24h"
+        first_line, second_line = TYPE_4_TITLE_LINES[self._type_4_language(language)]
         first_width, first_height = self._text_size(
             draw,
             first_line,
@@ -840,9 +902,10 @@ class VideoRenderer:
         image: Image.Image,
         draw: ImageDraw.ImageDraw,
         row: tuple[str, str, str, int, int, int, int, int, int, int, int, int, int],
+        labels: dict[str, str],
     ) -> None:
         (
-            label,
+            label_key,
             tool_key,
             name,
             label_x,
@@ -856,6 +919,7 @@ class VideoRenderer:
             name_y,
             name_size,
         ) = row
+        label = labels.get(label_key, label_key)
         width, height = image.size
         label_box = (
             _scale_x(label_x, width),
@@ -1063,99 +1127,421 @@ class VideoRenderer:
     # ------------------------------------------------------------------
 
     def _draw_text(self, image: Image.Image, slide: SlidePlan) -> None:
-        draw = ImageDraw.Draw(image)
-        width, height = image.size
-
-        account_label = (
-            "Dropradar"
-            if slide.media.source_account == "fixed"
-            else f"@{slide.media.source_account}"
-        )
-        account_font = self._load_font(size=34, bold=True)
-        draw.text(
-            (70, 70),
-            account_label,
-            font=account_font,
-            fill=(255, 222, 173),
-            stroke_width=2,
-            stroke_fill=(0, 0, 0),
-        )
-
         if not slide.text:
             return
 
-        max_text_width = width - 140
-        bottom_margin = 220 if slide.role == SlideRole.HOOK else 190
-
         if slide.role == SlideRole.HOOK:
-            font, lines = self._fit_text(
-                slide.text,
-                draw,
-                max_width=max_text_width,
-                max_height=int(height * 0.55),
-                base_size=84,
-                min_size=46,
-                bold=True,
-                stroke_width=4,
-            )
-            text_height = self._block_height(lines, font, draw, stroke_width=4)
-            start_y = max(80, height - text_height - bottom_margin)
-            self._draw_lines(
-                draw,
-                lines,
-                font,
-                start_y=start_y,
-                width=width,
-                fill=(255, 255, 255),
-                stroke_width=4,
-            )
+            self._draw_hook_text(image, slide.text)
             return
 
-        first_line, body = self._split_slide_text(slide.text)
+        self._draw_caption_card_text(image, slide.text)
+
+    def _draw_hook_text(self, image: Image.Image, text: str) -> None:
+        draw = ImageDraw.Draw(image)
+        width, height = image.size
+
+        stroke_width = max(2, _scale_x(4, width))
+        font, lines = self._fit_text(
+            text,
+            draw,
+            max_width=width - _scale_x(120, width),
+            max_height=int(height * 0.30),
+            base_size=self._scaled_text_size(76, minimum=28),
+            min_size=self._scaled_text_size(42, minimum=18),
+            bold=True,
+            stroke_width=stroke_width,
+        )
+        text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+        block_width = min(
+            width - _scale_x(80, width),
+            self._block_width(lines, font, draw, stroke_width=stroke_width)
+            + _scale_x(40, width),
+        )
+        start_y = self._safe_text_start_y(
+            image,
+            block_width=block_width,
+            block_height=text_height,
+            preferred_centers=(0.56, 0.64, 0.46, 0.72, 0.36),
+        )
+        self._draw_lines(
+            draw,
+            lines,
+            font,
+            start_y=start_y,
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=stroke_width,
+        )
+
+    def _draw_caption_card_text(self, image: Image.Image, text: str) -> None:
+        draw = ImageDraw.Draw(image)
+        width, height = image.size
+        first_line, body = self._split_slide_text(text)
+        max_text_width = width - _scale_x(140, width)
+
         title_font, title_lines = self._fit_text(
             first_line,
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.18),
-            base_size=52,
-            min_size=34,
+            base_size=self._scaled_text_size(54, minimum=20),
+            min_size=self._scaled_text_size(34, minimum=15),
             bold=True,
-            stroke_width=3,
+            stroke_width=0,
         )
         body_font, body_lines = self._fit_text(
             body,
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.40),
-            base_size=60,
-            min_size=34,
-            bold=False,
-            stroke_width=3,
+            base_size=self._scaled_text_size(50, minimum=18),
+            min_size=self._scaled_text_size(32, minimum=14),
+            bold=True,
+            stroke_width=0,
         )
 
-        title_height = self._block_height(title_lines, title_font, draw, stroke_width=3)
-        body_height = self._block_height(body_lines, body_font, draw, stroke_width=3)
-        total_height = title_height + 28 + body_height
-        start_y = max(80, height - total_height - bottom_margin)
+        padding_x = _scale_x(30, width)
+        padding_y = _scale_y(13, height)
+        line_gap = _scale_y(8, height)
+        block_gap = _scale_y(24, height)
 
-        self._draw_lines(
-            draw,
-            title_lines,
-            title_font,
-            start_y=start_y,
-            width=width,
-            fill=(255, 214, 102),
-            stroke_width=3,
+        groups: list[tuple[list[str], ImageFont.ImageFont]] = []
+        if first_line.strip():
+            groups.append((title_lines, title_font))
+        if body.strip():
+            groups.append((body_lines, body_font))
+        if not groups:
+            return
+
+        group_heights = [
+            self._pill_lines_height(
+                lines,
+                font,
+                draw,
+                padding_y=padding_y,
+                line_gap=line_gap,
+            )
+            for lines, font in groups
+        ]
+        total_height = sum(group_heights) + block_gap * max(0, len(groups) - 1)
+        block_width = min(
+            width - _scale_x(80, width),
+            max(
+                self._pill_lines_width(
+                    lines,
+                    font,
+                    draw,
+                    padding_x=padding_x,
+                )
+                for lines, font in groups
+            ),
         )
-        self._draw_lines(
-            draw,
-            body_lines,
-            body_font,
-            start_y=start_y + title_height + 28,
-            width=width,
-            fill=(255, 255, 255),
-            stroke_width=3,
+        start_y = self._safe_text_start_y(
+            image,
+            block_width=block_width,
+            block_height=total_height,
+            preferred_centers=(0.54, 0.44, 0.64, 0.34, 0.74, 0.26),
         )
+
+        y = start_y
+        for index, (lines, font) in enumerate(groups):
+            y = self._draw_pill_lines(
+                draw,
+                lines,
+                font,
+                start_y=y,
+                canvas_width=width,
+                padding_x=padding_x,
+                padding_y=padding_y,
+                line_gap=line_gap,
+            )
+            if index < len(groups) - 1:
+                y += block_gap
+
+    def _scaled_text_size(self, base_size: int, *, minimum: int) -> int:
+        return max(minimum, _scale_x(base_size, self.settings.width))
+
+    def _pill_lines_width(
+        self,
+        lines: list[str],
+        font: ImageFont.ImageFont,
+        draw: ImageDraw.ImageDraw,
+        *,
+        padding_x: int,
+    ) -> int:
+        if not lines:
+            return 0
+        return max(
+            self._text_size(draw, line, font, stroke_width=0)[0] + padding_x * 2
+            for line in lines
+        )
+
+    def _pill_lines_height(
+        self,
+        lines: list[str],
+        font: ImageFont.ImageFont,
+        draw: ImageDraw.ImageDraw,
+        *,
+        padding_y: int,
+        line_gap: int,
+    ) -> int:
+        if not lines:
+            return 0
+        heights = [
+            self._text_size(draw, line, font, stroke_width=0)[1] + padding_y * 2
+            for line in lines
+        ]
+        return sum(heights) + line_gap * max(0, len(lines) - 1)
+
+    def _draw_pill_lines(
+        self,
+        draw: ImageDraw.ImageDraw,
+        lines: list[str],
+        font: ImageFont.ImageFont,
+        *,
+        start_y: int,
+        canvas_width: int,
+        padding_x: int,
+        padding_y: int,
+        line_gap: int,
+    ) -> int:
+        y = start_y
+        radius = max(6, _scale_x(12, canvas_width))
+        shadow_offset = max(1, _scale_x(2, canvas_width))
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=0)
+            line_width = bbox[2] - bbox[0]
+            line_height = bbox[3] - bbox[1]
+            box_width = line_width + padding_x * 2
+            box_height = line_height + padding_y * 2
+            x = (canvas_width - box_width) // 2
+            box = (x, y, x + box_width, y + box_height)
+            shadow_box = (
+                box[0],
+                box[1] + shadow_offset,
+                box[2],
+                box[3] + shadow_offset,
+            )
+            draw.rounded_rectangle(
+                shadow_box,
+                radius=radius,
+                fill=TEXT_CARD_SHADOW,
+            )
+            draw.rounded_rectangle(box, radius=radius, fill=TEXT_CARD_FILL)
+            text_x = x + padding_x - bbox[0]
+            text_y = y + padding_y - bbox[1]
+            draw.text((text_x, text_y), line, font=font, fill=TEXT_CARD_TEXT)
+            y += box_height + line_gap
+        return y - line_gap
+
+    def _block_width(
+        self,
+        lines: list[str],
+        font: ImageFont.ImageFont,
+        draw: ImageDraw.ImageDraw,
+        *,
+        stroke_width: int,
+    ) -> int:
+        if not lines:
+            return 0
+        return max(
+            self._text_size(draw, line, font, stroke_width=stroke_width)[0]
+            for line in lines
+        )
+
+    def _safe_text_start_y(
+        self,
+        image: Image.Image,
+        *,
+        block_width: int,
+        block_height: int,
+        preferred_centers: tuple[float, ...],
+    ) -> int:
+        width, height = image.size
+        top_margin = max(16, _scale_y(70, height))
+        bottom_margin = max(16, _scale_y(110, height))
+        min_y = top_margin
+        max_y = max(min_y, height - block_height - bottom_margin)
+        regions = self._text_avoid_regions(image)
+        centers = list(preferred_centers)
+        centers.extend(value / 100.0 for value in range(18, 84, 4))
+        candidates: list[int] = []
+        for center in centers:
+            y = int(round(center * height - block_height / 2))
+            y = max(min_y, min(max_y, y))
+            if y not in candidates:
+                candidates.append(y)
+        if min_y not in candidates:
+            candidates.append(min_y)
+        if max_y not in candidates:
+            candidates.append(max_y)
+
+        primary_center = preferred_centers[0] if preferred_centers else 0.55
+        best_y = min(
+            candidates,
+            key=lambda y: self._text_position_score(
+                y,
+                block_width=block_width,
+                block_height=block_height,
+                canvas_width=width,
+                canvas_height=height,
+                avoid_regions=regions,
+                preferred_center=primary_center,
+            ),
+        )
+        return best_y
+
+    def _text_position_score(
+        self,
+        y: int,
+        *,
+        block_width: int,
+        block_height: int,
+        canvas_width: int,
+        canvas_height: int,
+        avoid_regions: list[tuple[tuple[int, int, int, int], float]],
+        preferred_center: float,
+    ) -> float:
+        x = max(0, (canvas_width - block_width) // 2)
+        box = (x, y, min(canvas_width, x + block_width), min(canvas_height, y + block_height))
+        box_area = max(1, self._box_area(box))
+        center = (box[1] + box[3]) / 2.0 / max(canvas_height, 1)
+        score = abs(center - preferred_center) * 3.0
+        for region, weight in avoid_regions:
+            overlap = self._intersection_area(box, region)
+            if overlap <= 0:
+                continue
+            region_area = max(1, self._box_area(region))
+            score += weight * max(overlap / box_area, overlap / region_area)
+        return score
+
+    def _text_avoid_regions(
+        self,
+        image: Image.Image,
+    ) -> list[tuple[tuple[int, int, int, int], float]]:
+        width, height = image.size
+        try:
+            rgb = np.asarray(image.convert("RGB"))
+            gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        except cv2.error:
+            return []
+
+        regions: list[tuple[tuple[int, int, int, int], float]] = []
+        for x, y, w, h in self._detect_render_faces(gray):
+            face = self._expanded_box(
+                (int(x), int(y), int(x + w), int(y + h)),
+                width,
+                height,
+                x_pad=int(w * 0.45),
+                y_pad=int(h * 0.55),
+            )
+            regions.append((face, TEXT_FACE_AVOID_WEIGHT))
+
+        for x, y, w, h in self._detect_render_people(rgb):
+            body = self._expanded_box(
+                (int(x), int(y), int(x + w), int(y + h)),
+                width,
+                height,
+                x_pad=int(w * 0.12),
+                y_pad=int(h * 0.04),
+            )
+            head = self._expanded_box(
+                (
+                    int(x + w * 0.15),
+                    int(y),
+                    int(x + w * 0.85),
+                    int(y + h * 0.33),
+                ),
+                width,
+                height,
+                x_pad=int(w * 0.15),
+                y_pad=int(h * 0.08),
+            )
+            regions.append((body, TEXT_BODY_AVOID_WEIGHT))
+            regions.append((head, TEXT_HEAD_AVOID_WEIGHT))
+        return regions
+
+    def _detect_render_faces(self, gray: np.ndarray) -> np.ndarray:
+        if self._face_detector.empty():
+            return np.empty((0, 4), dtype=np.int32)
+        height, width = gray.shape[:2]
+        min_size = max(24, _scale_x(42, width))
+        detected = self._face_detector.detectMultiScale(
+            gray,
+            scaleFactor=1.16,
+            minNeighbors=4,
+            minSize=(min_size, min_size),
+        )
+        if len(detected) == 0:
+            return np.empty((0, 4), dtype=np.int32)
+        return np.asarray(detected, dtype=np.int32)
+
+    def _detect_render_people(self, rgb: np.ndarray) -> np.ndarray:
+        height, width = rgb.shape[:2]
+        scale = min(1.0, 840.0 / max(height, width, 1))
+        if scale < 1.0:
+            resized = cv2.resize(
+                rgb,
+                (max(1, int(width * scale)), max(1, int(height * scale))),
+                interpolation=cv2.INTER_AREA,
+            )
+        else:
+            resized = rgb
+        boxes, weights = self._people_detector.detectMultiScale(
+            resized,
+            winStride=(8, 8),
+            padding=(8, 8),
+            scale=1.05,
+        )
+        if len(boxes) == 0:
+            return np.empty((0, 4), dtype=np.int32)
+        if len(weights) > 0:
+            boxes = np.asarray(
+                [
+                    box
+                    for box, weight in zip(boxes, weights)
+                    if float(weight) >= 0.22
+                ],
+                dtype=np.float32,
+            )
+            if len(boxes) == 0:
+                return np.empty((0, 4), dtype=np.int32)
+        boxes = np.asarray(boxes, dtype=np.float32)
+        if scale < 1.0:
+            boxes[:, :4] = boxes[:, :4] / scale
+        return boxes.astype(np.int32)
+
+    def _expanded_box(
+        self,
+        box: tuple[int, int, int, int],
+        width: int,
+        height: int,
+        *,
+        x_pad: int,
+        y_pad: int,
+    ) -> tuple[int, int, int, int]:
+        return (
+            max(0, box[0] - x_pad),
+            max(0, box[1] - y_pad),
+            min(width, box[2] + x_pad),
+            min(height, box[3] + y_pad),
+        )
+
+    def _intersection_area(
+        self,
+        first: tuple[int, int, int, int],
+        second: tuple[int, int, int, int],
+    ) -> int:
+        left = max(first[0], second[0])
+        top = max(first[1], second[1])
+        right = min(first[2], second[2])
+        bottom = min(first[3], second[3])
+        if right <= left or bottom <= top:
+            return 0
+        return (right - left) * (bottom - top)
+
+    def _box_area(self, box: tuple[int, int, int, int]) -> int:
+        return max(0, box[2] - box[0]) * max(0, box[3] - box[1])
 
     def _fit_text(
         self,

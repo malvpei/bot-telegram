@@ -678,10 +678,11 @@ class ImageSelector:
             or len(allowed_remaining) > 1
         ):
             LOGGER.info(
-                "tipo1 @%s: genero con %d foto(s) sin persona detectada tras priorizar personas",
+                "tipo1 @%s: descartada, %d foto(s) sin persona detectada tras priorizar personas",
                 account,
                 len(remaining_without_person),
             )
+            return False
         return True
 
     def _move_type_1_landscape_exception_to_replaceable_role(
@@ -816,7 +817,11 @@ class ImageSelector:
         return self._has_person_signal(media)
 
     def _is_type_1_person_visible_media(self, media: MediaCandidate) -> bool:
-        return self._has_person_signal(media)
+        if self._has_person_signal(media):
+            return True
+        if media.metrics is None:
+            return False
+        return self._is_high_quality_portrait_without_detected_face(media.metrics)
 
     def _has_person_signal(self, media: MediaCandidate) -> bool:
         if not media.metrics:

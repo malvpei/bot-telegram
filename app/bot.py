@@ -19,8 +19,6 @@ from app.accounts import AccountsFileError, load_accounts
 from app.config import get_settings
 from app.models import (
     Language,
-    SlideRole,
-    TYPE_3_ROLES,
     VideoGender,
     VideoRequest,
     VideoType,
@@ -33,7 +31,9 @@ GENDER_STATE, TYPE_STATE, LANGUAGE_STATE, LOWERCASE_STATE = range(4)
 REGENERATE_ACCEPT = "regen:accept"
 REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
-TEMPLATE_VIDEO_CREATE = "template_video:create"
+TEMPLATE_VIDEO_CREATE = "template_video:create:es"
+TEMPLATE_VIDEO_CREATE_EN = "template_video:create:en"
+TEMPLATE_VIDEO_CALLBACK_PATTERN = r"^template_video:create(?::(es|en))?$"
 
 LOGGER = logging.getLogger(__name__)
 TELEGRAM_SEND_ATTEMPTS = 3
@@ -77,19 +77,19 @@ def run_bot() -> None:
         ],
         states={
             GENDER_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"),
+                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:"),
             ],
             TYPE_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"),
+                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:"),
             ],
             LANGUAGE_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"),
+                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:"),
             ],
             LOWERCASE_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"),
+                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(wizard_lowercase, pattern=r"^wizard:lowercase:"),
             ],
         },
@@ -111,7 +111,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("template_video", template_video_command))
     application.add_handler(CommandHandler("video_template", template_video_command))
     application.add_handler(wizard_handler)
-    application.add_handler(CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"))
+    application.add_handler(CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN))
     application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
     application.add_error_handler(error_handler)
 
@@ -336,8 +336,8 @@ async def template_video_command(
     if not await _ensure_allowed(update):
         return
 
-    raw_source = " ".join(context.args).strip() if context.args else None
-    await _execute_template_video(update, context, raw_source)
+    language, raw_source = _parse_template_video_command_args(context.args or [])
+    await _execute_template_video(update, context, raw_source, language)
 
 
 async def template_video_button(
@@ -349,7 +349,8 @@ async def template_video_button(
 
     query = update.callback_query
     await query.answer()
-    await _execute_template_video(update, context, None)
+    language = _template_video_language_from_callback(query.data or "")
+    await _execute_template_video(update, context, None, language)
     return ConversationHandler.END
 
 
@@ -357,6 +358,7 @@ async def _execute_template_video(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
     source: str | None,
+    language: Language = Language.ES,
 ) -> None:
     chat = update.effective_chat
     message = update.effective_message
@@ -368,7 +370,11 @@ async def _execute_template_video(
     )
     service: VideoCreationService = context.application.bot_data["service"]
     try:
-        result = await asyncio.to_thread(service.create_template_video, source)
+        result = await asyncio.to_thread(
+            service.create_template_video,
+            source,
+            language,
+        )
     except Exception as error:
         LOGGER.exception("Template video generation failed")
         await status_message.edit_text(f"No pude generar el video plantilla.\n\n{error}")
@@ -467,8 +473,12 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             [
                 [
                     InlineKeyboardButton(
-                        "Video herramientas R2",
+                        "Video herramientas R2 ES",
                         callback_data=TEMPLATE_VIDEO_CREATE,
+                    ),
+                    InlineKeyboardButton(
+                        "Video tools R2 EN",
+                        callback_data=TEMPLATE_VIDEO_CREATE_EN,
                     ),
                 ]
             ]
@@ -487,8 +497,12 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         [
             [
                 InlineKeyboardButton(
-                    "Video herramientas R2",
+                    "Video herramientas R2 ES",
                     callback_data=TEMPLATE_VIDEO_CREATE,
+                ),
+                InlineKeyboardButton(
+                    "Video tools R2 EN",
+                    callback_data=TEMPLATE_VIDEO_CREATE_EN,
                 ),
             ],
             [
@@ -923,18 +937,9 @@ async def _telegram_call_with_retries(call, **kwargs):
 
 async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
     slides = list(slides)
-    send_text = not _slides_have_type_3_embedded_text(slides)
 
-    # Type 1 and 2 still send text as Telegram messages. In type 3, the hook
-    # remains a Telegram text, while tool slides carry embedded text.
+    # Slide copy is embedded in the generated images for every video type.
     for slide in slides:
-        raw = slide.text.strip() if slide.text else ""
-        if raw and (send_text or slide.role == SlideRole.HOOK):
-            title, body = _split_title_body(raw)
-            if title:
-                await _send_message(context, chat_id, title)
-            if body:
-                await _send_message(context, chat_id, body)
         path = slide.media.local_path
         if not path.exists():
             continue
@@ -967,24 +972,35 @@ def _main_menu_markup() -> InlineKeyboardMarkup:
         [
             [
                 InlineKeyboardButton(
-                    "Crear video R2",
+                    "Crear video R2 ES",
                     callback_data=TEMPLATE_VIDEO_CREATE,
+                ),
+                InlineKeyboardButton(
+                    "Create R2 video EN",
+                    callback_data=TEMPLATE_VIDEO_CREATE_EN,
                 ),
             ],
         ]
     )
 
 
-def _split_title_body(text: str) -> tuple[str, str]:
-    parts = text.split("\n", 1)
-    if len(parts) == 1:
-        return parts[0].strip(), ""
-    return parts[0].strip(), parts[1].strip()
+def _template_video_language_from_callback(callback_data: str) -> Language:
+    parts = callback_data.split(":")
+    if parts and parts[-1] == Language.EN.value:
+        return Language.EN
+    return Language.ES
 
 
-def _slides_have_type_3_embedded_text(slides) -> bool:
-    type_3_tool_roles = set(TYPE_3_ROLES[1:])
-    return any(slide.role in type_3_tool_roles for slide in slides)
+def _parse_template_video_command_args(args) -> tuple[Language, str | None]:
+    values = [str(arg).strip() for arg in args if str(arg).strip()]
+    if not values:
+        return Language.ES, None
+    first = values[0].lower()
+    if first in {"en", "eng", "english", "ingles", "inglés"}:
+        return Language.EN, " ".join(values[1:]).strip() or None
+    if first in {"es", "esp", "spanish", "espanol", "español"}:
+        return Language.ES, " ".join(values[1:]).strip() or None
+    return Language.ES, " ".join(values).strip() or None
 
 
 def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -14,12 +14,14 @@ from app.bot import (
     REGENERATE_SKIP_ACCOUNT,
     TELEGRAM_TEXT_LIMIT,
     TEMPLATE_VIDEO_CREATE,
+    TEMPLATE_VIDEO_CREATE_EN,
     _ask_for_another_same_account,
     _clear_wizard_state,
     _format_pool_refill_summary,
     _format_pool_status,
     _main_menu_markup,
     _execute_template_video,
+    _send_message,
     _send_slides_text_then_image,
     create_command,
 )
@@ -115,7 +117,7 @@ class FakeTemplateService:
     def __init__(self, video_path: Path) -> None:
         self.video_path = video_path
 
-    def create_template_video(self, source=None):
+    def create_template_video(self, source=None, language=None):
         return TemplateVideoResult(
             video_path=self.video_path,
             social_copy=SocialCopy(
@@ -149,7 +151,7 @@ async def _fast_sleep(delay: float) -> None:
     return None
 
 
-def test_type_3_sends_hook_text_but_not_tool_slide_messages():
+def test_type_3_sends_embedded_text_images_without_slide_messages():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -203,7 +205,6 @@ def test_type_3_sends_hook_text_but_not_tool_slide_messages():
         asyncio.run(_send_slides_text_then_image(context, 123, [hook_slide, tool_slide]))
 
         assert context.bot.events == [
-            ("message", "Como empezar en Dropshipping en 2026"),
             ("photo", "slide.jpg"),
             ("photo", "slide.jpg"),
         ]
@@ -211,13 +212,22 @@ def test_type_3_sends_hook_text_but_not_tool_slide_messages():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_slide_text_send_retries_after_network_error():
+def test_send_message_retries_after_network_error():
+    context = FlakyContext()
+
+    with patch("app.bot.asyncio.sleep", new=_fast_sleep):
+        asyncio.run(_send_message(context, 123, "Hook text"))
+
+    assert context.bot.events == [("message", "Hook text")]
+
+
+def test_type_1_sends_embedded_text_image_without_slide_messages():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
         image_path = root / "slide.jpg"
         Image.new("RGB", (10, 10), (0, 0, 0)).save(image_path)
-        context = FlakyContext()
+        context = FakeContext()
         slide = SlidePlan(
             index=1,
             role=SlideRole.HOOK,
@@ -231,26 +241,12 @@ def test_slide_text_send_retries_after_network_error():
                 width=10,
                 height=10,
                 created_at="",
-                metrics=ImageMetrics(
-                    brightness=0,
-                    daylight=0,
-                    sharpness=0,
-                    faces=0,
-                    aspect_ratio=1,
-                    is_landscape=False,
-                    outdoor_score=0,
-                    casual_score=0,
-                    luxury_score=0,
-                    quality_score=0,
-                ),
             ),
         )
 
-        with patch("app.bot.asyncio.sleep", new=_fast_sleep):
-            asyncio.run(_send_slides_text_then_image(context, 123, [slide]))
+        asyncio.run(_send_slides_text_then_image(context, 123, [slide]))
 
         assert context.bot.events == [
-            ("message", "Hook text"),
             ("photo", "slide.jpg"),
         ]
     finally:
@@ -280,10 +276,13 @@ def test_repeat_prompt_has_accept_and_cancel_buttons():
 def test_main_menu_has_template_video_button():
     markup = _main_menu_markup()
 
-    button = markup.inline_keyboard[0][0]
+    es_button = markup.inline_keyboard[0][0]
+    en_button = markup.inline_keyboard[0][1]
 
-    assert button.text == "Crear video R2"
-    assert button.callback_data == TEMPLATE_VIDEO_CREATE
+    assert es_button.text == "Crear video R2 ES"
+    assert es_button.callback_data == TEMPLATE_VIDEO_CREATE
+    assert en_button.text == "Create R2 video EN"
+    assert en_button.callback_data == TEMPLATE_VIDEO_CREATE_EN
 
 
 def test_create_command_offers_template_video_without_accounts():
@@ -303,8 +302,10 @@ def test_create_command_offers_template_video_without_accounts():
     assert state == GENDER_STATE
     buttons = update.effective_message.reply_markup.inline_keyboard
     assert len(buttons) == 1
-    assert buttons[0][0].text == "Video herramientas R2"
+    assert buttons[0][0].text == "Video herramientas R2 ES"
     assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
+    assert buttons[0][1].text == "Video tools R2 EN"
+    assert buttons[0][1].callback_data == TEMPLATE_VIDEO_CREATE_EN
 
 
 def test_template_video_sends_queue_restart_warning():

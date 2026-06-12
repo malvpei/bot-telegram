@@ -54,16 +54,21 @@ def test_type_3_tool_slide_uses_icon_asset():
         pixels = np.asarray(still)
         icon_region = pixels[290:430, 120:240]
         text_region = pixels[50:250, 20:340]
+        white_card_pixels = (
+            (text_region[..., 0] > 230)
+            & (text_region[..., 1] > 230)
+            & (text_region[..., 2] > 230)
+        )
 
         assert icon_region[..., 0].mean() > 70
         assert icon_region[..., 1].mean() > 60
         assert icon_region[..., 2].mean() > 150
-        assert text_region.max() > 200
+        assert white_card_pixels.mean() > 0.08
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_3_hook_still_does_not_render_hook_text():
+def test_type_3_hook_still_renders_hook_text():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -85,9 +90,69 @@ def test_type_3_hook_still_does_not_render_hook_text():
         )
 
         still = renderer.render_slide_still(slide, VideoType.TYPE_3)
-        assert np.asarray(still).max() == 0
+        assert np.asarray(still).max() > 200
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_1_still_embeds_caption_cards(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "source.jpg"
+        Image.new("RGB", (360, 640), (25, 30, 35)).save(image_path)
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            width=360,
+            height=640,
+            fonts_dir=root / "fonts",
+        )
+        renderer = VideoRenderer(settings)
+        monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+        slide = SlidePlan(
+            index=2,
+            role=SlideRole.OCTOBER,
+            text=(
+                "octubre - 0€\n"
+                "empece con muchas ganas, pero no consegui ni una sola venta."
+            ),
+            media=_candidate(image_path),
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_1)
+        pixels = np.asarray(still)
+        white_card_pixels = (
+            (pixels[..., 0] > 230)
+            & (pixels[..., 1] > 230)
+            & (pixels[..., 2] > 230)
+        )
+
+        assert white_card_pixels.mean() > 0.015
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_safe_text_position_avoids_face_region(monkeypatch):
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGBA", (360, 640), (20, 20, 20, 255))
+    face_region = (100, 220, 260, 360)
+    monkeypatch.setattr(
+        renderer,
+        "_text_avoid_regions",
+        lambda image: [(face_region, 80.0)],
+    )
+
+    y = renderer._safe_text_start_y(
+        image,
+        block_width=260,
+        block_height=90,
+        preferred_centers=(0.44,),
+    )
+    text_box = (50, y, 310, y + 90)
+
+    assert renderer._intersection_area(text_box, face_region) == 0
 
 
 def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_body_line():
@@ -101,18 +166,18 @@ def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_bod
         max_width=1000,
         base_size=72,
         min_size=46,
-        bold=True,
-        stroke_width=3,
+        bold=False,
+        stroke_width=4,
     )
     title_width, _ = renderer._text_size(
         draw,
         "2. Busqueda de productos",
         title_font,
-        stroke_width=3,
+        stroke_width=4,
     )
 
     assert title_width <= 1000
-    body_font = renderer._load_font(size=56, bold=True)
+    body_font = renderer._load_font(size=58, bold=False)
     assert renderer._type_3_body_lines(
         "Encuentra productos ganadores - Usa Dropradar",
         "",
@@ -126,7 +191,7 @@ def test_type_3_spanish_descriptions_share_fixed_body_size_without_clipping():
     settings = replace(get_settings(), width=1080, height=1920)
     renderer = VideoRenderer(settings)
     draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
-    font = renderer._load_font(size=56, bold=True)
+    font = renderer._load_font(size=58, bold=False)
 
     descriptions = [
         "Construye tu tienda por 1€ - Usa Shopify",
@@ -147,7 +212,7 @@ def test_type_3_spanish_descriptions_share_fixed_body_size_without_clipping():
         )
         assert lines
         assert all(
-            renderer._text_size(draw, line, font, stroke_width=3)[0] <= 920
+            renderer._text_size(draw, line, font, stroke_width=4)[0] <= 920
             for line in lines
         )
 
