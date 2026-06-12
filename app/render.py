@@ -81,7 +81,9 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
 TYPE_3_TEXT_STROKE_WIDTH = 3
 TYPE_3_BODY_FONT_SIZE = 56
 TYPE_4_TARGET_SECONDS = 7.5
-TYPE_4_TEXT_STROKE_WIDTH = 3
+TYPE_4_TEXT_STROKE_WIDTH = 2
+TYPE_4_LABEL_FONT_SIZE = 40
+TYPE_4_LABEL_MIN_FONT_SIZE = 28
 TYPE_4_TEMPLATE_ROWS: tuple[
     tuple[str, str, str, int, int, int, int, int, int, int, int, int, int],
     ...
@@ -868,8 +870,8 @@ class VideoRenderer:
             draw,
             max_width=(label_box[2] - label_box[0]) - _scale_x(28, width),
             max_height=(label_box[3] - label_box[1]) - _scale_y(18, height),
-            base_size=_scale_y(42, height),
-            min_size=_scale_y(30, height),
+            base_size=_scale_y(TYPE_4_LABEL_FONT_SIZE, height),
+            min_size=_scale_y(TYPE_4_LABEL_MIN_FONT_SIZE, height),
             bold=False,
             stroke_width=0,
         )
