@@ -33,6 +33,7 @@ GENDER_STATE, TYPE_STATE, LANGUAGE_STATE, LOWERCASE_STATE = range(4)
 REGENERATE_ACCEPT = "regen:accept"
 REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
+TEMPLATE_VIDEO_CREATE = "template_video:create"
 
 LOGGER = logging.getLogger(__name__)
 TELEGRAM_SEND_ATTEMPTS = 3
@@ -100,6 +101,7 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("template_video", template_video_command))
     application.add_handler(CommandHandler("video_template", template_video_command))
     application.add_handler(wizard_handler)
+    application.add_handler(CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"))
     application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
     application.add_error_handler(error_handler)
 
@@ -126,7 +128,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
         "/cancel — cancelar el wizard actual"
     )
-    await update.effective_message.reply_text(message)
+    await update.effective_message.reply_text(
+        message,
+        reply_markup=_main_menu_markup(),
+    )
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -156,7 +161,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
     )
-    await update.effective_message.reply_text(message)
+    await update.effective_message.reply_text(
+        message,
+        reply_markup=_main_menu_markup(),
+    )
 
 
 async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -318,14 +326,38 @@ async def template_video_command(
     if not await _ensure_allowed(update):
         return
 
-    chat = update.effective_chat
     raw_source = " ".join(context.args).strip() if context.args else None
-    status_message = await update.effective_message.reply_text(
+    await _execute_template_video(update, context, raw_source)
+
+
+async def template_video_button(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    if not await _ensure_allowed(update):
+        return
+
+    query = update.callback_query
+    await query.answer()
+    await _execute_template_video(update, context, None)
+
+
+async def _execute_template_video(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    source: str | None,
+) -> None:
+    chat = update.effective_chat
+    message = update.effective_message
+    if message is None or chat is None:
+        return
+
+    status_message = await message.reply_text(
         "Estoy cogiendo un video de R2 y aplicando la plantilla fija."
     )
     service: VideoCreationService = context.application.bot_data["service"]
     try:
-        video_path = await asyncio.to_thread(service.create_template_video, raw_source)
+        video_path = await asyncio.to_thread(service.create_template_video, source)
     except Exception as error:
         LOGGER.exception("Template video generation failed")
         await status_message.edit_text(f"No pude generar el video plantilla.\n\n{error}")
@@ -887,6 +919,19 @@ async def _ask_for_another_same_account(context, chat_id: int, account: str) -> 
             "alguna no te convence?"
         ),
         reply_markup=keyboard,
+    )
+
+
+def _main_menu_markup() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Crear video R2",
+                    callback_data=TEMPLATE_VIDEO_CREATE,
+                ),
+            ],
+        ]
     )
 
 

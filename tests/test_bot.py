@@ -12,10 +12,12 @@ from app.bot import (
     REGENERATE_CANCEL,
     REGENERATE_SKIP_ACCOUNT,
     TELEGRAM_TEXT_LIMIT,
+    TEMPLATE_VIDEO_CREATE,
     _ask_for_another_same_account,
     _clear_wizard_state,
     _format_pool_refill_summary,
     _format_pool_status,
+    _main_menu_markup,
     _send_slides_text_then_image,
 )
 from app.models import ImageMetrics, MediaCandidate, SlidePlan, SlideRole
@@ -188,6 +190,15 @@ def test_repeat_prompt_has_accept_and_cancel_buttons():
         REGENERATE_SKIP_ACCOUNT,
         REGENERATE_CANCEL,
     ]
+
+
+def test_main_menu_has_template_video_button():
+    markup = _main_menu_markup()
+
+    button = markup.inline_keyboard[0][0]
+
+    assert button.text == "Crear video R2"
+    assert button.callback_data == TEMPLATE_VIDEO_CREATE
 
 
 def test_clear_wizard_state_keeps_repeat_request():
