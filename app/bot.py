@@ -77,11 +77,21 @@ def run_bot() -> None:
         ],
         states={
             GENDER_STATE: [
-                CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:")
+                CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"),
+                CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:"),
             ],
-            TYPE_STATE: [CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:")],
-            LANGUAGE_STATE: [CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:")],
-            LOWERCASE_STATE: [CallbackQueryHandler(wizard_lowercase, pattern=r"^wizard:lowercase:")],
+            TYPE_STATE: [
+                CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"),
+                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:"),
+            ],
+            LANGUAGE_STATE: [
+                CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"),
+                CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:"),
+            ],
+            LOWERCASE_STATE: [
+                CallbackQueryHandler(template_video_button, pattern=r"^template_video:create$"),
+                CallbackQueryHandler(wizard_lowercase, pattern=r"^wizard:lowercase:"),
+            ],
         },
         fallbacks=[CommandHandler("cancel", wizard_cancel)],
     )
@@ -333,13 +343,14 @@ async def template_video_command(
 async def template_video_button(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
-) -> None:
+) -> int:
     if not await _ensure_allowed(update):
-        return
+        return ConversationHandler.END
 
     query = update.callback_query
     await query.answer()
     await _execute_template_video(update, context, None)
+    return ConversationHandler.END
 
 
 async def _execute_template_video(
@@ -357,7 +368,7 @@ async def _execute_template_video(
     )
     service: VideoCreationService = context.application.bot_data["service"]
     try:
-        video_path = await asyncio.to_thread(service.create_template_video, source)
+        result = await asyncio.to_thread(service.create_template_video, source)
     except Exception as error:
         LOGGER.exception("Template video generation failed")
         await status_message.edit_text(f"No pude generar el video plantilla.\n\n{error}")
@@ -365,12 +376,20 @@ async def _execute_template_video(
 
     await status_message.edit_text("Video listo. Enviando MP4.")
     try:
-        await _send_video(context, chat.id, video_path)
+        if result.queue_restarted:
+            await _send_message(
+                context,
+                chat.id,
+                "Aviso: la cola de videos ha llegado al final y se ha reiniciado desde el principio.",
+            )
+        await _send_video(context, chat.id, result.video_path)
+        for text in result.social_copy.messages:
+            await _send_message(context, chat.id, text)
     except TelegramError as error:
         LOGGER.exception("Telegram refused the template video")
         await status_message.edit_text(f"Telegram rechazó el video.\n\n{error}")
         return
-    await status_message.edit_text("Listo. Plantilla aplicada y video enviado.")
+    await status_message.edit_text("Listo. Plantilla aplicada, video y textos enviados.")
 
 
 async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -444,13 +463,34 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     }
 
     if not any(accounts_by_gender.values()):
-        await update.effective_message.reply_text(
-            "No encontré cuentas cargadas en accounts.txt ni en accounts_women.txt."
+        keyboard = InlineKeyboardMarkup(
+            [
+                [
+                    InlineKeyboardButton(
+                        "Video herramientas R2",
+                        callback_data=TEMPLATE_VIDEO_CREATE,
+                    ),
+                ]
+            ]
         )
-        return ConversationHandler.END
+        await update.effective_message.reply_text(
+            (
+                "Que quieres crear?\n\n"
+                "No encontre cuentas cargadas, asi que por ahora solo esta "
+                "disponible el video de herramientas R2."
+            ),
+            reply_markup=keyboard,
+        )
+        return GENDER_STATE
 
     keyboard = InlineKeyboardMarkup(
         [
+            [
+                InlineKeyboardButton(
+                    "Video herramientas R2",
+                    callback_data=TEMPLATE_VIDEO_CREATE,
+                ),
+            ],
             [
                 InlineKeyboardButton(
                     f"Hombres ({len(accounts_by_gender[VideoGender.MALE])})",
@@ -464,7 +504,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         ]
     )
     await update.effective_message.reply_text(
-        "¿Qué protagonista quieres para el video?",
+        "Que quieres crear?",
         reply_markup=keyboard,
     )
     return GENDER_STATE

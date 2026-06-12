@@ -260,11 +260,13 @@ def test_create_template_video_picks_video_from_configured_folder():
         service = VideoCreationService.__new__(VideoCreationService)
         service.settings = settings
         service.renderer = FakeRenderer()
+        service.state = StateStore(root / "state")
         service._job_lock = Lock()
 
-        output_path = service.create_template_video()
+        result = service.create_template_video()
 
-        assert output_path.exists()
+        assert result.video_path.exists()
+        assert result.social_copy.hashtag_line.startswith("#")
         assert service.renderer.template_input_video == chosen
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -286,15 +288,98 @@ def test_create_template_video_downloads_from_r2_when_configured(monkeypatch):
         service.settings = settings
         service.renderer = FakeRenderer()
         service.r2_storage = FakeR2Storage()
+        service.state = StateStore(root / "state")
         service._job_lock = Lock()
 
-        output_path = service.create_template_video("campaign-a")
+        result = service.create_template_video("campaign-a")
 
-        assert output_path.exists()
+        assert result.video_path.exists()
+        assert result.social_copy.hashtag_line.startswith("#")
         assert service.r2_storage.listed_prefix == "campaign-a"
         assert service.r2_storage.downloaded_key == "videos/source.mp4"
         assert service.renderer.template_input_video is not None
         assert service.renderer.template_input_video.read_bytes() == b"r2-video"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_template_video_queue_cycles_and_reports_restart():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        source_dir = root / "template_videos"
+        source_dir.mkdir()
+        first = source_dir / "a.mp4"
+        second = source_dir / "b.mp4"
+        first.write_bytes(b"a")
+        second.write_bytes(b"b")
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            template_videos_dir=source_dir,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = FakeRenderer()
+        service.state = StateStore(root / "state")
+        service._job_lock = Lock()
+
+        result_a = service.create_template_video()
+        picked_a = service.renderer.template_input_video
+        result_b = service.create_template_video()
+        picked_b = service.renderer.template_input_video
+        result_restart = service.create_template_video()
+        picked_restart = service.renderer.template_input_video
+
+        assert picked_a == first
+        assert result_a.queue_restarted is False
+        assert picked_b == second
+        assert result_b.queue_restarted is False
+        assert picked_restart == first
+        assert result_restart.queue_restarted is True
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_template_video_queue_appends_new_videos_to_end():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        source_dir = root / "template_videos"
+        source_dir.mkdir()
+        first = source_dir / "a.mp4"
+        second = source_dir / "b.mp4"
+        third = source_dir / "c.mp4"
+        first.write_bytes(b"a")
+        second.write_bytes(b"b")
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            template_videos_dir=source_dir,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = FakeRenderer()
+        service.state = StateStore(root / "state")
+        service._job_lock = Lock()
+
+        service.create_template_video()
+        third.write_bytes(b"c")
+        service.create_template_video()
+        picked_second = service.renderer.template_input_video
+        service.create_template_video()
+        picked_third = service.renderer.template_input_video
+        result_restart = service.create_template_video()
+        picked_restart = service.renderer.template_input_video
+
+        assert picked_second == second
+        assert picked_third == third
+        assert picked_restart == first
+        assert result_restart.queue_restarted is True
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

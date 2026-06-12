@@ -863,27 +863,15 @@ class VideoRenderer:
             _scale_x(label_x + label_w, width),
             _scale_y(label_y + label_h, height),
         )
-        radius = max(10, _scale_x(16, width))
-        draw.rounded_rectangle(label_box, radius=radius, fill=(255, 255, 255))
-        label_lines = label.splitlines()
-        label_font = self._fit_prebroken_lines(
-            label_lines,
+        self._draw_white_label_pill(
             draw,
-            max_width=(label_box[2] - label_box[0]) - _scale_x(28, width),
-            max_height=(label_box[3] - label_box[1]) - _scale_y(18, height),
+            label,
+            label_box,
+            radius=max(10, _scale_x(16, width)),
+            horizontal_padding=_scale_x(28, width),
+            vertical_padding=_scale_y(18, height),
             base_size=_scale_y(TYPE_4_LABEL_FONT_SIZE, height),
             min_size=_scale_y(TYPE_4_LABEL_MIN_FONT_SIZE, height),
-            bold=False,
-            stroke_width=0,
-        )
-        self._draw_centered_lines_in_box(
-            draw,
-            label_lines,
-            label_font,
-            label_box,
-            fill=(0, 0, 0),
-            stroke_width=0,
-            faux_bold_pixels=1,
         )
 
         scaled_icon_size = _scale_x(icon_size, width)
@@ -961,9 +949,10 @@ class VideoRenderer:
         y = box[1] + ((box[3] - box[1]) - total_height) // 2
         for line, bbox, line_height in zip(lines, line_metrics, line_heights):
             line_width = bbox[2] - bbox[0]
-            x = box[0] + ((box[2] - box[0]) - line_width) // 2
+            x = box[0] + ((box[2] - box[0]) - line_width) // 2 - bbox[0]
+            draw_y = y - bbox[1]
             draw.text(
-                (x, y),
+                (x, draw_y),
                 line,
                 font=font,
                 fill=fill,
@@ -972,12 +961,46 @@ class VideoRenderer:
             )
             if faux_bold_pixels:
                 draw.text(
-                    (x + faux_bold_pixels, y),
+                    (x + faux_bold_pixels, draw_y),
                     line,
                     font=font,
                     fill=fill,
                 )
             y += line_height + gap
+
+    def _draw_white_label_pill(
+        self,
+        draw: ImageDraw.ImageDraw,
+        text: str,
+        box: tuple[int, int, int, int],
+        *,
+        radius: int,
+        horizontal_padding: int,
+        vertical_padding: int,
+        base_size: int,
+        min_size: int,
+    ) -> None:
+        draw.rounded_rectangle(box, radius=radius, fill=(255, 255, 255))
+        lines = text.splitlines()
+        font = self._fit_prebroken_lines(
+            lines,
+            draw,
+            max_width=(box[2] - box[0]) - horizontal_padding,
+            max_height=(box[3] - box[1]) - vertical_padding,
+            base_size=base_size,
+            min_size=min_size,
+            bold=False,
+            stroke_width=0,
+        )
+        self._draw_centered_lines_in_box(
+            draw,
+            lines,
+            font,
+            box,
+            fill=(0, 0, 0),
+            stroke_width=0,
+            faux_bold_pixels=1,
+        )
 
     def _draw_type_4_meta_icon(
         self,

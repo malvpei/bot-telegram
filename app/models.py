@@ -151,6 +151,13 @@ class SocialCopy:
 
 
 @dataclass
+class TemplateVideoResult:
+    video_path: Path
+    social_copy: SocialCopy
+    queue_restarted: bool = False
+
+
+@dataclass
 class ScriptPackage:
     slides_by_role: dict[SlideRole, str]
     ordered_slides: list[str]

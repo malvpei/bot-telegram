@@ -40,6 +40,7 @@ class StateStore:
         self._excluded_accounts_path = self.state_dir / "excluded_accounts.json"
         self._account_cooldowns_path = self.state_dir / "account_cooldowns.json"
         self._type_3_background_queue_path = self.state_dir / "type3_background_queue.json"
+        self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
         self._persistence_marker_path = self.state_dir / "persistence_marker.json"
         self._lock_path = self.state_dir / ".state.lock"
@@ -294,6 +295,47 @@ class StateStore:
                 {"order": normalized},
             )
 
+    def get_next_template_video_id(
+        self,
+        scope: str,
+        video_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        if not video_ids:
+            return None, False
+        scope_key = str(scope or "default").strip() or "default"
+        with self._exclusive():
+            payload = self._read_json(self._template_video_queue_path, {})
+            if not isinstance(payload, dict):
+                payload = {}
+            scopes = payload.get("scopes")
+            if not isinstance(scopes, dict):
+                scopes = {}
+            queue = scopes.get(scope_key)
+            if not isinstance(queue, dict):
+                queue = {}
+
+            order = self._normalize_template_video_order(queue, video_ids)
+            cursor = queue.get("cursor", 0)
+            try:
+                cursor = int(cursor)
+            except (TypeError, ValueError):
+                cursor = 0
+            if cursor < 0:
+                cursor = 0
+
+            restarted = False
+            if cursor >= len(order):
+                cursor = 0
+                restarted = True
+
+            selected = order[cursor] if order else None
+            scopes[scope_key] = {
+                "order": order,
+                "cursor": cursor + 1,
+            }
+            self._write_json(self._template_video_queue_path, {"scopes": scopes})
+        return selected, restarted
+
     def read_media_pool(self) -> dict[str, Any]:
         with self._exclusive():
             pool = self._read_json(self._media_pool_path, {})
@@ -542,6 +584,34 @@ class StateStore:
             if background_id not in normalized_seen:
                 normalized.append(background_id)
                 normalized_seen.add(background_id)
+        return normalized
+
+    @staticmethod
+    def _normalize_template_video_order(
+        queue: Any,
+        video_ids: list[str],
+    ) -> list[str]:
+        available: list[str] = []
+        seen: set[str] = set()
+        for video_id in video_ids:
+            normalized_id = str(video_id or "").strip()
+            if not normalized_id or normalized_id in seen:
+                continue
+            seen.add(normalized_id)
+            available.append(normalized_id)
+
+        saved_order = queue.get("order", []) if isinstance(queue, dict) else []
+        normalized: list[str] = []
+        normalized_seen: set[str] = set()
+        for video_id in saved_order:
+            normalized_id = str(video_id or "").strip()
+            if normalized_id in seen and normalized_id not in normalized_seen:
+                normalized.append(normalized_id)
+                normalized_seen.add(normalized_id)
+        for video_id in available:
+            if video_id not in normalized_seen:
+                normalized.append(video_id)
+                normalized_seen.add(video_id)
         return normalized
 
     @staticmethod

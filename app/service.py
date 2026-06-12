@@ -14,7 +14,15 @@ from PIL import Image
 from app.config import DEFAULT_ACCOUNT_PICK_ATTEMPTS, get_settings
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
 from app.media_pool import MediaPoolService
-from app.models import GenerationResult, MediaCandidate, VideoPlan, VideoRequest, VideoType
+from app.models import (
+    GenerationResult,
+    MediaCandidate,
+    SocialCopy,
+    TemplateVideoResult,
+    VideoPlan,
+    VideoRequest,
+    VideoType,
+)
 from app.r2_storage import R2StorageClient
 from app.render import VideoRenderer
 from app.selector import ImageSelector
@@ -24,6 +32,94 @@ from app.texts import ScriptGenerator
 
 LOGGER = logging.getLogger(__name__)
 VIDEO_TEMPLATE_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
+TEMPLATE_VIDEO_SOCIAL_COPIES = (
+    SocialCopy(
+        title="Herramientas para empezar dropshipping sin complicarte",
+        description=(
+            "Si quieres lanzar una tienda online, no necesitas mil apps: necesitas "
+            "un stack claro. Investiga productos, monta la tienda, prepara anuncios, "
+            "cobra bien y edita contenido que se pueda publicar rapido."
+        ),
+        hashtags=[
+            "#dropshipping",
+            "#ecommerce",
+            "#shopify",
+            "#herramientas",
+            "#dropradar",
+            "#metaads",
+            "#tiktokmarketing",
+            "#capcut",
+        ],
+    ),
+    SocialCopy(
+        title="El stack basico para lanzar una tienda online",
+        description=(
+            "Estas herramientas cubren lo esencial: encontrar productos con demanda, "
+            "crear la tienda, aceptar pagos, grabar contenido y testear anuncios. "
+            "Menos ruido, mas ejecucion."
+        ),
+        hashtags=[
+            "#tiendaonline",
+            "#dropshippingespana",
+            "#shopify",
+            "#stripe",
+            "#chatgpt",
+            "#ecommerce",
+            "#negocioonline",
+        ],
+    ),
+    SocialCopy(
+        title="Tu flujo de trabajo para vender online",
+        description=(
+            "Empieza por validar producto, escribe angulos de venta, prepara creativos "
+            "cortos y mide resultados. Con las herramientas correctas, el proceso se "
+            "vuelve mucho mas facil de repetir."
+        ),
+        hashtags=[
+            "#dropshipping",
+            "#marketingdigital",
+            "#metaads",
+            "#tiktokads",
+            "#capcut",
+            "#emprenderonline",
+            "#ecommerce",
+        ],
+    ),
+    SocialCopy(
+        title="Herramientas que aceleran tu primer lanzamiento",
+        description=(
+            "No se trata de usar mas plataformas, sino de usar las correctas para cada "
+            "parte del lanzamiento: producto, tienda, pagos, creatividad y trafico. "
+            "Asi evitas improvisar cuando toca publicar."
+        ),
+        hashtags=[
+            "#dropshippingtips",
+            "#shopifyespana",
+            "#dropradar",
+            "#stripe",
+            "#chatgpt",
+            "#negociosonline",
+            "#ventas",
+        ],
+    ),
+    SocialCopy(
+        title="La base para crear contenido y vender con dropshipping",
+        description=(
+            "Una buena idea necesita sistema: analiza productos, estructura la oferta, "
+            "edita videos verticales y prueba anuncios con datos. Este stack te da una "
+            "base sencilla para empezar."
+        ),
+        hashtags=[
+            "#dropshipping",
+            "#contenidovertical",
+            "#capcut",
+            "#tiktokmarketing",
+            "#metaads",
+            "#shopify",
+            "#ecommercebusiness",
+        ],
+    ),
+)
 
 
 def _merge_preserving_order(existing: list[str], new_items: list[str]) -> list[str]:
@@ -155,18 +251,25 @@ class VideoCreationService:
     def pool_status(self) -> dict[str, object]:
         return self.pool.stock_counts()
 
-    def create_template_video(self, source: str | None = None) -> Path:
+    def create_template_video(self, source: str | None = None) -> TemplateVideoResult:
         with self._job_lock:
             job_id = self._build_job_id()
             job_dir = self.settings.outputs_dir / job_id
             if getattr(self, "r2_storage", None) is not None and self.r2_storage.is_configured:
-                source_video = self._download_template_video_from_r2(source, job_dir)
+                source_video, queue_restarted = self._download_template_video_from_r2(
+                    source,
+                    job_dir,
+                )
             else:
                 source_dir = self._resolve_template_video_dir(source)
-                source_video = self._pick_template_video(source_dir)
+                source_video, queue_restarted = self._pick_template_video(source_dir)
             output_path = self.renderer.render_template_video(source_video, job_dir)
             self._cleanup_old_outputs()
-            return output_path
+            return TemplateVideoResult(
+                video_path=output_path,
+                social_copy=random.choice(TEMPLATE_VIDEO_SOCIAL_COPIES),
+                queue_restarted=queue_restarted,
+            )
 
     def persistence_status(self) -> dict[str, object]:
         data_dir = self.settings.data_dir
@@ -553,7 +656,7 @@ class VideoCreationService:
         self,
         prefix: str | None,
         job_dir: Path,
-    ) -> Path:
+    ) -> tuple[Path, bool]:
         r2_prefix = (
             prefix.strip().lstrip("/")
             if prefix and prefix.strip()
@@ -563,10 +666,18 @@ class VideoCreationService:
         if not videos:
             scope = f" bajo el prefijo {r2_prefix!r}" if r2_prefix else ""
             raise ValueError(f"No encontré videos en R2{scope}.")
-        selected = random.choice(sorted(videos, key=lambda item: item.key))
+        ordered_videos = sorted(videos, key=lambda item: item.key)
+        selected_key, queue_restarted = self.state.get_next_template_video_id(
+            f"r2:{r2_prefix}",
+            [video.key for video in ordered_videos],
+        )
+        selected = next(
+            (video for video in ordered_videos if video.key == selected_key),
+            ordered_videos[0],
+        )
         suffix = Path(selected.key).suffix.lower() or ".mp4"
         local_input = job_dir / "input" / f"source{suffix}"
-        return self.r2_storage.download(selected.key, local_input)
+        return self.r2_storage.download(selected.key, local_input), queue_restarted
 
     def _resolve_template_video_dir(self, folder: str | None) -> Path:
         if folder is None or not folder.strip():
@@ -576,7 +687,7 @@ class VideoCreationService:
             return path
         return self.settings.root_dir / path
 
-    def _pick_template_video(self, source_dir: Path) -> Path:
+    def _pick_template_video(self, source_dir: Path) -> tuple[Path, bool]:
         if not source_dir.exists():
             raise ValueError(
                 "No encuentro la carpeta de videos plantilla: "
@@ -594,7 +705,15 @@ class VideoCreationService:
                 "No encontré videos .mp4/.mov/.m4v/.webm en "
                 f"{source_dir}."
             )
-        return random.choice(sorted(candidates))
+        ordered_candidates = sorted(candidates)
+        selected_id, queue_restarted = self.state.get_next_template_video_id(
+            f"local:{source_dir.resolve()}",
+            [str(path.resolve()) for path in ordered_candidates],
+        )
+        selected_path = Path(selected_id) if selected_id else ordered_candidates[0]
+        if selected_path not in ordered_candidates:
+            selected_path = ordered_candidates[0]
+        return selected_path, queue_restarted
 
     def _normalize_slide_images(self, plan: VideoPlan, job_dir: Path) -> None:
         # Telegram-bound images must share the vertical TikTok carousel format

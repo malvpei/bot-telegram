@@ -8,6 +8,7 @@ from PIL import Image
 from telegram.error import NetworkError
 
 from app.bot import (
+    GENDER_STATE,
     REGENERATE_ACCEPT,
     REGENERATE_CANCEL,
     REGENERATE_SKIP_ACCOUNT,
@@ -18,9 +19,19 @@ from app.bot import (
     _format_pool_refill_summary,
     _format_pool_status,
     _main_menu_markup,
+    _execute_template_video,
     _send_slides_text_then_image,
+    create_command,
 )
-from app.models import ImageMetrics, MediaCandidate, SlidePlan, SlideRole
+from app.models import (
+    ImageMetrics,
+    MediaCandidate,
+    SlidePlan,
+    SlideRole,
+    SocialCopy,
+    TemplateVideoResult,
+    VideoGender,
+)
 
 
 class FakeTelegramBot:
@@ -35,11 +46,85 @@ class FakeTelegramBot:
     async def send_photo(self, *, chat_id: int, photo) -> None:
         self.events.append(("photo", Path(photo.name).name))
 
+    async def send_video(self, *, chat_id: int, video, supports_streaming=True) -> None:
+        self.events.append(("video", Path(video.name).name))
+
 
 class FakeContext:
     def __init__(self) -> None:
         self.bot = FakeTelegramBot()
         self.user_data = {}
+
+
+class FakeReplyMessage:
+    def __init__(self) -> None:
+        self.text = ""
+        self.reply_markup = None
+
+    async def reply_text(self, text: str, reply_markup=None) -> None:
+        self.text = text
+        self.reply_markup = reply_markup
+
+
+class FakeUpdate:
+    def __init__(self) -> None:
+        self.effective_message = FakeReplyMessage()
+        self.effective_chat = None
+        self.effective_user = None
+
+
+class FakeStatusMessage:
+    def __init__(self) -> None:
+        self.edits: list[str] = []
+
+    async def edit_text(self, text: str) -> None:
+        self.edits.append(text)
+
+
+class FakeTemplateMessage:
+    def __init__(self) -> None:
+        self.status = FakeStatusMessage()
+
+    async def reply_text(self, text: str):
+        self.status.edits.append(text)
+        return self.status
+
+
+class FakeChat:
+    id = 123
+
+
+class FakeApplication:
+    def __init__(self, service) -> None:
+        self.bot_data = {"service": service}
+
+
+class FakeTemplateContext(FakeContext):
+    def __init__(self, service) -> None:
+        super().__init__()
+        self.application = FakeApplication(service)
+
+
+class FakeTemplateUpdate:
+    def __init__(self) -> None:
+        self.effective_message = FakeTemplateMessage()
+        self.effective_chat = FakeChat()
+
+
+class FakeTemplateService:
+    def __init__(self, video_path: Path) -> None:
+        self.video_path = video_path
+
+    def create_template_video(self, source=None):
+        return TemplateVideoResult(
+            video_path=self.video_path,
+            social_copy=SocialCopy(
+                title="Titulo",
+                description="Descripcion",
+                hashtags=["#dropshipping"],
+            ),
+            queue_restarted=True,
+        )
 
 
 class FlakyMessageTelegramBot(FakeTelegramBot):
@@ -199,6 +284,53 @@ def test_main_menu_has_template_video_button():
 
     assert button.text == "Crear video R2"
     assert button.callback_data == TEMPLATE_VIDEO_CREATE
+
+
+def test_create_command_offers_template_video_without_accounts():
+    async def allow(update):
+        return True
+
+    context = FakeContext()
+    update = FakeUpdate()
+    empty_accounts = {VideoGender.MALE: [], VideoGender.FEMALE: []}
+
+    with patch("app.bot._ensure_allowed", allow), patch(
+        "app.bot._load_accounts_by_gender",
+        return_value=empty_accounts,
+    ):
+        state = asyncio.run(create_command(update, context))
+
+    assert state == GENDER_STATE
+    buttons = update.effective_message.reply_markup.inline_keyboard
+    assert len(buttons) == 1
+    assert buttons[0][0].text == "Video herramientas R2"
+    assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
+
+
+def test_template_video_sends_queue_restart_warning():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        video_path = root / "template_video.mp4"
+        video_path.write_bytes(b"video")
+        update = FakeTemplateUpdate()
+        context = FakeTemplateContext(FakeTemplateService(video_path))
+
+        asyncio.run(_execute_template_video(update, context, None))
+
+        events = context.bot.events
+        assert events[0] == (
+            "message",
+            "Aviso: la cola de videos ha llegado al final y se ha reiniciado desde el principio.",
+        )
+        assert events[1] == ("video", "template_video.mp4")
+        assert events[2:] == [
+            ("message", "Titulo"),
+            ("message", "Descripcion"),
+            ("message", "#dropshipping"),
+        ]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_clear_wizard_state_keeps_repeat_request():
