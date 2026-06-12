@@ -81,9 +81,10 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
 TYPE_3_TEXT_STROKE_WIDTH = 3
 TYPE_3_BODY_FONT_SIZE = 56
 TYPE_4_TARGET_SECONDS = 7.5
+TYPE_4_TITLE_STROKE_WIDTH = 4
 TYPE_4_TEXT_STROKE_WIDTH = 3
-TYPE_4_LABEL_FONT_SIZE = 38
-TYPE_4_LABEL_MIN_FONT_SIZE = 26
+TYPE_4_LABEL_FONT_SIZE = 39
+TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TYPE_4_TEMPLATE_ROWS: tuple[
     tuple[str, str, str, int, int, int, int, int, int, int, int, int, int],
     ...
@@ -800,13 +801,13 @@ class VideoRenderer:
             draw,
             first_line,
             font,
-            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_width=TYPE_4_TITLE_STROKE_WIDTH,
         )
         second_width, second_height = self._text_size(
             draw,
             second_line,
             font,
-            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_width=TYPE_4_TITLE_STROKE_WIDTH,
         )
         y = _scale_y(244, height)
         draw.text(
@@ -814,7 +815,7 @@ class VideoRenderer:
             first_line,
             font=font,
             fill=(255, 255, 255),
-            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_width=TYPE_4_TITLE_STROKE_WIDTH,
             stroke_fill=(0, 0, 0),
         )
         second_y = y + first_height + line_gap
@@ -827,7 +828,7 @@ class VideoRenderer:
             second_line,
             font=font,
             fill=(255, 255, 255),
-            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_width=TYPE_4_TITLE_STROKE_WIDTH,
             stroke_fill=(0, 0, 0),
         )
         badge_x = second_x + second_width + badge_gap
@@ -882,6 +883,7 @@ class VideoRenderer:
             label_box,
             fill=(0, 0, 0),
             stroke_width=0,
+            faux_bold_pixels=1,
         )
 
         scaled_icon_size = _scale_x(icon_size, width)
@@ -931,6 +933,12 @@ class VideoRenderer:
             stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
             stroke_fill=(0, 0, 0),
         )
+        draw.text(
+            (_scale_x(name_x, width) + 1, _scale_y(name_y, height)),
+            name,
+            font=name_font,
+            fill=(255, 255, 255),
+        )
 
     def _draw_centered_lines_in_box(
         self,
@@ -941,6 +949,7 @@ class VideoRenderer:
         *,
         fill: tuple[int, int, int],
         stroke_width: int,
+        faux_bold_pixels: int = 0,
     ) -> None:
         line_metrics = [
             draw.textbbox((0, 0), line or "A", font=font, stroke_width=stroke_width)
@@ -961,6 +970,13 @@ class VideoRenderer:
                 stroke_width=stroke_width,
                 stroke_fill=(0, 0, 0),
             )
+            if faux_bold_pixels:
+                draw.text(
+                    (x + faux_bold_pixels, y),
+                    line,
+                    font=font,
+                    fill=fill,
+                )
             y += line_height + gap
 
     def _draw_type_4_meta_icon(
