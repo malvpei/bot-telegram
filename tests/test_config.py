@@ -18,6 +18,8 @@ def test_data_dir_env_moves_persistent_paths(monkeypatch):
         assert settings.downloads_dir == persistent_dir / "downloads"
         assert settings.outputs_dir == persistent_dir / "outputs"
         assert settings.state_dir == persistent_dir / "state"
+        assert settings.template_videos_dir == persistent_dir / "template_videos"
+        assert settings.r2_downloads_dir == persistent_dir / "r2_downloads"
         assert (
             settings.instagram_session_path
             == persistent_dir / "state" / "instagram_session"
@@ -52,5 +54,38 @@ def test_women_accounts_file_env_is_resolved_from_project_root(monkeypatch):
             settings.women_accounts_file
             == Path(__file__).resolve().parents[1] / "data" / "women.txt"
         )
+    finally:
+        get_settings.cache_clear()
+
+
+def test_template_videos_dir_env_is_resolved_from_project_root(monkeypatch):
+    monkeypatch.setenv("TEMPLATE_VIDEOS_DIR", "data/video-inputs")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert (
+            settings.template_videos_dir
+            == Path(__file__).resolve().parents[1] / "data" / "video-inputs"
+        )
+    finally:
+        get_settings.cache_clear()
+
+
+def test_r2_settings_are_loaded_from_env(monkeypatch):
+    monkeypatch.setenv("R2_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("R2_ACCESS_KEY_ID", "key")
+    monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "secret")
+    monkeypatch.setenv("R2_BUCKET", "bucket")
+    monkeypatch.setenv("R2_INPUT_PREFIX", "/inputs/videos")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.r2_account_id == "acct"
+        assert settings.r2_access_key_id == "key"
+        assert settings.r2_secret_access_key == "secret"
+        assert settings.r2_bucket == "bucket"
+        assert settings.r2_input_prefix == "inputs/videos"
     finally:
         get_settings.cache_clear()

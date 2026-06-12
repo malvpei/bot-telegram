@@ -69,6 +69,8 @@ class Settings:
     downloads_dir: Path
     outputs_dir: Path
     state_dir: Path
+    template_videos_dir: Path
+    r2_downloads_dir: Path
     fixed_assets_dir: Path
     fonts_dir: Path
     telegram_bot_token: str
@@ -99,6 +101,12 @@ class Settings:
     ig_sessionid: str
     ig_ds_user_id: str
     ig_csrftoken: str
+    r2_account_id: str
+    r2_access_key_id: str
+    r2_secret_access_key: str
+    r2_bucket: str
+    r2_endpoint_url: str
+    r2_input_prefix: str
 
 
 @lru_cache(maxsize=1)
@@ -110,6 +118,12 @@ def get_settings() -> Settings:
     downloads_dir = data_dir / "downloads"
     outputs_dir = data_dir / "outputs"
     state_dir = data_dir / "state"
+    template_videos_dir = _env_path(
+        "TEMPLATE_VIDEOS_DIR",
+        data_dir / "template_videos",
+        root_dir,
+    )
+    r2_downloads_dir = data_dir / "r2_downloads"
     fixed_assets_dir = root_dir / "assets" / "fixed"
     fonts_dir = root_dir / "assets" / "fonts"
 
@@ -139,6 +153,8 @@ def get_settings() -> Settings:
         downloads_dir=downloads_dir,
         outputs_dir=outputs_dir,
         state_dir=state_dir,
+        template_videos_dir=template_videos_dir,
+        r2_downloads_dir=r2_downloads_dir,
         fixed_assets_dir=fixed_assets_dir,
         fonts_dir=fonts_dir,
         telegram_bot_token=os.getenv("TELEGRAM_BOT_TOKEN", "").strip(),
@@ -169,4 +185,10 @@ def get_settings() -> Settings:
         ig_sessionid=os.getenv("IG_SESSIONID", "").strip(),
         ig_ds_user_id=os.getenv("IG_DS_USER_ID", "").strip(),
         ig_csrftoken=os.getenv("IG_CSRFTOKEN", "").strip(),
+        r2_account_id=os.getenv("R2_ACCOUNT_ID", "").strip(),
+        r2_access_key_id=os.getenv("R2_ACCESS_KEY_ID", "").strip(),
+        r2_secret_access_key=os.getenv("R2_SECRET_ACCESS_KEY", "").strip(),
+        r2_bucket=os.getenv("R2_BUCKET", "").strip(),
+        r2_endpoint_url=os.getenv("R2_ENDPOINT_URL", "").strip(),
+        r2_input_prefix=os.getenv("R2_INPUT_PREFIX", "").strip().lstrip("/"),
     )

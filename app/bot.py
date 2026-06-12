@@ -97,6 +97,8 @@ def run_bot() -> None:
     )
     application.add_handler(CommandHandler("pool", pool_command))
     application.add_handler(CommandHandler("memory", memory_command))
+    application.add_handler(CommandHandler("template_video", template_video_command))
+    application.add_handler(CommandHandler("video_template", template_video_command))
     application.add_handler(wizard_handler)
     application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
     application.add_error_handler(error_handler)
@@ -118,6 +120,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/download_pool - rellenar el pool rapido de fotos de hombres\n"
         "/download_pool_women - rellenar el pool rapido de fotos de mujeres\n"
         "/pool - ver stock del pool\n"
+        "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
@@ -148,6 +151,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Usa /download_pool para hombres y /download_pool_women para mujeres. "
         "Ambos precargan un lote de fotos aptas. "
         "Despues /create elige desde ese pool local sin descargar en caliente.\n\n"
+        "Usa /template_video [prefijo-r2] para coger un MP4 de R2 y "
+        "aplicarle la plantilla fija de herramientas. El MP4 final sale sin audio.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
     )
@@ -304,6 +309,36 @@ async def pool_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     service: VideoCreationService = context.application.bot_data["service"]
     summary = await asyncio.to_thread(service.pool_status)
     await update.effective_message.reply_text(_format_pool_status(summary))
+
+
+async def template_video_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    if not await _ensure_allowed(update):
+        return
+
+    chat = update.effective_chat
+    raw_source = " ".join(context.args).strip() if context.args else None
+    status_message = await update.effective_message.reply_text(
+        "Estoy cogiendo un video de R2 y aplicando la plantilla fija."
+    )
+    service: VideoCreationService = context.application.bot_data["service"]
+    try:
+        video_path = await asyncio.to_thread(service.create_template_video, raw_source)
+    except Exception as error:
+        LOGGER.exception("Template video generation failed")
+        await status_message.edit_text(f"No pude generar el video plantilla.\n\n{error}")
+        return
+
+    await status_message.edit_text("Video listo. Enviando MP4.")
+    try:
+        await _send_video(context, chat.id, video_path)
+    except TelegramError as error:
+        LOGGER.exception("Telegram refused the template video")
+        await status_message.edit_text(f"Telegram rechazó el video.\n\n{error}")
+        return
+    await status_message.edit_text("Listo. Plantilla aplicada y video enviado.")
 
 
 async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -764,6 +799,22 @@ async def _send_photo(context, chat_id: int, path):
         send_opened_photo,
         chat_id=chat_id,
         photo_path=path,
+    )
+
+
+async def _send_video(context, chat_id: int, path):
+    async def send_opened_video(*, chat_id: int, video_path):
+        with video_path.open("rb") as handle:
+            return await context.bot.send_video(
+                chat_id=chat_id,
+                video=handle,
+                supports_streaming=True,
+            )
+
+    return await _telegram_call_with_retries(
+        send_opened_video,
+        chat_id=chat_id,
+        video_path=path,
     )
 
 

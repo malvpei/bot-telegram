@@ -3,12 +3,14 @@ from __future__ import annotations
 import shutil
 from dataclasses import replace
 from pathlib import Path
+from threading import Lock
 from uuid import uuid4
 
 from PIL import Image
 
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoRequest, VideoType
+from app.r2_storage import R2Object
 from app.service import VideoCreationService
 from app.state import StateStore
 
@@ -17,6 +19,7 @@ class FakeRenderer:
     def __init__(self) -> None:
         self.render_called = False
         self.write_script_called = False
+        self.template_input_video: Path | None = None
 
     def render(self, plan: VideoPlan, job_dir: Path):
         self.render_called = True
@@ -31,6 +34,13 @@ class FakeRenderer:
 
     def render_slide_still(self, slide: SlidePlan, video_type: VideoType) -> Image.Image:
         return Image.new("RGB", (72, 128), (40, 80, 120))
+
+    def render_template_video(self, input_video: Path, job_dir: Path) -> Path:
+        self.template_input_video = input_video
+        job_dir.mkdir(parents=True, exist_ok=True)
+        output_path = job_dir / "template_video.mp4"
+        output_path.write_bytes(b"video")
+        return output_path
 
 
 class FakeCollector:
@@ -92,6 +102,24 @@ class ExtraImageCollectorNoCache(ExtraImageCollector):
 class EmptyExtraPool:
     def pick_extra_image(self, account: str, video_type: VideoType):
         raise ValueError("No quedan fotos disponibles")
+
+
+class FakeR2Storage:
+    is_configured = True
+
+    def __init__(self) -> None:
+        self.listed_prefix: str | None = None
+        self.downloaded_key: str | None = None
+
+    def list_videos(self, prefix: str):
+        self.listed_prefix = prefix
+        return [R2Object(key="videos/source.mp4", size=123)]
+
+    def download(self, key: str, destination: Path) -> Path:
+        self.downloaded_key = key
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(b"r2-video")
+        return destination
 
 
 def test_type_3_outputs_skip_full_video_render():
@@ -209,6 +237,64 @@ def test_type_1_outputs_skip_full_video_render():
         assert service.renderer.write_script_called is True
         assert plan.slides[0].media.local_path.name == "slide_01.jpg"
         assert plan.slides[0].media.local_path.exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_create_template_video_picks_video_from_configured_folder():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        source_dir = root / "template_videos"
+        source_dir.mkdir()
+        chosen = source_dir / "source.mp4"
+        chosen.write_bytes(b"fake")
+        (source_dir / "notes.txt").write_text("ignored", encoding="utf-8")
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            template_videos_dir=source_dir,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = FakeRenderer()
+        service._job_lock = Lock()
+
+        output_path = service.create_template_video()
+
+        assert output_path.exists()
+        assert service.renderer.template_input_video == chosen
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_create_template_video_downloads_from_r2_when_configured(monkeypatch):
+    monkeypatch.setattr("app.service.random.choice", lambda values: values[0])
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            r2_input_prefix="fallback-prefix",
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = FakeRenderer()
+        service.r2_storage = FakeR2Storage()
+        service._job_lock = Lock()
+
+        output_path = service.create_template_video("campaign-a")
+
+        assert output_path.exists()
+        assert service.r2_storage.listed_prefix == "campaign-a"
+        assert service.r2_storage.downloaded_key == "videos/source.mp4"
+        assert service.renderer.template_input_video is not None
+        assert service.renderer.template_input_video.read_bytes() == b"r2-video"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

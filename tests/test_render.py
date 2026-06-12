@@ -219,6 +219,65 @@ def test_type_3_icon_path_follows_selected_tool_text():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_4_template_overlay_draws_fixed_labels_icons_and_text():
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+
+    overlay = renderer.build_type_4_template_overlay()
+    pixels = np.asarray(overlay)
+    alpha = pixels[..., 3]
+
+    label_region = pixels[152:185, 30:105]
+    icon_region = alpha[143:190, 120:175]
+    title_region = alpha[80:135, 20:340]
+
+    assert overlay.mode == "RGBA"
+    assert title_region.max() == 255
+    label_opaque = label_region[..., 3] > 180
+    assert label_opaque.mean() > 0.70
+    assert label_region[..., :3][label_opaque].mean() > 210
+    assert icon_region.mean() > 60
+
+
+def test_template_video_render_forces_output_without_audio(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    captured = {}
+    try:
+        source = root / "source.mp4"
+        source.write_bytes(b"input")
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            outputs_dir=root / "outputs",
+            width=360,
+            height=640,
+        )
+        renderer = VideoRenderer(settings)
+        monkeypatch.setattr(
+            renderer,
+            "_video_duration_seconds",
+            lambda input_video: 13.0,
+        )
+
+        def fake_run(cmd, check, capture_output, text=False):
+            captured["cmd"] = cmd
+            Path(cmd[-1]).write_bytes(b"output")
+
+        monkeypatch.setattr("app.render.subprocess.run", fake_run)
+
+        output_path = renderer.render_template_video(source, root / "job")
+
+        assert output_path.exists()
+        assert "-an" in captured["cmd"]
+        assert "0:a?" not in captured["cmd"]
+        filtergraph = captured["cmd"][captured["cmd"].index("-filter_complex") + 1]
+        assert "shortest=1" in filtergraph
+        assert "trim=start=5.5:duration=7.5" in filtergraph
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _candidate(path: Path) -> MediaCandidate:
     return MediaCandidate(
         source_account="test",

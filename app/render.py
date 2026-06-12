@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -57,6 +58,7 @@ TYPE_3_ICON_ALIASES: dict[str, tuple[str, ...]] = {
     "capcut": ("capcut",),
     "instagram": ("instagram", "istagram"),
     "tiktok": ("tiktok", "tikok"),
+    "meta_ads": ("meta", "facebook"),
 }
 TYPE_3_ICON_VISUAL_SCALE: dict[str, float] = {
     "canva": 0.94,
@@ -78,6 +80,46 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
 }
 TYPE_3_TEXT_STROKE_WIDTH = 3
 TYPE_3_BODY_FONT_SIZE = 56
+TYPE_4_TARGET_SECONDS = 7.5
+TYPE_4_TEXT_STROKE_WIDTH = 4
+TYPE_4_TEMPLATE_ROWS: tuple[
+    tuple[str, str, str, int, int, int, int, int, int, int, int, int, int],
+    ...
+] = (
+    ("Tienda:", "shopify", "Shopify", 95, 456, 205, 91, 368, 431, 142, 568, 475, 50),
+    (
+        "Productos\nganadores:",
+        "dropradar",
+        "Dropradar",
+        83,
+        620,
+        262,
+        122,
+        381,
+        596,
+        142,
+        568,
+        663,
+        50,
+    ),
+    ("Guiones:", "chatgpt", "ChatGPT", 96, 818, 211, 82, 354, 789, 142, 539, 846, 47),
+    ("Pagos:", "stripe", "Stripe", 98, 981, 176, 82, 359, 961, 130, 549, 1008, 48),
+    ("Organico:", "tiktok", "TikTok", 94, 1144, 232, 88, 372, 1138, 118, 554, 1179, 47),
+    ("Ads:", "meta_ads", "Meta Ads", 120, 1329, 127, 82, 306, 1322, 170, 507, 1363, 45),
+    ("Edicion:", "capcut", "CapCut", 92, 1504, 216, 82, 368, 1476, 130, 542, 1530, 47),
+)
+
+
+def _scale_x(value: int, width: int) -> int:
+    return max(1, int(round(value * width / 1080)))
+
+
+def _scale_y(value: int, height: int) -> int:
+    return max(1, int(round(value * height / 1920)))
+
+
+def _format_filter_float(value: float) -> str:
+    return f"{value:.3f}".rstrip("0").rstrip(".")
 
 
 class VideoRenderer:
@@ -86,6 +128,7 @@ class VideoRenderer:
         self._gradient_overlay = self._build_gradient_overlay()
         self._font_dir = settings.fonts_dir
         self._type_3_icons_dir = settings.root_dir / "tipo3" / "iconos"
+        self._type_4_icons_dir = settings.root_dir / "tipo4" / "iconos"
 
     def render(self, plan: VideoPlan, job_dir: Path) -> tuple[Path, Path]:
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -159,6 +202,95 @@ class VideoRenderer:
         source_image = self._load_source_image(slide.media.local_path)
         frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
         return Image.fromarray(frame)
+
+    def render_template_video(self, input_video: Path, job_dir: Path) -> Path:
+        job_dir.mkdir(parents=True, exist_ok=True)
+        overlay_path = job_dir / "template_overlay.png"
+        output_path = job_dir / "template_video.mp4"
+        self.build_type_4_template_overlay().save(overlay_path)
+
+        width = self.settings.width
+        height = self.settings.height
+        duration = self._video_duration_seconds(input_video)
+        trim_start = max(0.0, duration - TYPE_4_TARGET_SECONDS) if duration else 0.0
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        filtergraph = (
+            f"[0:v]trim=start={_format_filter_float(trim_start)}:"
+            f"duration={_format_filter_float(TYPE_4_TARGET_SECONDS)},"
+            "setpts=PTS-STARTPTS,"
+            f"scale={width}:{height}:force_original_aspect_ratio=increase,"
+            f"crop={width}:{height},setsar=1,fps={self.settings.fps}[base];"
+            "[1:v]format=rgba[overlay];"
+            "[base][overlay]overlay=0:0:format=auto:shortest=1[v]"
+        )
+        cmd = [
+            ffmpeg_path,
+            "-y",
+            "-i",
+            str(input_video),
+            "-loop",
+            "1",
+            "-i",
+            str(overlay_path),
+            "-filter_complex",
+            filtergraph,
+            "-map",
+            "[v]",
+            "-c:v",
+            "libx264",
+            "-preset",
+            "medium",
+            "-crf",
+            "23",
+            "-pix_fmt",
+            "yuv420p",
+            "-an",
+            "-shortest",
+            "-movflags",
+            "+faststart",
+            str(output_path),
+        ]
+        try:
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        except (subprocess.CalledProcessError, FileNotFoundError) as error:
+            details = ""
+            if isinstance(error, subprocess.CalledProcessError):
+                details = error.stderr[-1200:] if error.stderr else ""
+            raise RuntimeError(f"No pude renderizar el video plantilla. {details}") from error
+        self._enforce_size_limit(output_path)
+        return output_path
+
+    def _video_duration_seconds(self, input_video: Path) -> float | None:
+        ffmpeg_path = imageio_ffmpeg.get_ffmpeg_exe()
+        try:
+            result = subprocess.run(
+                [ffmpeg_path, "-hide_banner", "-i", str(input_video)],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError:
+            return None
+        match = re.search(
+            r"Duration:\s*(\d+):(\d+):(\d+(?:\.\d+)?)",
+            result.stderr or "",
+        )
+        if not match:
+            return None
+        hours, minutes, seconds = match.groups()
+        return int(hours) * 3600 + int(minutes) * 60 + float(seconds)
+
+    def build_type_4_template_overlay(self) -> Image.Image:
+        image = Image.new(
+            "RGBA",
+            (self.settings.width, self.settings.height),
+            (0, 0, 0, 0),
+        )
+        draw = ImageDraw.Draw(image)
+        self._draw_type_4_title(draw, image.width, image.height)
+        for row in TYPE_4_TEMPLATE_ROWS:
+            self._draw_type_4_template_row(image, draw, row)
+        return image
 
     def write_script(self, plan: VideoPlan, job_dir: Path) -> Path:
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -624,15 +756,21 @@ class VideoRenderer:
         return fitted
 
     def _type_3_icon_path(self, role: SlideRole, text: str) -> Path | None:
-        needles = TYPE_3_ICON_ALIASES.get(self._type_3_tool_key(role, text))
-        if not needles or not self._type_3_icons_dir.exists():
+        return self._icon_path_for_tool_key(self._type_3_tool_key(role, text))
+
+    def _icon_path_for_tool_key(self, tool_key: str) -> Path | None:
+        needles = TYPE_3_ICON_ALIASES.get(tool_key)
+        if not needles:
             return None
-        for path in sorted(self._type_3_icons_dir.iterdir(), key=lambda item: item.name.lower()):
-            if not path.is_file():
+        for icons_dir in (self._type_4_icons_dir, self._type_3_icons_dir):
+            if not icons_dir.exists():
                 continue
-            lowered = path.name.lower()
-            if any(needle in lowered for needle in needles):
-                return path
+            for path in sorted(icons_dir.iterdir(), key=lambda item: item.name.lower()):
+                if not path.is_file():
+                    continue
+                lowered = path.name.lower()
+                if any(needle in lowered for needle in needles):
+                    return path
         return None
 
     def _type_3_tool_key(self, role: SlideRole, text: str) -> str:
@@ -645,6 +783,220 @@ class VideoRenderer:
         if options:
             return options[0]
         return "tool"
+
+    def _draw_type_4_title(
+        self,
+        draw: ImageDraw.ImageDraw,
+        width: int,
+        height: int,
+    ) -> None:
+        font = self._load_font(size=_scale_y(66, height), bold=True)
+        line_gap = _scale_y(4, height)
+        first_line = "Empieza tu negocio online"
+        second_line = "en 24h"
+        first_width, first_height = self._text_size(
+            draw,
+            first_line,
+            font,
+            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+        )
+        second_width, second_height = self._text_size(
+            draw,
+            second_line,
+            font,
+            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+        )
+        y = _scale_y(244, height)
+        draw.text(
+            ((width - first_width) // 2, y),
+            first_line,
+            font=font,
+            fill=(255, 255, 255),
+            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_fill=(0, 0, 0),
+        )
+        second_y = y + first_height + line_gap
+        second_x = (width - second_width) // 2
+        draw.text(
+            (second_x, second_y),
+            second_line,
+            font=font,
+            fill=(255, 255, 255),
+            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_fill=(0, 0, 0),
+        )
+        badge_size = _scale_x(58, width)
+        badge_x = second_x + second_width + _scale_x(20, width)
+        badge_y = second_y + max(0, (second_height - badge_size) // 2) + _scale_y(2, height)
+        self._draw_type_3_check_badge(draw, badge_x, badge_y, badge_size)
+
+    def _draw_type_4_template_row(
+        self,
+        image: Image.Image,
+        draw: ImageDraw.ImageDraw,
+        row: tuple[str, str, str, int, int, int, int, int, int, int, int, int, int],
+    ) -> None:
+        (
+            label,
+            tool_key,
+            name,
+            label_x,
+            label_y,
+            label_w,
+            label_h,
+            icon_x,
+            icon_y,
+            icon_size,
+            name_x,
+            name_y,
+            name_size,
+        ) = row
+        width, height = image.size
+        label_box = (
+            _scale_x(label_x, width),
+            _scale_y(label_y, height),
+            _scale_x(label_x + label_w, width),
+            _scale_y(label_y + label_h, height),
+        )
+        radius = max(10, _scale_x(16, width))
+        draw.rounded_rectangle(label_box, radius=radius, fill=(255, 255, 255))
+        label_lines = label.splitlines()
+        label_font = self._fit_prebroken_lines(
+            label_lines,
+            draw,
+            max_width=(label_box[2] - label_box[0]) - _scale_x(28, width),
+            max_height=(label_box[3] - label_box[1]) - _scale_y(18, height),
+            base_size=_scale_y(42, height),
+            min_size=_scale_y(30, height),
+            bold=False,
+            stroke_width=0,
+        )
+        self._draw_centered_lines_in_box(
+            draw,
+            label_lines,
+            label_font,
+            label_box,
+            fill=(0, 0, 0),
+            stroke_width=0,
+        )
+
+        scaled_icon_size = _scale_x(icon_size, width)
+        icon_path = self._icon_path_for_tool_key(tool_key)
+        if icon_path is None and tool_key == "meta_ads":
+            self._draw_type_4_meta_icon(
+                image,
+                _scale_x(icon_x, width),
+                _scale_y(icon_y, height),
+                scaled_icon_size,
+            )
+        elif icon_path is not None:
+            with Image.open(icon_path) as raw_icon:
+                icon = raw_icon.convert("RGBA")
+            icon = self._fit_type_3_icon(
+                icon,
+                scaled_icon_size,
+                visual_scale=TYPE_3_ICON_VISUAL_SCALE.get(tool_key, 1.0),
+            )
+            image.alpha_composite(
+                icon,
+                (_scale_x(icon_x, width), _scale_y(icon_y, height)),
+            )
+        else:
+            self._draw_type_4_fallback_icon(
+                image,
+                _scale_x(icon_x, width),
+                _scale_y(icon_y, height),
+                scaled_icon_size,
+                tool_key,
+            )
+
+        name_font = self._fit_single_line_text(
+            name,
+            draw,
+            max_width=width - _scale_x(name_x + 40, width),
+            base_size=_scale_y(name_size, height),
+            min_size=_scale_y(32, height),
+            bold=True,
+            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+        )
+        draw.text(
+            (_scale_x(name_x, width), _scale_y(name_y, height)),
+            name,
+            font=name_font,
+            fill=(255, 255, 255),
+            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_fill=(0, 0, 0),
+        )
+
+    def _draw_centered_lines_in_box(
+        self,
+        draw: ImageDraw.ImageDraw,
+        lines: list[str],
+        font: ImageFont.ImageFont,
+        box: tuple[int, int, int, int],
+        *,
+        fill: tuple[int, int, int],
+        stroke_width: int,
+    ) -> None:
+        line_metrics = [
+            draw.textbbox((0, 0), line or "A", font=font, stroke_width=stroke_width)
+            for line in lines
+        ]
+        line_heights = [bbox[3] - bbox[1] for bbox in line_metrics]
+        gap = max(4, int((box[3] - box[1]) * 0.04)) if len(lines) > 1 else 0
+        total_height = sum(line_heights) + gap * max(0, len(lines) - 1)
+        y = box[1] + ((box[3] - box[1]) - total_height) // 2
+        for line, bbox, line_height in zip(lines, line_metrics, line_heights):
+            line_width = bbox[2] - bbox[0]
+            x = box[0] + ((box[2] - box[0]) - line_width) // 2
+            draw.text(
+                (x, y),
+                line,
+                font=font,
+                fill=fill,
+                stroke_width=stroke_width,
+                stroke_fill=(0, 0, 0),
+            )
+            y += line_height + gap
+
+    def _draw_type_4_meta_icon(
+        self,
+        image: Image.Image,
+        x: int,
+        y: int,
+        size: int,
+    ) -> None:
+        draw = ImageDraw.Draw(image)
+        color = (24, 119, 242, 255)
+        line_width = max(10, size // 13)
+        left_box = (x + int(size * 0.05), y + int(size * 0.25), x + int(size * 0.52), y + int(size * 0.77))
+        right_box = (x + int(size * 0.48), y + int(size * 0.25), x + int(size * 0.95), y + int(size * 0.77))
+        draw.arc(left_box, start=205, end=520, fill=color, width=line_width)
+        draw.arc(right_box, start=20, end=335, fill=color, width=line_width)
+
+    def _draw_type_4_fallback_icon(
+        self,
+        image: Image.Image,
+        x: int,
+        y: int,
+        size: int,
+        label: str,
+    ) -> None:
+        draw = ImageDraw.Draw(image)
+        draw.rounded_rectangle(
+            (x, y, x + size, y + size),
+            radius=max(10, size // 8),
+            fill=(255, 255, 255),
+        )
+        short_label = label[:2].upper()
+        font = self._load_font(size=max(20, size // 3), bold=True)
+        text_width, text_height = self._text_size(draw, short_label, font, stroke_width=0)
+        draw.text(
+            (x + (size - text_width) // 2, y + (size - text_height) // 2),
+            short_label,
+            font=font,
+            fill=(0, 0, 0),
+        )
 
     def _build_gradient_overlay(self) -> Image.Image:
         width = self.settings.width
@@ -928,7 +1280,7 @@ class VideoRenderer:
             chunks.append(f"{header}\n{source}\n{slide.text}")
         return "\n\n".join(chunks)
 
-    def _enforce_size_limit(self, video_path: Path) -> None:
+    def _enforce_size_limit(self, video_path: Path, *, preserve_audio: bool = False) -> None:
         limit_bytes = self.settings.max_video_size_mb * 1024 * 1024
         if limit_bytes <= 0:
             return
@@ -952,14 +1304,19 @@ class VideoRenderer:
                 ffmpeg_path,
                 "-y",
                 "-i", str(video_path),
+                "-map", "0:v:0",
+                "-map", "0:a?",
                 "-c:v", "libx264",
                 "-preset", "medium",
                 "-crf", str(crf),
                 "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart",
-                "-an",
-                str(tmp_path),
             ]
+            if preserve_audio:
+                cmd.extend(["-c:a", "aac", "-b:a", "96k"])
+            else:
+                cmd.append("-an")
+            cmd.append(str(tmp_path))
             try:
                 subprocess.run(cmd, check=True, capture_output=True)
             except (subprocess.CalledProcessError, FileNotFoundError) as error:
