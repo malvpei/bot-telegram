@@ -1232,17 +1232,25 @@ class VideoRenderer:
         draw = ImageDraw.Draw(image)
         width, height = image.size
         stroke_width = max(2, _scale_x(4, width))
+        line_gap = _scale_y(8, height)
         font, lines = self._fit_text(
             text.strip(),
             draw,
-            max_width=width - _scale_x(130, width),
-            max_height=int(height * 0.44),
-            base_size=self._scaled_text_size(58, minimum=24),
-            min_size=self._scaled_text_size(34, minimum=16),
+            max_width=width - _scale_x(160, width),
+            max_height=int(height * 0.34),
+            base_size=self._scaled_text_size(46, minimum=20),
+            min_size=self._scaled_text_size(24, minimum=13),
             bold=True,
             stroke_width=stroke_width,
+            line_gap=line_gap,
         )
-        text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+        text_height = self._block_height(
+            lines,
+            font,
+            draw,
+            stroke_width=stroke_width,
+            line_gap=line_gap,
+        )
         block_width = min(
             width - _scale_x(80, width),
             self._block_width(lines, font, draw, stroke_width=stroke_width)
@@ -1262,6 +1270,7 @@ class VideoRenderer:
             width=width,
             fill=(255, 255, 255),
             stroke_width=stroke_width,
+            line_gap=line_gap,
         )
 
     def _fit_hook_two_lines(
@@ -1397,6 +1406,12 @@ class VideoRenderer:
             block_height=total_height,
             preferred_centers=self._caption_preferred_centers(slide),
         )
+        start_y = self._clamp_fixed_screen_caption_y(
+            slide,
+            start_y,
+            total_height,
+            canvas_height=height,
+        )
 
         y = start_y
         for index, (lines, font, line_gap, connected, group_padding_y) in enumerate(groups):
@@ -1438,6 +1453,25 @@ class VideoRenderer:
         ):
             return (0.24, 0.20, 0.30, 0.16, 0.36)
         return (0.50, 0.54, 0.46, 0.60, 0.40, 0.66, 0.34)
+
+    def _clamp_fixed_screen_caption_y(
+        self,
+        slide: SlidePlan | None,
+        start_y: int,
+        block_height: int,
+        *,
+        canvas_height: int,
+    ) -> int:
+        if (
+            slide is None
+            or not slide.fixed_asset
+            or slide.role != SlideRole.TIP3
+        ):
+            return start_y
+        screen_top = int(canvas_height * 0.525)
+        margin = _scale_y(18, canvas_height)
+        max_start_y = max(0, screen_top - margin - block_height)
+        return min(start_y, max_start_y)
 
     def _scaled_text_size(self, base_size: int, *, minimum: int) -> int:
         return max(minimum, _scale_x(base_size, self.settings.width))
@@ -1835,12 +1869,19 @@ class VideoRenderer:
         min_size: int,
         bold: bool,
         stroke_width: int,
+        line_gap: int = 16,
     ) -> tuple[ImageFont.ImageFont, list[str]]:
         size = base_size
         while size >= min_size:
             font = self._load_font(size=size, bold=bold)
             lines = self._wrap_text(text, font, max_width, draw, stroke_width=stroke_width)
-            height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+            height = self._block_height(
+                lines,
+                font,
+                draw,
+                stroke_width=stroke_width,
+                line_gap=line_gap,
+            )
             if height <= max_height:
                 return font, lines
             size -= 4
@@ -1868,6 +1909,7 @@ class VideoRenderer:
         width: int,
         fill: tuple[int, int, int],
         stroke_width: int,
+        line_gap: int = 16,
     ) -> None:
         y = start_y
         for line in lines:
@@ -1883,7 +1925,7 @@ class VideoRenderer:
                 stroke_width=stroke_width,
                 stroke_fill=(0, 0, 0),
             )
-            y += line_height + 16
+            y += line_height + line_gap
 
     def _wrap_text(
         self,
@@ -1919,12 +1961,13 @@ class VideoRenderer:
         draw: ImageDraw.ImageDraw,
         *,
         stroke_width: int,
+        line_gap: int = 16,
     ) -> int:
         height = 0
         for line in lines:
             bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=stroke_width)
-            height += (bbox[3] - bbox[1]) + 16
-        return max(height - 16, 0)
+            height += (bbox[3] - bbox[1]) + line_gap
+        return max(height - line_gap, 0)
 
     def _text_size(
         self,

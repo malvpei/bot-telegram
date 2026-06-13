@@ -220,6 +220,11 @@ def test_type_2_long_titleless_tip_uses_hook_style_without_white_card(monkeypatc
             text=(
                 "1. Don't compete by slashing prices to the ground just to get your "
                 "first quick sale. If your profit margin is tiny, any small unexpected "
+                "expense in advertising or potential returns will put you in the red. "
+                "Instead, focus your efforts on building an irresistible offer around "
+                "your product. "
+                "1. Don't compete by slashing prices to the ground just to get your "
+                "first quick sale. If your profit margin is tiny, any small unexpected "
                 "expense in advertising or potential returns will put you in the red."
             ),
             media=_candidate(image_path),
@@ -232,8 +237,10 @@ def test_type_2_long_titleless_tip_uses_hook_style_without_white_card(monkeypatc
             & (pixels[..., 1] > 235)
             & (pixels[..., 2] > 235)
         )
+        ys, _xs = np.where(white)
 
         assert white.mean() < 0.08
+        assert ys.max() - ys.min() < int(still.height * 0.42)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
