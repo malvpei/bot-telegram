@@ -10,7 +10,7 @@ import cv2
 import imageio.v2 as imageio
 import imageio_ffmpeg
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from app.config import Settings
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
@@ -88,9 +88,9 @@ TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
-TEXT_FACE_AVOID_WEIGHT = 220.0
-TEXT_EYE_AVOID_WEIGHT = 180.0
-TEXT_HEAD_AVOID_WEIGHT = 80.0
+TEXT_FACE_AVOID_WEIGHT = 150.0
+TEXT_EYE_AVOID_WEIGHT = 120.0
+TEXT_HEAD_AVOID_WEIGHT = 55.0
 TEXT_BODY_AVOID_WEIGHT = 2.5
 TEXT_CARD_EDGE_MARGIN = 84
 TEXT_CARD_PADDING_X = 46
@@ -371,7 +371,11 @@ class VideoRenderer:
         if video_type == VideoType.TYPE_3:
             return self._render_type_3_slide_frame(slide, source_image, progress)
         image_progress = 0.0 if slide.fixed_asset else progress
-        canvas = self._cover_image(source_image, image_progress)
+        canvas = (
+            self._fit_fixed_image(source_image)
+            if slide.fixed_asset
+            else self._cover_image(source_image, image_progress)
+        )
         composed = canvas.convert("RGBA")
         if not slide.fixed_asset:
             composed = Image.alpha_composite(composed, self._gradient_overlay)
@@ -396,6 +400,23 @@ class VideoRenderer:
         offset_x = int(extra_x * (0.3 + 0.4 * progress))
         offset_y = int(extra_y * 0.5)
         return resized.crop((offset_x, offset_y, offset_x + width, offset_y + height))
+
+    def _fit_fixed_image(self, source: Image.Image) -> Image.Image:
+        width = self.settings.width
+        height = self.settings.height
+        background = self._cover_image(source, 0.0).filter(ImageFilter.GaussianBlur(18))
+        scale = min(width / source.width, height / source.height)
+        resized = source.resize(
+            (
+                max(1, int(source.width * scale)),
+                max(1, int(source.height * scale)),
+            ),
+            Image.Resampling.LANCZOS,
+        )
+        x = (width - resized.width) // 2
+        y = (height - resized.height) // 2
+        background.paste(resized, (x, y))
+        return background
 
     def _render_type_3_slide_frame(
         self,
@@ -1513,9 +1534,8 @@ class VideoRenderer:
         if not boxes:
             return start_y
 
-        radius = max(3, _scale_x(5, canvas_width))
         for box, _text_pos, _line in boxes:
-            draw.rounded_rectangle(box, radius=radius, fill=TEXT_CARD_FILL)
+            draw.rectangle(box, fill=TEXT_CARD_FILL)
         for _box, text_pos, line in boxes:
             self._draw_card_text(
                 draw,
@@ -1643,23 +1663,23 @@ class VideoRenderer:
                 (int(x), int(y), int(x + w), int(y + h)),
                 width,
                 height,
-                x_pad=int(w * 0.65),
-                y_pad=int(h * 0.75),
+                x_pad=int(w * 0.38),
+                y_pad=int(h * 0.38),
             )
             regions.append((face, TEXT_FACE_AVOID_WEIGHT))
 
         for x, y, w, h in self._detect_render_eyes(gray):
             eye_face = self._expanded_box(
                 (
-                    int(x - w * 1.7),
-                    int(y - h * 1.7),
-                    int(x + w * 2.7),
-                    int(y + h * 5.2),
+                    int(x - w * 1.4),
+                    int(y - h * 1.2),
+                    int(x + w * 2.4),
+                    int(y + h * 3.6),
                 ),
                 width,
                 height,
-                x_pad=int(w * 0.8),
-                y_pad=int(h * 0.8),
+                x_pad=int(w * 0.45),
+                y_pad=int(h * 0.45),
             )
             regions.append((eye_face, TEXT_EYE_AVOID_WEIGHT))
 
@@ -1680,8 +1700,8 @@ class VideoRenderer:
                 ),
                 width,
                 height,
-                x_pad=int(w * 0.18),
-                y_pad=int(h * 0.12),
+                x_pad=int(w * 0.14),
+                y_pad=int(h * 0.08),
             )
             regions.append((body, TEXT_BODY_AVOID_WEIGHT))
             regions.append((head, TEXT_HEAD_AVOID_WEIGHT))

@@ -356,6 +356,41 @@ def test_fixed_laptop_slide_places_caption_above_screen(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_fixed_asset_is_fit_without_cropping_sides():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "wide_fixed.jpg"
+        canvas = np.full((720, 500, 3), (30, 80, 30), dtype=np.uint8)
+        canvas[:, :40, :] = (230, 20, 20)
+        canvas[:, -40:, :] = (230, 20, 20)
+        Image.fromarray(canvas).save(image_path)
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            width=360,
+            height=640,
+            fonts_dir=root / "fonts",
+        )
+        renderer = VideoRenderer(settings)
+        slide = SlidePlan(
+            index=3,
+            role=SlideRole.TIP3,
+            text="",
+            media=_candidate(image_path),
+            fixed_asset=True,
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_2)
+        pixels = np.asarray(still)
+        middle_rows = pixels[120:520]
+
+        assert middle_rows[:, :12, 0].mean() > 150
+        assert middle_rows[:, -12:, 0].mean() > 150
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_safe_text_position_avoids_face_region(monkeypatch):
     settings = replace(get_settings(), width=360, height=640)
     renderer = VideoRenderer(settings)
