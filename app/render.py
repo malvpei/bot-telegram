@@ -94,7 +94,7 @@ TEXT_BODY_AVOID_WEIGHT = 2.5
 TEXT_CARD_EDGE_MARGIN = 84
 TEXT_CARD_PADDING_X = 46
 TEXT_CARD_PADDING_Y = 16
-TEXT_CARD_LINE_OVERLAP = 3
+TEXT_CARD_LINE_OVERLAP = 7
 TEXT_CARD_GROUP_GAP = 20
 TEXT_CARD_FAUX_BOLD_PIXELS = 1
 TYPE_4_TITLE_LINES: dict[Language, tuple[str, str]] = {
@@ -1169,7 +1169,7 @@ class VideoRenderer:
             image,
             block_width=block_width,
             block_height=text_height,
-            preferred_centers=(0.56, 0.64, 0.46, 0.72, 0.36),
+            preferred_centers=(0.50, 0.54, 0.46, 0.58, 0.42, 0.62, 0.38),
         )
         self._draw_lines(
             draw,
@@ -1260,7 +1260,7 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.18),
-            base_size=self._scaled_text_size(42, minimum=18),
+            base_size=self._scaled_text_size(39, minimum=17),
             min_size=self._scaled_text_size(30, minimum=14),
             bold=False,
             stroke_width=0,
@@ -1270,7 +1270,7 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.40),
-            base_size=self._scaled_text_size(40, minimum=17),
+            base_size=self._scaled_text_size(37, minimum=16),
             min_size=self._scaled_text_size(28, minimum=13),
             bold=False,
             stroke_width=0,
@@ -1455,6 +1455,7 @@ class VideoRenderer:
         radius = max(5, _scale_x(9, canvas_width))
         for box, _text_pos, _line in boxes:
             draw.rounded_rectangle(box, radius=radius, fill=TEXT_CARD_FILL)
+        self._smooth_connected_card_joints(draw, boxes, canvas_width)
         for _box, text_pos, line in boxes:
             self._draw_card_text(
                 draw,
@@ -1464,6 +1465,36 @@ class VideoRenderer:
                 canvas_width=canvas_width,
             )
         return boxes[-1][0][3]
+
+    def _smooth_connected_card_joints(
+        self,
+        draw: ImageDraw.ImageDraw,
+        boxes: list[tuple[tuple[int, int, int, int], tuple[int, int], str]],
+        canvas_width: int,
+    ) -> None:
+        radius = max(4, _scale_x(13, canvas_width))
+        for (previous_box, _previous_text, _previous_line), (
+            next_box,
+            _next_text,
+            _next_line,
+        ) in zip(boxes, boxes[1:]):
+            joint_y = next_box[1]
+            edge_pairs = (
+                (previous_box[0], next_box[0], max(previous_box[0], next_box[0])),
+                (previous_box[2], next_box[2], min(previous_box[2], next_box[2])),
+            )
+            for previous_edge, next_edge, edge_x in edge_pairs:
+                if abs(previous_edge - next_edge) < radius // 2:
+                    continue
+                draw.ellipse(
+                    (
+                        edge_x - radius,
+                        joint_y - radius,
+                        edge_x + radius,
+                        joint_y + radius,
+                    ),
+                    fill=TEXT_CARD_FILL,
+                )
 
     def _draw_card_text(
         self,

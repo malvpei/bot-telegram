@@ -124,6 +124,43 @@ def test_hook_text_prefers_exactly_two_lines():
     assert len(lines) == 2
 
 
+def test_hook_text_renders_in_middle_third_without_avoid_regions(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        bg_path = root / "hook.jpg"
+        Image.new("RGB", (360, 640), (0, 0, 0)).save(bg_path)
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            width=360,
+            height=640,
+            fonts_dir=root / "fonts",
+        )
+        renderer = VideoRenderer(settings)
+        monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+        slide = SlidePlan(
+            index=1,
+            role=SlideRole.HOOK,
+            text="How to do Dropshipping in 2026",
+            media=_candidate(bg_path),
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_1)
+        pixels = np.asarray(still)
+        white = (
+            (pixels[..., 0] > 220)
+            & (pixels[..., 1] > 220)
+            & (pixels[..., 2] > 220)
+        )
+        ys, _xs = np.where(white)
+        center_y = (ys.min() + ys.max()) / 2
+
+        assert still.height / 3 <= center_y <= still.height * 2 / 3
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_type_1_still_embeds_caption_cards(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -219,7 +256,7 @@ def test_type_1_title_is_only_slightly_larger_than_body():
         draw,
         max_width=800,
         max_height=300,
-        base_size=42,
+        base_size=39,
         min_size=30,
         bold=False,
         stroke_width=0,
@@ -229,7 +266,7 @@ def test_type_1_title_is_only_slightly_larger_than_body():
         draw,
         max_width=800,
         max_height=300,
-        base_size=40,
+        base_size=37,
         min_size=28,
         bold=False,
         stroke_width=0,
