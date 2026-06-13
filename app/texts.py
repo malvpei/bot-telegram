@@ -533,10 +533,10 @@ class ScriptGenerator:
             },
             "c": {
                 SlideRole.HOOK: "4 consejos de Dropshipping que me habrían ahorrado muchos errores",
-                SlideRole.TIP1: "1. No compitas tirando los precios por los suelos para conseguir tu primera venta rápida. Si tu margen de beneficio es minúsculo, cualquier pequeño gasto imprevisto en publicidad o en posibles devoluciones te dejará en números rojos. Mejor esfuérzate en construir una oferta irresistible alrededor de tu producto.",
-                SlideRole.TIP2: "2. Contacta siempre con tus proveedores para confirmar su capacidad antes de escalar una campaña publicitaria. De nada sirve que un anuncio funcione genial si la fábrica no tiene stock o tarda semanas en procesar pedidos, ya que acabarás lidiando con decenas de clientes exigiendo su dinero.",
-                SlideRole.TIP3: "3. Deja de intentar adivinar qué se va a vender basándote únicamente en tu intuición o en lo que te parece visualmente atractivo. El éxito llega cuando ofreces lo que el mercado ya está pidiendo a gritos, así que apóyate en herramientas como Dropradar para basarte en datos reales y encontrar productos ganadores.",
-                SlideRole.TIP4: "4. Tus anuncios de vídeo deben centrarse en el problema que resuelves y no en enumerar características técnicas aburridas. Aprovecha los tres primeros segundos para captar la atención del espectador mostrándole de forma visual y muy directa cómo tu artículo le va a hacer la vida más fácil.",
+                SlideRole.TIP1: "1. Protege tu margen\nNo compitas tirando los precios por los suelos para conseguir tu primera venta rápida. Si tu beneficio es minúsculo, cualquier gasto imprevisto en anuncios o devoluciones te dejará en números rojos.",
+                SlideRole.TIP2: "2. Confirma el stock antes\nContacta siempre con tus proveedores antes de escalar una campaña. De nada sirve que un anuncio funcione si la fábrica no tiene stock o tarda semanas en procesar pedidos.",
+                SlideRole.TIP3: "3. Deja de adivinar\nNo elijas productos solo por intuición o porque se ven atractivos. Usa Dropradar para basarte en datos reales y encontrar productos que el mercado ya está pidiendo.",
+                SlideRole.TIP4: "4. Enseña el problema\nTus anuncios deben centrarse en el problema que resuelves, no en características aburridas. Usa los tres primeros segundos para mostrar por qué tu producto facilita la vida.",
             },
         }
         return self._compose_type_2_fixed(Language.ES, variants)
@@ -559,10 +559,10 @@ class ScriptGenerator:
             },
             "c": {
                 SlideRole.HOOK: "4 Dropshipping lessons that would have saved me a lot of mistakes",
-                SlideRole.TIP1: "1. Don't compete by slashing prices to the ground just to get your first quick sale. If your profit margin is tiny, any small unexpected expense in advertising or potential returns will put you in the red. Instead, focus your efforts on building an irresistible offer around your product.",
-                SlideRole.TIP2: "2. Always contact your suppliers to confirm their capacity before scaling an advertising campaign. It is useless for an ad to perform great if the factory has no stock or takes weeks to process orders, as you will end up dealing with dozens of angry customers demanding their money back.",
-                SlideRole.TIP3: "3. Stop trying to guess what will sell based solely on your intuition or what you find visually appealing. Success comes when you offer what the market is already crying out for, so lean on tools like Dropradar to base your decisions on real data and find winning products.",
-                SlideRole.TIP4: "4. Your video ads should focus on the problem you solve rather than listing boring technical features. Use the first three seconds to grab the viewer's attention by showing them visually and very directly how your item is going to make their life easier.",
+                SlideRole.TIP1: "1. Protect your margin\nDo not slash prices just to get your first quick sale. If your profit is tiny, one unexpected ad cost or return can put you in the red.",
+                SlideRole.TIP2: "2. Confirm supplier capacity\nAlways contact suppliers before scaling a campaign. A strong ad is useless if the factory has no stock or needs weeks to process orders.",
+                SlideRole.TIP3: "3. Stop guessing products\nDo not choose products only by intuition or because they look visually appealing. Use Dropradar to base decisions on real data and find products people already want.",
+                SlideRole.TIP4: "4. Show the problem\nYour video ads should focus on the problem you solve, not boring technical features. Use the first three seconds to show why your product makes life easier.",
             },
         }
         return self._compose_type_2_fixed(Language.EN, variants)
@@ -616,15 +616,14 @@ class ScriptGenerator:
                 raise ValueError(
                     f"Tipo 2 ({role.value}): el consejo debe empezar por '{expected_prefix}'."
                 )
-            if "\n" in slide:
-                title, body = slide.split("\n", 1)
-                if not title.strip() or not body.strip():
-                    raise ValueError(
-                        f"Tipo 2 ({role.value}): el consejo debe tener título y texto."
-                    )
-            elif not slide[len(expected_prefix):].strip():
+            if "\n" not in slide:
                 raise ValueError(
-                    f"Tipo 2 ({role.value}): el consejo debe tener texto."
+                    f"Tipo 2 ({role.value}): el consejo debe separar título y texto."
+                )
+            title, body = slide.split("\n", 1)
+            if not title.strip() or not body.strip():
+                raise ValueError(
+                    f"Tipo 2 ({role.value}): el consejo debe tener título y texto."
                 )
         if "Dropradar" not in slides_by_role.get(SlideRole.TIP3, ""):
             raise ValueError("Tipo 2: el consejo 3 debe mencionar Dropradar.")

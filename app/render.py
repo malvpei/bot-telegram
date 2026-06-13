@@ -1190,7 +1190,11 @@ class VideoRenderer:
         if slide.role not in {SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4}:
             return False
         text = slide.text.strip()
-        return "\n" not in text and bool(re.match(r"^\d+\.\s+\S+", text))
+        return (
+            "\n" not in text
+            and len(text) <= 130
+            and bool(re.match(r"^\d+\.\s+\S+", text))
+        )
 
     def _draw_hook_text(self, image: Image.Image, text: str) -> None:
         draw = ImageDraw.Draw(image)

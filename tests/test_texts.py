@@ -190,12 +190,10 @@ def test_type_2_tips_separate_title_and_body_and_hooks_are_fixed(state_dir):
     for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
         slide = package.slides_by_role[role]
         assert slide.startswith(f"{role.value[-1]}.")
-        if "\n" in slide:
-            title, body = slide.split("\n", 1)
-            assert title
-            assert body
-        else:
-            assert slide[len(f"{role.value[-1]}."):].strip()
+        assert "\n" in slide
+        title, body = slide.split("\n", 1)
+        assert title
+        assert body
 
 
 def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
@@ -230,9 +228,8 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
         == "4 consejos de Dropshipping que me habrían ahorrado muchos errores"
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
-        "1. No compitas tirando los precios por los suelos"
+        "1. Protege tu margen\n"
     )
-    assert "\n" not in third.slides_by_role[SlideRole.TIP1]
     assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
 
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.ES, third.choice_key)
@@ -271,9 +268,8 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
         == "4 Dropshipping lessons that would have saved me a lot of mistakes"
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
-        "1. Don't compete by slashing prices to the ground"
+        "1. Protect your margin\n"
     )
-    assert "\n" not in third.slides_by_role[SlideRole.TIP1]
     assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
 
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, third.choice_key)
@@ -476,8 +472,8 @@ def test_lowercase_option_formats_new_type_2_titleless_variant(state_dir):
 
     assert package.choice_key == "c"
     assert all(slide == slide.lower() for slide in package.ordered_slides)
-    assert "\n" not in package.slides_by_role[SlideRole.TIP1]
-    assert package.slides_by_role[SlideRole.TIP1].startswith("1. don't compete")
+    assert "\n" in package.slides_by_role[SlideRole.TIP1]
+    assert package.slides_by_role[SlideRole.TIP1].startswith("1. protect your margin")
 
 
 def test_social_hashtags_force_literal_dropshipping():

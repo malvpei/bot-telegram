@@ -199,7 +199,7 @@ def test_type_1_still_embeds_caption_cards(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_2_long_titleless_tip_uses_hook_style_without_white_card(monkeypatch):
+def test_type_2_long_titleless_tip_falls_back_to_caption_card(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -230,6 +230,7 @@ def test_type_2_long_titleless_tip_uses_hook_style_without_white_card(monkeypatc
             media=_candidate(image_path),
         )
 
+        assert renderer._uses_hook_paragraph_style(slide, VideoType.TYPE_2) is False
         still = renderer.render_slide_still(slide, VideoType.TYPE_2)
         pixels = np.asarray(still)
         white = (
@@ -239,8 +240,8 @@ def test_type_2_long_titleless_tip_uses_hook_style_without_white_card(monkeypatc
         )
         ys, _xs = np.where(white)
 
-        assert white.mean() < 0.08
-        assert ys.max() - ys.min() < int(still.height * 0.42)
+        assert white.mean() > 0.04
+        assert ys.max() - ys.min() < int(still.height * 0.48)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
