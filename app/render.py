@@ -95,7 +95,8 @@ TEXT_BODY_AVOID_WEIGHT = 2.5
 TEXT_CARD_EDGE_MARGIN = 84
 TEXT_CARD_PADDING_X = 46
 TEXT_CARD_PADDING_Y = 16
-TEXT_CARD_LINE_OVERLAP = 7
+TEXT_CARD_TITLE_PADDING_Y = 22
+TEXT_CARD_LINE_OVERLAP = 12
 TEXT_CARD_GROUP_GAP = 20
 TEXT_CARD_FAUX_BOLD_PIXELS = 1
 TYPE_4_TITLE_LINES: dict[Language, tuple[str, str]] = {
@@ -1333,6 +1334,7 @@ class VideoRenderer:
         edge_margin = _scale_x(TEXT_CARD_EDGE_MARGIN, width)
         padding_x = _scale_x(TEXT_CARD_PADDING_X, width)
         padding_y = _scale_y(TEXT_CARD_PADDING_Y, height)
+        title_padding_y = _scale_y(TEXT_CARD_TITLE_PADDING_Y, height)
         connected_line_gap = -_scale_y(TEXT_CARD_LINE_OVERLAP, height)
         block_gap = _scale_y(TEXT_CARD_GROUP_GAP, height)
         max_text_width = max(1, width - (edge_margin * 2) - (padding_x * 2))
@@ -1358,11 +1360,11 @@ class VideoRenderer:
             stroke_width=0,
         )
 
-        groups: list[tuple[list[str], ImageFont.ImageFont, int, bool]] = []
+        groups: list[tuple[list[str], ImageFont.ImageFont, int, bool, int]] = []
         if first_line.strip():
-            groups.append((title_lines, title_font, 0, False))
+            groups.append((title_lines, title_font, 0, False, title_padding_y))
         if body.strip():
-            groups.append((body_lines, body_font, connected_line_gap, True))
+            groups.append((body_lines, body_font, connected_line_gap, True, padding_y))
         if not groups:
             return
 
@@ -1371,10 +1373,10 @@ class VideoRenderer:
                 lines,
                 font,
                 draw,
-                padding_y=padding_y,
+                padding_y=group_padding_y,
                 line_gap=line_gap,
             )
-            for lines, font, line_gap, _connected in groups
+            for lines, font, line_gap, _connected, group_padding_y in groups
         ]
         total_height = sum(group_heights) + block_gap * max(0, len(groups) - 1)
         block_width = min(
@@ -1386,7 +1388,7 @@ class VideoRenderer:
                     draw,
                     padding_x=padding_x,
                 )
-                for lines, font, _line_gap, _connected in groups
+                for lines, font, _line_gap, _connected, _group_padding_y in groups
             ),
         )
         start_y = self._safe_text_start_y(
@@ -1397,7 +1399,7 @@ class VideoRenderer:
         )
 
         y = start_y
-        for index, (lines, font, line_gap, connected) in enumerate(groups):
+        for index, (lines, font, line_gap, connected, group_padding_y) in enumerate(groups):
             if connected:
                 y = self._draw_connected_pill_lines(
                     draw,
@@ -1406,7 +1408,7 @@ class VideoRenderer:
                     start_y=y,
                     canvas_width=width,
                     padding_x=padding_x,
-                    padding_y=padding_y,
+                    padding_y=group_padding_y,
                     line_gap=line_gap,
                 )
             else:
@@ -1417,7 +1419,7 @@ class VideoRenderer:
                     start_y=y,
                     canvas_width=width,
                     padding_x=padding_x,
-                    padding_y=padding_y,
+                    padding_y=group_padding_y,
                     line_gap=line_gap,
                 )
             if index < len(groups) - 1:
@@ -1428,9 +1430,11 @@ class VideoRenderer:
         slide: SlidePlan | None,
     ) -> tuple[float, ...]:
         if (
-            slide is not None
-            and slide.fixed_asset
-            and slide.role in {SlideRole.FEBRUARY, SlideRole.TIP3}
+            slide is not None and slide.fixed_asset and slide.role == SlideRole.TIP3
+        ):
+            return (0.42, 0.40, 0.44, 0.38, 0.36)
+        if (
+            slide is not None and slide.fixed_asset and slide.role == SlideRole.FEBRUARY
         ):
             return (0.24, 0.20, 0.30, 0.16, 0.36)
         return (0.50, 0.54, 0.46, 0.60, 0.40, 0.66, 0.34)
@@ -1534,8 +1538,7 @@ class VideoRenderer:
         if not boxes:
             return start_y
 
-        for box, _text_pos, _line in boxes:
-            draw.rectangle(box, fill=TEXT_CARD_FILL)
+        self._draw_connected_card_background(draw, boxes, canvas_width)
         for _box, text_pos, line in boxes:
             self._draw_card_text(
                 draw,
@@ -1545,6 +1548,23 @@ class VideoRenderer:
                 canvas_width=canvas_width,
             )
         return boxes[-1][0][3]
+
+    def _draw_connected_card_background(
+        self,
+        draw: ImageDraw.ImageDraw,
+        boxes: list[tuple[tuple[int, int, int, int], tuple[int, int], str]],
+        canvas_width: int,
+    ) -> None:
+        mask_height = max(box[3] for box, _text_pos, _line in boxes) + _scale_x(8, canvas_width)
+        mask = Image.new("L", (canvas_width, mask_height), 0)
+        mask_draw = ImageDraw.Draw(mask)
+        for box, _text_pos, _line in boxes:
+            mask_draw.rectangle(box, fill=255)
+
+        smooth_radius = max(2, _scale_x(3, canvas_width))
+        mask = mask.filter(ImageFilter.GaussianBlur(smooth_radius))
+        mask = mask.point(lambda value: 255 if value >= 128 else 0)
+        draw.bitmap((0, 0), mask, fill=TEXT_CARD_FILL)
 
     def _draw_card_text(
         self,
