@@ -40,17 +40,39 @@ def test_type_1_es_has_seven_slides_and_dropradar_in_february(state_dir):
 
 def test_type_1_hooks_are_short_and_example_like(state_dir):
     generator = _make_generator(state_dir)
+    allowed_hooks = {
+        "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y por qué casi lo dejo...",
+        "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo....",
+        "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo...",
+    }
     hooks = set()
     for _ in range(3):
         package = generator.generate(VideoType.TYPE_1, Language.ES)
         generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, package.choice_key)
         hook = package.slides_by_role[SlideRole.HOOK]
         assert len(hook) <= 95
-        assert "Dropshipping" in hook
-        assert any(term in hook for term in ("gané", "facturé"))
+        assert hook in allowed_hooks
         hooks.add(hook)
     assert len(hooks) == 3
-    assert any(hook.startswith(("Exactamente cuanto", "Exactamente cuánto")) for hook in hooks)
+
+
+def test_type_1_es_visible_text_avoids_unapproved_hook_typos(state_dir):
+    generator = _make_generator(state_dir)
+    allowed_hooks = {
+        "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y por qué casi lo dejo...",
+        "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo....",
+        "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo...",
+    }
+
+    for _ in range(3):
+        package = generator.generate(VideoType.TYPE_1, Language.ES)
+        generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, package.choice_key)
+        hook = package.slides_by_role[SlideRole.HOOK]
+        visible_text = f"{hook}\n{package.social_copy.title}"
+
+        assert hook in allowed_hooks
+        assert "dropsipping" not in visible_text.lower()
+        assert "facture" not in visible_text.lower()
 
 
 def test_type_1_amounts_are_coherent(state_dir):
@@ -95,7 +117,7 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert third.choice_key == "c"
     assert (
         third.slides_by_role[SlideRole.HOOK]
-        == "Exactamente cuánto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo."
+        == "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo..."
     )
     assert "Febrero - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 3100€" in third.slides_by_role[SlideRole.MARCH]

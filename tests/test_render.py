@@ -260,7 +260,7 @@ def test_hook_text_uses_larger_two_line_fit(monkeypatch):
     renderer._draw_hook_text(image, "Errores frecuentes que veo en dropshippers novatos")
 
     assert captured["max_width"] == 1080 - HOOK_SIDE_MARGIN
-    assert captured["max_height"] == int(1920 * 0.34)
+    assert captured["max_height"] == int(1920 * 0.40)
     assert captured["base_size"] == HOOK_BASE_FONT_SIZE
     assert captured["min_size"] == HOOK_MIN_FONT_SIZE
 

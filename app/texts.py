@@ -217,7 +217,7 @@ class ScriptGenerator:
                 SlideRole.MARCH: "Marzo - 3100€\nNo soy millonario, pero por fin tengo un negocio que funciona. Me alegro de no haberme rendido en enero la clave era la constancia y dejar de adivinar qué producto iba a funcionar.",
             },
             "c": {
-                SlideRole.HOOK: "Exactamente cuánto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo.",
+                SlideRole.HOOK: "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo...",
                 SlideRole.OCTOBER: "Octubre - 0€\nMe obsesioné con crear la marca perfecta. Pagué un logo, diseñé una web increíble y elegí productos que a mí me parecían bonitos. Mucho esfuerzo, cero ventas.",
                 SlideRole.NOVEMBER: "Noviembre - 0€\nPensé que la gente no confiaba en la tienda. Mejoré las descripciones, metí más fotos y gasté mis primeros euros en TikTok Ads. Mi presupuesto desapareció sin resultados.",
                 SlideRole.DECEMBER: "Diciembre - 74€\nEmpecé a subir productos al azar desde AliExpress a ver si sonaba la flauta. Cayeron tres ventas, pero los envíos eran carísimos y tardaban semanas. Trabajaba literalmente gratis.",
@@ -781,7 +781,7 @@ class ScriptGenerator:
     def _social_title_variants_es(self, video_type: VideoType) -> dict[str, str]:
         if video_type == VideoType.TYPE_1:
             return {
-                "t1": "Lo que facture cuando deje de adivinar",
+                "t1": "Lo que facturé cuando dejé de adivinar",
                 "t2": "Mi cambio real con dropshipping",
                 "t3": "De perder meses a entender los numeros",
                 "t4": "La parte que nadie me explico al empezar",
@@ -1171,7 +1171,7 @@ class ScriptGenerator:
                     ["#emprendimiento", "#dropshipping", "#productoganador", "#ecommerce", "#dropradar"],
                 ),
                 "es5": (
-                    "Cuanto facture realmente con dropshipping",
+                    "Cuanto facturé realmente con Dropshipping",
                     "Este carrusel resume una parte que casi nunca se cuenta con calma, los meses donde abres la tienda, te ilusionas con cada visita y aun así no entra dinero suficiente para justificar todo el esfuerzo. Al principio yo confundía movimiento con progreso, tocar la web, cambiar textos, mirar productos y revisar estadísticas cada rato me hacía sentir ocupado, pero no me acercaba a una decisión mejor. La diferencia llegó cuando dejé de buscar el producto perfecto por intuición y empecé a mirar datos con más humildad, demanda, anuncios que ya estaban funcionando, margen y señales reales de compra. Dropradar no convirtió el proceso en magia, pero sí me dio una forma más ordenada de filtrar antes de gastar. Eso cambió mi cabeza más que mis números al principio, porque cada prueba dejó de ser una apuesta emocional y empezó a ser una decisión que podía entender. Si estás en esa fase rara de trabajar mucho y facturar poco, quizá no te falta motivación, quizá te falta un criterio más limpio para elegir qué probar.",
                     ["#dropshipping", "#facturacion", "#ecommerce", "#productresearch", "#dropradar"],
                 ),

@@ -52,9 +52,9 @@ TIKTOK_OVERLAY_FONT_CANDIDATES = (
 HOOK_TEXT_STROKE_FILL = (12, 12, 12)
 FIXED_SCREEN_TEXT_MARGIN = 78
 FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 40
-HOOK_BASE_FONT_SIZE = 106
-HOOK_MIN_FONT_SIZE = 46
-HOOK_SIDE_MARGIN = 80
+HOOK_BASE_FONT_SIZE = 126
+HOOK_MIN_FONT_SIZE = 54
+HOOK_SIDE_MARGIN = 48
 TYPE_3_TOOL_BADGES: dict[str, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
     "shopify": ("Shopify", (255, 255, 255), (92, 156, 55)),
     "dropradar": ("Dropradar", (163, 245, 48), (20, 20, 20)),
@@ -1229,7 +1229,7 @@ class VideoRenderer:
             text,
             draw,
             max_width=width - _scale_x(HOOK_SIDE_MARGIN, width),
-            max_height=int(height * 0.34),
+            max_height=int(height * 0.40),
             base_size=self._scaled_text_size(HOOK_BASE_FONT_SIZE, minimum=38),
             min_size=self._scaled_text_size(HOOK_MIN_FONT_SIZE, minimum=20),
             stroke_width=stroke_width,
