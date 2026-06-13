@@ -199,6 +199,45 @@ def test_type_1_still_embeds_caption_cards(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_2_long_titleless_tip_uses_hook_style_without_white_card(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "source.jpg"
+        Image.new("RGB", (360, 640), (25, 30, 35)).save(image_path)
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            width=360,
+            height=640,
+            fonts_dir=root / "fonts",
+        )
+        renderer = VideoRenderer(settings)
+        monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+        slide = SlidePlan(
+            index=2,
+            role=SlideRole.TIP1,
+            text=(
+                "1. Don't compete by slashing prices to the ground just to get your "
+                "first quick sale. If your profit margin is tiny, any small unexpected "
+                "expense in advertising or potential returns will put you in the red."
+            ),
+            media=_candidate(image_path),
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_2)
+        pixels = np.asarray(still)
+        white = (
+            (pixels[..., 0] > 235)
+            & (pixels[..., 1] > 235)
+            & (pixels[..., 2] > 235)
+        )
+
+        assert white.mean() < 0.08
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_caption_body_background_is_connected_and_keeps_side_margin(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)

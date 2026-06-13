@@ -88,8 +88,9 @@ TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
-TEXT_FACE_AVOID_WEIGHT = 120.0
-TEXT_HEAD_AVOID_WEIGHT = 55.0
+TEXT_FACE_AVOID_WEIGHT = 220.0
+TEXT_EYE_AVOID_WEIGHT = 180.0
+TEXT_HEAD_AVOID_WEIGHT = 80.0
 TEXT_BODY_AVOID_WEIGHT = 2.5
 TEXT_CARD_EDGE_MARGIN = 84
 TEXT_CARD_PADDING_X = 46
@@ -170,6 +171,9 @@ class VideoRenderer:
         self._type_4_icons_dir = settings.root_dir / "tipo4" / "iconos"
         self._face_detector = cv2.CascadeClassifier(
             cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
+        )
+        self._eye_detector = cv2.CascadeClassifier(
+            cv2.data.haarcascades + "haarcascade_eye.xml"
         )
         self._people_detector = cv2.HOGDescriptor()
         self._people_detector.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
@@ -371,7 +375,7 @@ class VideoRenderer:
         composed = canvas.convert("RGBA")
         if not slide.fixed_asset:
             composed = Image.alpha_composite(composed, self._gradient_overlay)
-        self._draw_text(composed, slide)
+        self._draw_text(composed, slide, video_type)
         return np.asarray(composed.convert("RGB"))
 
     def _cover_image(self, source: Image.Image, progress: float) -> Image.Image:
@@ -1135,7 +1139,12 @@ class VideoRenderer:
     # Text rendering
     # ------------------------------------------------------------------
 
-    def _draw_text(self, image: Image.Image, slide: SlidePlan) -> None:
+    def _draw_text(
+        self,
+        image: Image.Image,
+        slide: SlidePlan,
+        video_type: VideoType,
+    ) -> None:
         if not slide.text:
             return
 
@@ -1143,7 +1152,23 @@ class VideoRenderer:
             self._draw_hook_text(image, slide.text)
             return
 
+        if self._uses_hook_paragraph_style(slide, video_type):
+            self._draw_hook_paragraph_text(image, slide.text)
+            return
+
         self._draw_caption_card_text(image, slide.text, slide=slide)
+
+    def _uses_hook_paragraph_style(
+        self,
+        slide: SlidePlan,
+        video_type: VideoType,
+    ) -> bool:
+        if video_type != VideoType.TYPE_2:
+            return False
+        if slide.role not in {SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4}:
+            return False
+        text = slide.text.strip()
+        return "\n" not in text and bool(re.match(r"^\d+\.\s+\S+", text))
 
     def _draw_hook_text(self, image: Image.Image, text: str) -> None:
         draw = ImageDraw.Draw(image)
@@ -1157,6 +1182,42 @@ class VideoRenderer:
             max_height=int(height * 0.30),
             base_size=self._scaled_text_size(96, minimum=34),
             min_size=self._scaled_text_size(42, minimum=18),
+            stroke_width=stroke_width,
+        )
+        text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+        block_width = min(
+            width - _scale_x(80, width),
+            self._block_width(lines, font, draw, stroke_width=stroke_width)
+            + _scale_x(40, width),
+        )
+        start_y = self._safe_text_start_y(
+            image,
+            block_width=block_width,
+            block_height=text_height,
+            preferred_centers=(0.50, 0.54, 0.46, 0.58, 0.42, 0.62, 0.38),
+        )
+        self._draw_lines(
+            draw,
+            lines,
+            font,
+            start_y=start_y,
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=stroke_width,
+        )
+
+    def _draw_hook_paragraph_text(self, image: Image.Image, text: str) -> None:
+        draw = ImageDraw.Draw(image)
+        width, height = image.size
+        stroke_width = max(2, _scale_x(4, width))
+        font, lines = self._fit_text(
+            text.strip(),
+            draw,
+            max_width=width - _scale_x(130, width),
+            max_height=int(height * 0.44),
+            base_size=self._scaled_text_size(58, minimum=24),
+            min_size=self._scaled_text_size(34, minimum=16),
+            bold=True,
             stroke_width=stroke_width,
         )
         text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
@@ -1452,10 +1513,9 @@ class VideoRenderer:
         if not boxes:
             return start_y
 
-        radius = max(5, _scale_x(9, canvas_width))
+        radius = max(3, _scale_x(5, canvas_width))
         for box, _text_pos, _line in boxes:
             draw.rounded_rectangle(box, radius=radius, fill=TEXT_CARD_FILL)
-        self._smooth_connected_card_joints(draw, boxes, canvas_width)
         for _box, text_pos, line in boxes:
             self._draw_card_text(
                 draw,
@@ -1465,36 +1525,6 @@ class VideoRenderer:
                 canvas_width=canvas_width,
             )
         return boxes[-1][0][3]
-
-    def _smooth_connected_card_joints(
-        self,
-        draw: ImageDraw.ImageDraw,
-        boxes: list[tuple[tuple[int, int, int, int], tuple[int, int], str]],
-        canvas_width: int,
-    ) -> None:
-        radius = max(4, _scale_x(13, canvas_width))
-        for (previous_box, _previous_text, _previous_line), (
-            next_box,
-            _next_text,
-            _next_line,
-        ) in zip(boxes, boxes[1:]):
-            joint_y = next_box[1]
-            edge_pairs = (
-                (previous_box[0], next_box[0], max(previous_box[0], next_box[0])),
-                (previous_box[2], next_box[2], min(previous_box[2], next_box[2])),
-            )
-            for previous_edge, next_edge, edge_x in edge_pairs:
-                if abs(previous_edge - next_edge) < radius // 2:
-                    continue
-                draw.ellipse(
-                    (
-                        edge_x - radius,
-                        joint_y - radius,
-                        edge_x + radius,
-                        joint_y + radius,
-                    ),
-                    fill=TEXT_CARD_FILL,
-                )
 
     def _draw_card_text(
         self,
@@ -1618,6 +1648,21 @@ class VideoRenderer:
             )
             regions.append((face, TEXT_FACE_AVOID_WEIGHT))
 
+        for x, y, w, h in self._detect_render_eyes(gray):
+            eye_face = self._expanded_box(
+                (
+                    int(x - w * 1.7),
+                    int(y - h * 1.7),
+                    int(x + w * 2.7),
+                    int(y + h * 5.2),
+                ),
+                width,
+                height,
+                x_pad=int(w * 0.8),
+                y_pad=int(h * 0.8),
+            )
+            regions.append((eye_face, TEXT_EYE_AVOID_WEIGHT))
+
         for x, y, w, h in self._detect_render_people(rgb):
             body = self._expanded_box(
                 (int(x), int(y), int(x + w), int(y + h)),
@@ -1651,6 +1696,21 @@ class VideoRenderer:
             gray,
             scaleFactor=1.16,
             minNeighbors=4,
+            minSize=(min_size, min_size),
+        )
+        if len(detected) == 0:
+            return np.empty((0, 4), dtype=np.int32)
+        return np.asarray(detected, dtype=np.int32)
+
+    def _detect_render_eyes(self, gray: np.ndarray) -> np.ndarray:
+        if self._eye_detector.empty():
+            return np.empty((0, 4), dtype=np.int32)
+        height, width = gray.shape[:2]
+        min_size = max(10, _scale_x(22, width))
+        detected = self._eye_detector.detectMultiScale(
+            gray,
+            scaleFactor=1.10,
+            minNeighbors=5,
             minSize=(min_size, min_size),
         )
         if len(detected) == 0:
