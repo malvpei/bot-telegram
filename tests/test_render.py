@@ -24,6 +24,17 @@ def test_numbered_titleless_tip_keeps_number_with_body_for_rendering():
     assert body.startswith("1. Don't compete by slashing prices")
 
 
+def test_numbered_titleless_tip_merges_line_broken_number_with_body():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+
+    title, body = renderer._split_slide_text(
+        "1.\nDon't compete by slashing prices to the ground just to get your first quick sale."
+    )
+
+    assert title == ""
+    assert body.startswith("1. Don't compete by slashing prices")
+
+
 def test_type_3_tool_slide_uses_icon_asset():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)

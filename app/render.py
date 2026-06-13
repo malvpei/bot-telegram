@@ -88,12 +88,12 @@ TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
-TEXT_FACE_AVOID_WEIGHT = 80.0
-TEXT_HEAD_AVOID_WEIGHT = 34.0
-TEXT_BODY_AVOID_WEIGHT = 2.0
+TEXT_FACE_AVOID_WEIGHT = 120.0
+TEXT_HEAD_AVOID_WEIGHT = 55.0
+TEXT_BODY_AVOID_WEIGHT = 2.5
 TEXT_CARD_EDGE_MARGIN = 84
-TEXT_CARD_PADDING_X = 20
-TEXT_CARD_PADDING_Y = 7
+TEXT_CARD_PADDING_X = 46
+TEXT_CARD_PADDING_Y = 16
 TEXT_CARD_LINE_OVERLAP = 3
 TEXT_CARD_GROUP_GAP = 20
 TEXT_CARD_FAUX_BOLD_PIXELS = 1
@@ -1351,7 +1351,7 @@ class VideoRenderer:
             and slide.role in {SlideRole.FEBRUARY, SlideRole.TIP3}
         ):
             return (0.24, 0.20, 0.30, 0.16, 0.36)
-        return (0.54, 0.44, 0.64, 0.34, 0.74, 0.26)
+        return (0.50, 0.54, 0.46, 0.60, 0.40, 0.66, 0.34)
 
     def _scaled_text_size(self, base_size: int, *, minimum: int) -> int:
         return max(minimum, _scale_x(base_size, self.settings.width))
@@ -1582,8 +1582,8 @@ class VideoRenderer:
                 (int(x), int(y), int(x + w), int(y + h)),
                 width,
                 height,
-                x_pad=int(w * 0.45),
-                y_pad=int(h * 0.55),
+                x_pad=int(w * 0.65),
+                y_pad=int(h * 0.75),
             )
             regions.append((face, TEXT_FACE_AVOID_WEIGHT))
 
@@ -1604,8 +1604,8 @@ class VideoRenderer:
                 ),
                 width,
                 height,
-                x_pad=int(w * 0.15),
-                y_pad=int(h * 0.08),
+                x_pad=int(w * 0.18),
+                y_pad=int(h * 0.12),
             )
             regions.append((body, TEXT_BODY_AVOID_WEIGHT))
             regions.append((head, TEXT_HEAD_AVOID_WEIGHT))
@@ -1721,6 +1721,10 @@ class VideoRenderer:
         parts = text.split("\n", 1)
         if len(parts) == 1:
             return "", parts[0].strip()
+        first_line = parts[0].strip()
+        body = parts[1].strip()
+        if first_line.endswith(".") and first_line[:-1].isdigit() and body:
+            return "", f"{first_line} {body}".strip()
         return parts[0], parts[1]
 
     def _draw_lines(
