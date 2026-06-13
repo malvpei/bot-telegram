@@ -44,6 +44,20 @@ def test_relative_data_dir_env_is_resolved_from_project_root(monkeypatch):
         get_settings.cache_clear()
 
 
+def test_default_type_1_fixed_image_reuses_dropradar_tip3(monkeypatch):
+    monkeypatch.delenv("FIXED_IMAGE_PATH", raising=False)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert (
+            settings.fixed_image_path
+            == Path(__file__).resolve().parents[1] / "assets" / "fixed" / "tip3_dropradar.jpg"
+        )
+    finally:
+        get_settings.cache_clear()
+
+
 def test_women_accounts_file_env_is_resolved_from_project_root(monkeypatch):
     monkeypatch.setenv("WOMEN_ACCOUNTS_FILE", "data/women.txt")
     get_settings.cache_clear()

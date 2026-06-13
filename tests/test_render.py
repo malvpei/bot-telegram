@@ -10,7 +10,15 @@ from PIL import Image, ImageDraw
 
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoType
-from app.render import FIXED_SCREEN_TEXT_MARGIN, HOOK_TEXT_STROKE_FILL, VideoRenderer
+from app.render import (
+    FEBRUARY_FIXED_SCREEN_TEXT_MARGIN,
+    FIXED_SCREEN_TEXT_MARGIN,
+    HOOK_BASE_FONT_SIZE,
+    HOOK_MIN_FONT_SIZE,
+    HOOK_SIDE_MARGIN,
+    HOOK_TEXT_STROKE_FILL,
+    VideoRenderer,
+)
 
 
 def test_numbered_titleless_tip_keeps_number_with_body_for_rendering():
@@ -232,6 +240,31 @@ def test_hook_text_uses_slightly_softer_stroke(monkeypatch):
     assert captured["stroke_fill"] == HOOK_TEXT_STROKE_FILL
 
 
+def test_hook_text_uses_larger_two_line_fit(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGBA", (1080, 1920), (20, 20, 20, 255))
+    captured: dict[str, int] = {}
+
+    def fake_fit_hook_two_lines(*args, **kwargs):
+        captured["max_width"] = kwargs["max_width"]
+        captured["max_height"] = kwargs["max_height"]
+        captured["base_size"] = kwargs["base_size"]
+        captured["min_size"] = kwargs["min_size"]
+        return renderer._load_font(size=48, bold=True), ["Line one", "Line two"]
+
+    monkeypatch.setattr(renderer, "_fit_hook_two_lines", fake_fit_hook_two_lines)
+    monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 200)
+    monkeypatch.setattr(renderer, "_draw_lines", lambda *args, **kwargs: None)
+
+    renderer._draw_hook_text(image, "Errores frecuentes que veo en dropshippers novatos")
+
+    assert captured["max_width"] == 1080 - HOOK_SIDE_MARGIN
+    assert captured["max_height"] == int(1920 * 0.34)
+    assert captured["base_size"] == HOOK_BASE_FONT_SIZE
+    assert captured["min_size"] == HOOK_MIN_FONT_SIZE
+
+
 def test_hook_text_uses_tiktok_overlay_font_loader(monkeypatch):
     settings = replace(get_settings(), width=360, height=640)
     renderer = VideoRenderer(settings)
@@ -451,6 +484,32 @@ def test_fixed_laptop_hook_paragraph_keeps_extra_screen_gap():
     screen_top = int(640 * 0.525)
     expected_margin = max(1, int(FIXED_SCREEN_TEXT_MARGIN * 640 / 1920))
     assert y + 80 <= screen_top - expected_margin
+
+
+def test_fixed_february_caption_sits_lower_but_above_screen():
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    slide = SlidePlan(
+        index=5,
+        role=SlideRole.FEBRUARY,
+        text="febrero - 680€\nElegí un producto usando los datos de Dropradar.",
+        media=_candidate(Path("source.jpg")),
+        fixed_asset=True,
+    )
+
+    assert renderer._caption_preferred_centers(slide)[0] == 0.34
+
+    y = renderer._clamp_fixed_screen_caption_y(
+        slide,
+        start_y=270,
+        block_height=92,
+        canvas_height=640,
+    )
+    screen_top = int(640 * 0.525)
+    expected_margin = max(1, int(FEBRUARY_FIXED_SCREEN_TEXT_MARGIN * 640 / 1920))
+
+    assert y + 92 <= screen_top - expected_margin
+    assert y > 200
 
 
 def test_fixed_asset_is_fit_without_cropping_sides():

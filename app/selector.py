@@ -1352,12 +1352,15 @@ class ImageSelector:
             + 0.04 * metrics.hands_score
         )
         if role == SlideRole.HOOK:
+            if (
+                self._is_landscape_media(media)
+                or not self._is_type_1_person_visible_media(media)
+            ):
+                return 0.0
             score += (
                 0.12 * metrics.daylight
                 + 0.18 * person_or_composition
             )
-            if metrics.is_landscape and person_or_composition <= 0:
-                score -= 0.18
         elif role == SlideRole.MARCH:
             # March is the closing slide, slight bump for upbeat outdoor shots.
             score += 0.05 * metrics.outdoor_score
@@ -1394,7 +1397,7 @@ class ImageSelector:
         else:
             score -= 0.38
         if role == SlideRole.HOOK:
-            if not has_visible_user:
+            if not has_visible_user or self._is_landscape_media(media):
                 return 0.0
             score += (
                 0.18 * person_or_composition
@@ -1411,6 +1414,8 @@ class ImageSelector:
         if metrics is None:
             return 0.0
         if metrics.quality_score < 0.28:
+            return 0.0
+        if self._is_landscape_media(media):
             return 0.0
 
         person_or_hands = max(
@@ -1434,8 +1439,6 @@ class ImageSelector:
             score += 0.18
         if metrics.has_visual_luxury:
             score += 0.08
-        if metrics.is_landscape and metrics.faces < 1 and metrics.laptop_score <= 0:
-            score -= 0.18
         return score
 
     def _score_extra_image(self, media: MediaCandidate, video_type: VideoType) -> float:
@@ -1593,20 +1596,22 @@ class ImageSelector:
     def _build_fixed_media(self) -> MediaCandidate:
         if self._fixed_media_cache is not None:
             return self._fixed_media_cache
-        if not self.settings.fixed_image_path.exists():
+        fixed_path = self.settings.fixed_image_path
+        if not fixed_path.exists():
             raise FileNotFoundError(
                 "No encuentro la imagen fija requerida en "
-                f"{self.settings.fixed_image_path}. "
-                "Coloca imagen6.png en assets/fixed/ o ajusta FIXED_IMAGE_PATH."
+                f"{fixed_path}. "
+                "Coloca tip3_dropradar.jpg en assets/fixed/ o ajusta FIXED_IMAGE_PATH."
             )
-        with Image.open(self.settings.fixed_image_path) as fixed_image:
+        fixed_id = fixed_path.stem
+        with Image.open(fixed_path) as fixed_image:
             width, height = fixed_image.size
         candidate = MediaCandidate(
             source_account="fixed",
-            source_id="fixed:imagen6",
-            local_path=self.settings.fixed_image_path,
-            permalink="fixed://imagen6",
-            caption="imagen6.png",
+            source_id=f"fixed:{fixed_id}",
+            local_path=fixed_path,
+            permalink=f"fixed://{fixed_id}",
+            caption=fixed_path.name,
             width=width,
             height=height,
             created_at="fixed",

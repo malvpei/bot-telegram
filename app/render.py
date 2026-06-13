@@ -51,6 +51,10 @@ TIKTOK_OVERLAY_FONT_CANDIDATES = (
 )
 HOOK_TEXT_STROKE_FILL = (12, 12, 12)
 FIXED_SCREEN_TEXT_MARGIN = 78
+FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 40
+HOOK_BASE_FONT_SIZE = 106
+HOOK_MIN_FONT_SIZE = 46
+HOOK_SIDE_MARGIN = 80
 TYPE_3_TOOL_BADGES: dict[str, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
     "shopify": ("Shopify", (255, 255, 255), (92, 156, 55)),
     "dropradar": ("Dropradar", (163, 245, 48), (20, 20, 20)),
@@ -1224,10 +1228,10 @@ class VideoRenderer:
         font, lines = self._fit_hook_two_lines(
             text,
             draw,
-            max_width=width - _scale_x(120, width),
-            max_height=int(height * 0.30),
-            base_size=self._scaled_text_size(96, minimum=34),
-            min_size=self._scaled_text_size(42, minimum=18),
+            max_width=width - _scale_x(HOOK_SIDE_MARGIN, width),
+            max_height=int(height * 0.34),
+            base_size=self._scaled_text_size(HOOK_BASE_FONT_SIZE, minimum=38),
+            min_size=self._scaled_text_size(HOOK_MIN_FONT_SIZE, minimum=20),
             stroke_width=stroke_width,
             font_loader=self._load_overlay_font,
         )
@@ -1511,7 +1515,7 @@ class VideoRenderer:
         if (
             slide is not None and slide.fixed_asset and slide.role == SlideRole.FEBRUARY
         ):
-            return (0.24, 0.20, 0.30, 0.16, 0.36)
+            return (0.34, 0.32, 0.36, 0.30, 0.38, 0.28)
         return (0.50, 0.54, 0.46, 0.60, 0.40, 0.66, 0.34)
 
     def _clamp_fixed_screen_caption_y(
@@ -1522,14 +1526,15 @@ class VideoRenderer:
         *,
         canvas_height: int,
     ) -> int:
-        if (
-            slide is None
-            or not slide.fixed_asset
-            or slide.role != SlideRole.TIP3
-        ):
+        if slide is None or not slide.fixed_asset:
+            return start_y
+        if slide.role == SlideRole.TIP3:
+            margin = _scale_y(FIXED_SCREEN_TEXT_MARGIN, canvas_height)
+        elif slide.role == SlideRole.FEBRUARY:
+            margin = _scale_y(FEBRUARY_FIXED_SCREEN_TEXT_MARGIN, canvas_height)
+        else:
             return start_y
         screen_top = int(canvas_height * 0.525)
-        margin = _scale_y(FIXED_SCREEN_TEXT_MARGIN, canvas_height)
         max_start_y = max(0, screen_top - margin - block_height)
         return min(start_y, max_start_y)
 

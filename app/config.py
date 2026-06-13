@@ -131,7 +131,7 @@ def get_settings() -> Settings:
 
     fixed_image_path = _env_path(
         "FIXED_IMAGE_PATH",
-        fixed_assets_dir / "imagen6.png",
+        fixed_assets_dir / "tip3_dropradar.jpg",
         root_dir,
     )
 

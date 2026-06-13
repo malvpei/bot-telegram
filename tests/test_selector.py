@@ -382,12 +382,25 @@ def test_type_1_allows_landscape_photos_when_person_is_visible(temp_workspace):
             luxury=0.04,
             portrait_focus=0.5,
         )
+    candidates[0].metrics = _metrics_stub(
+        quality=0.74,
+        daylight=0.7,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.25,
+        casual=0.12,
+        luxury=0.04,
+        portrait_focus=0.55,
+    )
 
     selector = ImageSelector(settings, state)
     plan = selector.create_plan({"landscape_people": candidates}, VideoType.TYPE_1, Language.ES)
 
     non_fixed = [slide.media for slide in plan.slides if not slide.fixed_asset]
+    hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
     assert all(selector._is_type_1_person_visible_media(media) for media in non_fixed)
+    assert not selector._is_landscape_media(hook_slide.media)
+    assert any(selector._is_landscape_media(media) for media in non_fixed)
 
 
 def test_type_1_moves_single_landscape_exception_to_secondary_role(temp_workspace):
@@ -983,6 +996,115 @@ def test_type_1_hook_accepts_any_high_quality_global_photo(temp_workspace):
 
     hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
     assert hook_slide.media.source_id in {candidate.source_id for candidate in candidates}
+
+
+def test_type_1_hook_never_uses_landscape_photo(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "hook_no_landscape"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="hook_no_landscape", idx=i)
+        for i in range(8)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.76,
+            daylight=0.7,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.2,
+            casual=0.2,
+            portrait_focus=0.35,
+        )
+    landscape = candidates[0]
+    landscape.metrics = _metrics_stub(
+        quality=0.98,
+        daylight=0.95,
+        faces=1,
+        is_landscape=True,
+        outdoor=1.0,
+        casual=0.8,
+        portrait_focus=0.9,
+    )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"hook_no_landscape": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
+    assert hook_slide.media.source_id != landscape.source_id
+    assert not selector._is_landscape_media(hook_slide.media)
+
+
+def test_type_2_hook_never_uses_landscape_photo(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "type2_hook_no_landscape"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="type2_hook_no_landscape", idx=i)
+        for i in range(6)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.78,
+            daylight=0.72,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.25,
+            casual=0.2,
+            portrait_focus=0.35,
+        )
+    landscape = candidates[0]
+    landscape.metrics = _metrics_stub(
+        quality=0.99,
+        daylight=0.95,
+        faces=1,
+        is_landscape=True,
+        outdoor=1.0,
+        casual=0.9,
+        portrait_focus=0.9,
+    )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"type2_hook_no_landscape": candidates},
+        VideoType.TYPE_2,
+        Language.ES,
+    )
+
+    hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
+    assert hook_slide.media.source_id != landscape.source_id
+    assert not selector._is_landscape_media(hook_slide.media)
+
+
+def test_type_3_hook_never_scores_landscape_photo(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "type3_hook_no_landscape"
+    account_dir.mkdir()
+    candidate = _make_candidate(
+        account_dir,
+        username="type3_hook_no_landscape",
+        idx=1,
+        landscape=True,
+    )
+    candidate.metrics = _metrics_stub(
+        quality=0.98,
+        daylight=0.9,
+        faces=1,
+        is_landscape=True,
+        outdoor=1.0,
+        luxury=0.8,
+        portrait_focus=0.8,
+    )
+
+    selector = ImageSelector(settings, state)
+
+    assert selector._score_type_3_hook(candidate) == 0.0
 
 
 def test_type_1_hook_candidate_must_pass_quality_gate(temp_workspace):
