@@ -17,6 +17,7 @@ from app.bot import (
     TEMPLATE_VIDEO_CREATE_EN,
     _ask_for_another_same_account,
     _clear_wizard_state,
+    _format_account_audit,
     _format_pool_refill_summary,
     _format_pool_status,
     _main_menu_markup,
@@ -363,6 +364,38 @@ def test_pool_status_distinguishes_raw_photos_from_usable_plan_photos():
     assert "Fotos aptas para planes: 0" in text
     assert "Fotos en disco sin usar: 2155" in text
     assert "Tipo 1 aptas: 0 (0 cuentas con stock minimo)" in text
+
+
+def test_account_audit_summary_prioritizes_exhausted_accounts():
+    text = _format_account_audit(
+        {
+            "accounts": [
+                {
+                    "account": "ready",
+                    "status": "ready",
+                    "total": 8,
+                    "available": 8,
+                    "used": 0,
+                    "usable_by_type": {"1": 8, "2": 6, "3": 2},
+                },
+                {
+                    "account": "spent",
+                    "status": "exhausted",
+                    "total": 6,
+                    "available": 0,
+                    "used": 6,
+                    "usable_by_type": {"1": 0, "2": 0, "3": 0},
+                },
+            ],
+            "status_counts": {"ready": 1, "exhausted": 1},
+            "minimums": {"1": 6, "2": 4, "3": 1},
+        },
+        "hombres",
+    )
+
+    assert "gastadas=1" in text
+    assert text.index("@spent") < text.index("@ready")
+    assert "Minimos para poder usar una cuenta: T1=6, T2=4, T3=1" in text
 
 
 def test_pool_refill_summary_fits_telegram_limit_with_many_accounts():

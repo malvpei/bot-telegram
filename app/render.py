@@ -1469,7 +1469,7 @@ class VideoRenderer:
         ):
             return start_y
         screen_top = int(canvas_height * 0.525)
-        margin = _scale_y(18, canvas_height)
+        margin = _scale_y(54, canvas_height)
         max_start_y = max(0, screen_top - margin - block_height)
         return min(start_y, max_start_y)
 

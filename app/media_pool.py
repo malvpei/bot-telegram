@@ -313,6 +313,89 @@ class MediaPoolService:
             usernames=usernames,
         )
 
+    def account_audit(self, usernames: list[str]) -> dict[str, Any]:
+        used_media = self.state.read_used_media()
+        excluded_accounts = self.state.read_excluded_accounts()
+        pool = self._normalise_pool(self.state.read_media_pool())
+        pool_counts = self._stock_counts(
+            pool,
+            used_media=used_media,
+            usernames=usernames,
+        )
+        rows: list[dict[str, Any]] = []
+
+        for username in usernames:
+            account = username.strip().lstrip("@").lower()
+            if not account:
+                continue
+            candidates = self._cached_candidates(account)
+            if not candidates:
+                candidates = self._pool_candidates_for_account(pool, account)
+            self.selector._prepare_candidates(candidates)
+
+            usable_by_type = {video_type.value: 0 for video_type in ALL_VIDEO_TYPES}
+            used_count = 0
+            invalid_count = 0
+            available_count = 0
+
+            for candidate in candidates:
+                if candidate.metrics is None:
+                    invalid_count += 1
+                    continue
+                keys = self.selector.reservation_keys_for([candidate])
+                if self._keys_used(keys, used_media):
+                    used_count += 1
+                    continue
+                available_count += 1
+                for video_type in ALL_VIDEO_TYPES:
+                    if self._candidate_counts_for_type(candidate, video_type):
+                        usable_by_type[video_type.value] += 1
+
+            viable_by_type = {
+                video_type.value: (
+                    usable_by_type[video_type.value] >= MIN_POOL_ITEMS_BY_TYPE[video_type]
+                )
+                for video_type in ALL_VIDEO_TYPES
+            }
+            total = len(candidates)
+            if account in excluded_accounts:
+                status = "excluded"
+            elif total == 0:
+                status = "missing_cache"
+            elif available_count == 0:
+                status = "exhausted"
+            elif not any(viable_by_type.values()):
+                status = "not_viable"
+            else:
+                status = "ready"
+
+            rows.append({
+                "account": account,
+                "status": status,
+                "total": total,
+                "available": available_count,
+                "used": used_count,
+                "invalid": invalid_count,
+                "usable_by_type": usable_by_type,
+                "viable_by_type": viable_by_type,
+                "pool_raw": pool_counts.get("raw_by_account", {}).get(account, 0),
+                "pool_usable": pool_counts.get("by_account", {}).get(account, 0),
+            })
+
+        status_counts: dict[str, int] = {}
+        for row in rows:
+            status = str(row["status"])
+            status_counts[status] = status_counts.get(status, 0) + 1
+
+        return {
+            "accounts": rows,
+            "status_counts": status_counts,
+            "minimums": {
+                video_type.value: MIN_POOL_ITEMS_BY_TYPE[video_type]
+                for video_type in ALL_VIDEO_TYPES
+            },
+        }
+
     def is_low_stock(
         self,
         video_type: VideoType | None = None,
@@ -814,6 +897,26 @@ class MediaPoolService:
             content_fingerprints=list(item.get("content_fingerprints") or []),
         )
         return candidate
+
+    def _pool_candidates_for_account(
+        self,
+        pool: dict[str, Any],
+        account: str,
+    ) -> list[MediaCandidate]:
+        candidates: list[MediaCandidate] = []
+        for item in pool["items"]:
+            source_account = (
+                str(item.get("source_account") or "")
+                .strip()
+                .lstrip("@")
+                .lower()
+            )
+            if source_account != account:
+                continue
+            if not Path(str(item.get("local_path") or "")).exists():
+                continue
+            candidates.append(self._item_to_candidate(item))
+        return candidates
 
     def _has_current_metric_fields(self, metrics: dict[str, Any]) -> bool:
         return all(

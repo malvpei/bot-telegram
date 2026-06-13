@@ -350,6 +350,12 @@ class VideoCreationService:
     def pool_status(self) -> dict[str, object]:
         return self.pool.stock_counts()
 
+    def account_audit(self, account_inputs: list[str]) -> dict[str, object]:
+        usernames = extract_usernames(account_inputs, len(account_inputs) or 1)
+        if not usernames:
+            raise ValueError("No se detectaron cuentas de Instagram validas.")
+        return self.pool.account_audit(usernames)
+
     def create_template_video(
         self,
         source: str | None = None,

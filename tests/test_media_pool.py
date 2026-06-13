@@ -111,6 +111,14 @@ class RefreshingCollector:
         return self.fresh
 
 
+class MappingCollector:
+    def __init__(self, items_by_account):
+        self.items_by_account = items_by_account
+
+    def _load_cached_account(self, username: str):
+        return self.items_by_account.get(username, [])
+
+
 def test_pool_merge_blocks_near_dhash_duplicates():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -133,6 +141,41 @@ def test_pool_merge_blocks_near_dhash_duplicates():
 
         assert added == 1
         assert len(pool["items"]) == 1
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_account_audit_marks_exhausted_and_not_viable_accounts():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        alpha = [
+            _candidate(root, f"alpha:TYPE1:{index}", f"dhash:{index + 1:016x}")
+            for index in range(6)
+        ]
+        beta = [_candidate(root, "beta:BAD:0", "dhash:eeeeeeeeeeeeeeee")]
+        state.mark_media_used([candidate.source_id for candidate in alpha], "job-old")
+        service = MediaPoolService(
+            settings,
+            state,
+            MappingCollector({"alpha": alpha, "beta": beta}),
+            TypeCompatibilitySelector(),  # type: ignore[arg-type]
+        )
+
+        audit = service.account_audit(["alpha", "beta", "gamma"])
+        rows = {row["account"]: row for row in audit["accounts"]}
+
+        assert rows["alpha"]["status"] == "exhausted"
+        assert rows["alpha"]["available"] == 0
+        assert rows["beta"]["status"] == "not_viable"
+        assert rows["gamma"]["status"] == "missing_cache"
+        assert audit["status_counts"] == {
+            "exhausted": 1,
+            "not_viable": 1,
+            "missing_cache": 1,
+        }
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

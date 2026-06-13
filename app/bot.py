@@ -41,6 +41,7 @@ TELEGRAM_SEND_RETRY_BASE_DELAY = 1.5
 TELEGRAM_TEXT_LIMIT = 4096
 POOL_SUMMARY_ACCOUNT_DETAIL_LIMIT = 12
 POOL_SUMMARY_ERROR_DETAIL_LIMIT = 4
+ACCOUNT_AUDIT_DETAIL_LIMIT = 12
 
 
 def run_bot() -> None:
@@ -107,6 +108,10 @@ def run_bot() -> None:
         CommandHandler("download_pool_women", download_pool_women_command)
     )
     application.add_handler(CommandHandler("pool", pool_command))
+    application.add_handler(CommandHandler("audit_accounts", audit_accounts_command))
+    application.add_handler(
+        CommandHandler("audit_accounts_women", audit_accounts_women_command)
+    )
     application.add_handler(CommandHandler("memory", memory_command))
     application.add_handler(CommandHandler("template_video", template_video_command))
     application.add_handler(CommandHandler("video_template", template_video_command))
@@ -132,6 +137,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/download_pool - precalentar el pool rapido de fotos de hombres\n"
         "/download_pool_women - precalentar el pool rapido de fotos de mujeres\n"
         "/pool - ver stock del pool\n"
+        "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
+        "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
@@ -167,6 +174,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Si no hay stock, busca dinamicamente en las cuentas y guarda "
         "las fotos validas sobrantes para acelerar los siguientes videos. "
         "/download_pool y /download_pool_women quedan como precalentamiento opcional.\n\n"
+        "Usa /audit_accounts o /audit_accounts_women para ver que cuentas "
+        "estan gastadas, sin cache local o sin suficientes fotos aptas.\n\n"
         "Usa /template_video [prefijo-r2] para coger un MP4 de R2 y "
         "aplicarle la plantilla fija de herramientas. El MP4 final sale sin audio.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
@@ -330,6 +339,53 @@ async def pool_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     service: VideoCreationService = context.application.bot_data["service"]
     summary = await asyncio.to_thread(service.pool_status)
     await update.effective_message.reply_text(_format_pool_status(summary))
+
+
+async def audit_accounts_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    await _audit_accounts_command_for_gender(update, context, VideoGender.MALE)
+
+
+async def audit_accounts_women_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    await _audit_accounts_command_for_gender(update, context, VideoGender.FEMALE)
+
+
+async def _audit_accounts_command_for_gender(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    gender: VideoGender,
+) -> None:
+    if not await _ensure_allowed(update):
+        return
+
+    settings = get_settings()
+    path = _accounts_path_for_gender(settings, gender)
+    try:
+        accounts = load_accounts(path)
+    except AccountsFileError as error:
+        await update.effective_message.reply_text(str(error))
+        return
+
+    status_message = await update.effective_message.reply_text(
+        f"Revisando memoria local de {len(accounts)} cuentas de "
+        f"{_gender_label_plural(gender)}. No hago scraping nuevo."
+    )
+    service: VideoCreationService = context.application.bot_data["service"]
+    try:
+        summary = await asyncio.to_thread(service.account_audit, accounts)
+    except Exception as error:
+        LOGGER.exception("Account audit failed")
+        await status_message.edit_text(f"No pude auditar cuentas.\n\n{error}")
+        return
+
+    await status_message.edit_text(
+        _format_account_audit(summary, _gender_label_plural(gender))
+    )
 
 
 async def template_video_command(
@@ -1179,6 +1235,100 @@ def _format_pool_refill_summary(summary: dict) -> str:
             "/download_pool solo cuando quieras precalentar mas fotos."
         )
     return _fit_telegram_text("\n".join(lines))
+
+
+def _format_account_audit(summary: dict, gender_label: str) -> str:
+    rows = list(summary.get("accounts", []))
+    counts = summary.get("status_counts", {})
+    minimums = summary.get("minimums", {})
+    priority = {
+        "exhausted": 0,
+        "not_viable": 1,
+        "missing_cache": 2,
+        "excluded": 3,
+        "ready": 4,
+    }
+    labels = {
+        "ready": "listas",
+        "exhausted": "gastadas",
+        "not_viable": "no aptas",
+        "missing_cache": "sin cache",
+        "excluded": "excluidas",
+    }
+    ordered = sorted(
+        rows,
+        key=lambda row: (
+            priority.get(str(row.get("status")), 99),
+            -int(row.get("used", 0)),
+            str(row.get("account", "")),
+        ),
+    )
+    lines = [
+        f"Diagnostico de cuentas de {gender_label}",
+        f"Total revisadas: {len(rows)}",
+        (
+            "Resumen: "
+            f"listas={counts.get('ready', 0)}, "
+            f"gastadas={counts.get('exhausted', 0)}, "
+            f"no aptas={counts.get('not_viable', 0)}, "
+            f"sin cache={counts.get('missing_cache', 0)}, "
+            f"excluidas={counts.get('excluded', 0)}"
+        ),
+        (
+            "Minimos para poder usar una cuenta: "
+            f"T1={minimums.get('1', 6)}, "
+            f"T2={minimums.get('2', 4)}, "
+            f"T3={minimums.get('3', 1)} fotos aptas sin usar"
+        ),
+    ]
+
+    actionable = [
+        row
+        for row in ordered
+        if str(row.get("status")) in {"exhausted", "not_viable", "missing_cache", "excluded"}
+    ]
+    ready = [row for row in ordered if str(row.get("status")) == "ready"]
+
+    if actionable:
+        lines.append("")
+        lines.append("Para revisar/quitar primero:")
+        for row in actionable[:ACCOUNT_AUDIT_DETAIL_LIMIT]:
+            lines.append(_format_account_audit_row(row, labels))
+        if len(actionable) > ACCOUNT_AUDIT_DETAIL_LIMIT:
+            lines.append(f"... y {len(actionable) - ACCOUNT_AUDIT_DETAIL_LIMIT} mas")
+
+    if ready:
+        lines.append("")
+        lines.append("Con stock util:")
+        for row in ready[:ACCOUNT_AUDIT_DETAIL_LIMIT]:
+            lines.append(_format_account_audit_row(row, labels))
+        if len(ready) > ACCOUNT_AUDIT_DETAIL_LIMIT:
+            lines.append(f"... y {len(ready) - ACCOUNT_AUDIT_DETAIL_LIMIT} mas")
+
+    if not actionable and not ready:
+        lines.append("")
+        lines.append("No encontre cuentas con cache local para auditar.")
+
+    lines.append("")
+    lines.append(
+        "Sin cache significa que aun no hay fotos locales suficientes para juzgar; "
+        "pasa /download_pool antes de borrarlas si quieres verificarlas."
+    )
+    return _fit_telegram_text("\n".join(lines))
+
+
+def _format_account_audit_row(row: dict, labels: dict[str, str]) -> str:
+    status = str(row.get("status", ""))
+    usable = row.get("usable_by_type", {})
+    return (
+        f"@{_short_summary_value(row.get('account', ''), 34)}: "
+        f"{labels.get(status, status)}; "
+        f"sin usar={row.get('available', 0)}/{row.get('total', 0)}, "
+        f"usadas={row.get('used', 0)}, "
+        f"aptas T1={usable.get('1', 0)} "
+        f"T2={usable.get('2', 0)} "
+        f"T3={usable.get('3', 0)}"
+    )
 
 
 def _short_summary_value(value: object, limit: int) -> str:

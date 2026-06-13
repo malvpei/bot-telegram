@@ -223,7 +223,7 @@ class ScriptGenerator:
                 SlideRole.DECEMBER: "Diciembre - 74€\nEmpecé a subir productos al azar desde AliExpress a ver si sonaba la flauta. Cayeron tres ventas, pero los envíos eran carísimos y tardaban semanas. Trabajaba literalmente gratis.",
                 SlideRole.JANUARY: "Enero - 0€\nMe quedé sin un euro para publicidad. Estaba mentalmente agotado de intentar vender cosas que a nadie le interesaban. Tiré la toalla y dejé la tienda abandonada.",
                 SlideRole.FEBRUARY: "Febrero - 1220€\nYa resignado, vi en un foro a otros dropshippers hablando de usar Dropradar para ver qué productos tenían demanda real. Lo probé por pura frustración. Di con un ganador y las ventas explotaron el primer día.",
-                SlideRole.MARCH: "Marzo - 3100€\nNo soy rico ni viajo en jet privado. Pero escalando ese producto ganador al máximo, logré mi mayor facturación. Moraleja: vende lo que la gente ya está buscando, no lo que tú crees.",
+                SlideRole.MARCH: "Marzo - 3100€\nNo soy rico ni viajo en jet privado. Pero escalando ese producto ganador al máximo, logré mi mayor facturación. Como consejo, vende lo que la gente ya está buscando, no lo que tú crees.",
             },
         }
         return self._compose_type_1_fixed(language=Language.ES, variants=variants)
@@ -526,8 +526,8 @@ class ScriptGenerator:
             },
             "b": {
                 SlideRole.HOOK: "Errores que veo en pequeños Dropshippers que están empezando",
-                SlideRole.TIP1: '1. Teneruna tienda con aspecto "barato"\nSi tu web parece una plantilla de hace diez años, nadie confiará en ti. Añade reseñas, ofrece ofertas, sé sincero con los tiempos de envío e intenta reducirlos para conseguir ventas reales.',
-                SlideRole.TIP2: "2. Tratar los anuncios como una tragaperras\nNo lances dinero a Facebook o TikTok esperando un milagro. Empieza con poco, prueba diferentes enfoques y usa el contenido orgánico para ver qué funciona antes de invertir fuerte.",
+                SlideRole.TIP1: '1. Tener una tienda con aspecto "barato"\nSi tu web parece una plantilla de hace diez años, nadie confiará en ti. Añade reseñas, ofrece ofertas, sé sincero con los tiempos de envío e intenta reducirlos para conseguir ventas reales.',
+                SlideRole.TIP2: "2. Quemar el dinero en anuncios\nNo lances dinero a Facebook o TikTok esperando un milagro. Empieza con poco, prueba diferentes enfoques y usa el contenido orgánico para ver qué funciona antes de invertir fuerte.",
                 SlideRole.TIP3: "3. Vender lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
                 SlideRole.TIP4: "4. Descuidar el trato con el comprador\nConseguir el pago es solo la mitad del trabajo. Si no ayudas al cliente tras la compra, tu reputación y tu cuenta bancaria lo pagarán. Una comunicación rápida evita devoluciones y protege tu negocio.",
             },
