@@ -4,6 +4,7 @@ import logging
 import re
 import shutil
 import subprocess
+from collections.abc import Callable
 from pathlib import Path
 
 import cv2
@@ -30,6 +31,26 @@ SYSTEM_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
+TIKTOK_OVERLAY_FONT_CANDIDATES = (
+    "TikTokSans-Bold.ttf",
+    "TikTokDisplay-Bold.ttf",
+    "TikTokText-Bold.ttf",
+    "ProximaNova-Bold.ttf",
+    "Proxima Nova Bold.ttf",
+    "AvenirNext-Bold.ttf",
+    "Avenir Next Bold.ttf",
+    "Gotham-Bold.ttf",
+    "Gotham Bold.ttf",
+    "Arial Rounded MT Bold.ttf",
+    "ARLRDBD.TTF",
+    "C:/Windows/Fonts/ARLRDBD.TTF",
+    "arialbd.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "DejaVuSans-Bold.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+)
+HOOK_TEXT_STROKE_FILL = (12, 12, 12)
+FIXED_SCREEN_TEXT_MARGIN = 78
 TYPE_3_TOOL_BADGES: dict[str, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
     "shopify": ("Shopify", (255, 255, 255), (92, 156, 55)),
     "dropradar": ("Dropradar", (163, 245, 48), (20, 20, 20)),
@@ -1175,7 +1196,7 @@ class VideoRenderer:
             return
 
         if self._uses_hook_paragraph_style(slide, video_type):
-            self._draw_hook_paragraph_text(image, slide.text)
+            self._draw_hook_paragraph_text(image, slide.text, slide=slide)
             return
 
         self._draw_caption_card_text(image, slide.text, slide=slide)
@@ -1185,14 +1206,13 @@ class VideoRenderer:
         slide: SlidePlan,
         video_type: VideoType,
     ) -> bool:
-        if video_type != VideoType.TYPE_2:
+        if video_type not in {VideoType.TYPE_1, VideoType.TYPE_2}:
             return False
         if slide.role not in {SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4}:
             return False
         text = slide.text.strip()
         return (
             "\n" not in text
-            and len(text) <= 130
             and bool(re.match(r"^\d+\.\s+\S+", text))
         )
 
@@ -1200,7 +1220,7 @@ class VideoRenderer:
         draw = ImageDraw.Draw(image)
         width, height = image.size
 
-        stroke_width = max(2, _scale_x(4, width))
+        stroke_width = max(2, _scale_x(3, width))
         font, lines = self._fit_hook_two_lines(
             text,
             draw,
@@ -1209,6 +1229,7 @@ class VideoRenderer:
             base_size=self._scaled_text_size(96, minimum=34),
             min_size=self._scaled_text_size(42, minimum=18),
             stroke_width=stroke_width,
+            font_loader=self._load_overlay_font,
         )
         text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
         block_width = min(
@@ -1230,12 +1251,20 @@ class VideoRenderer:
             width=width,
             fill=(255, 255, 255),
             stroke_width=stroke_width,
+            stroke_fill=HOOK_TEXT_STROKE_FILL,
         )
 
-    def _draw_hook_paragraph_text(self, image: Image.Image, text: str) -> None:
+    def _draw_hook_paragraph_text(
+        self,
+        image: Image.Image,
+        text: str,
+        *,
+        slide: SlidePlan | None = None,
+    ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
-        stroke_width = max(2, _scale_x(4, width))
+        text = self._normalise_hook_paragraph_text(text)
+        stroke_width = max(2, _scale_x(3, width))
         line_gap = _scale_y(8, height)
         font, lines = self._fit_text(
             text.strip(),
@@ -1247,6 +1276,7 @@ class VideoRenderer:
             bold=True,
             stroke_width=stroke_width,
             line_gap=line_gap,
+            font_loader=self._load_overlay_font,
         )
         text_height = self._block_height(
             lines,
@@ -1264,7 +1294,17 @@ class VideoRenderer:
             image,
             block_width=block_width,
             block_height=text_height,
-            preferred_centers=(0.40, 0.44, 0.36, 0.48, 0.52, 0.32, 0.56),
+            preferred_centers=(
+                self._caption_preferred_centers(slide)
+                if slide is not None and slide.fixed_asset and slide.role == SlideRole.TIP3
+                else (0.40, 0.44, 0.36, 0.48, 0.52, 0.32, 0.56)
+            ),
+        )
+        start_y = self._clamp_fixed_screen_caption_y(
+            slide,
+            start_y,
+            text_height,
+            canvas_height=height,
         )
         self._draw_lines(
             draw,
@@ -1275,7 +1315,18 @@ class VideoRenderer:
             fill=(255, 255, 255),
             stroke_width=stroke_width,
             line_gap=line_gap,
+            stroke_fill=HOOK_TEXT_STROKE_FILL,
         )
+
+    def _normalise_hook_paragraph_text(self, text: str) -> str:
+        text = " ".join(text.strip().split())
+        marker = re.match(r"^(\d+\.\s+)", text)
+        if marker is None:
+            return text
+        repeated_at = text.find(marker.group(1), marker.end())
+        if repeated_at > 0:
+            return text[:repeated_at].strip()
+        return text
 
     def _fit_hook_two_lines(
         self,
@@ -1287,7 +1338,11 @@ class VideoRenderer:
         base_size: int,
         min_size: int,
         stroke_width: int,
+        font_loader: Callable[[int, bool], ImageFont.ImageFont] | None = None,
     ) -> tuple[ImageFont.ImageFont, list[str]]:
+        load_font = font_loader or (
+            lambda font_size, is_bold: self._load_font(size=font_size, bold=is_bold)
+        )
         words = text.split()
         if len(words) < 2:
             return self._fit_text(
@@ -1299,10 +1354,11 @@ class VideoRenderer:
                 min_size=min_size,
                 bold=True,
                 stroke_width=stroke_width,
+                font_loader=font_loader,
             )
 
         for size in range(base_size, min_size - 1, -2):
-            font = self._load_font(size=size, bold=True)
+            font = load_font(size, True)
             best_lines: list[str] | None = None
             best_score: float | None = None
             for split_at in range(1, len(words)):
@@ -1331,7 +1387,7 @@ class VideoRenderer:
             if best_lines is not None:
                 return font, best_lines
 
-        font = self._load_font(size=min_size, bold=True)
+        font = load_font(min_size, True)
         return font, self._wrap_text(text, font, max_width, draw, stroke_width=stroke_width)[:2]
 
     def _draw_caption_card_text(
@@ -1473,7 +1529,7 @@ class VideoRenderer:
         ):
             return start_y
         screen_top = int(canvas_height * 0.525)
-        margin = _scale_y(54, canvas_height)
+        margin = _scale_y(FIXED_SCREEN_TEXT_MARGIN, canvas_height)
         max_start_y = max(0, screen_top - margin - block_height)
         return min(start_y, max_start_y)
 
@@ -1966,10 +2022,14 @@ class VideoRenderer:
         bold: bool,
         stroke_width: int,
         line_gap: int = 16,
+        font_loader: Callable[[int, bool], ImageFont.ImageFont] | None = None,
     ) -> tuple[ImageFont.ImageFont, list[str]]:
+        load_font = font_loader or (
+            lambda font_size, is_bold: self._load_font(size=font_size, bold=is_bold)
+        )
         size = base_size
         while size >= min_size:
-            font = self._load_font(size=size, bold=bold)
+            font = load_font(size, bold)
             lines = self._wrap_text(text, font, max_width, draw, stroke_width=stroke_width)
             height = self._block_height(
                 lines,
@@ -1981,7 +2041,7 @@ class VideoRenderer:
             if height <= max_height:
                 return font, lines
             size -= 4
-        font = self._load_font(size=min_size, bold=bold)
+        font = load_font(min_size, bold)
         lines = self._wrap_text(text, font, max_width, draw, stroke_width=stroke_width)
         return font, lines
 
@@ -2006,6 +2066,7 @@ class VideoRenderer:
         fill: tuple[int, int, int],
         stroke_width: int,
         line_gap: int = 16,
+        stroke_fill: tuple[int, int, int] = (0, 0, 0),
     ) -> None:
         y = start_y
         for line in lines:
@@ -2019,7 +2080,7 @@ class VideoRenderer:
                 font=font,
                 fill=fill,
                 stroke_width=stroke_width,
-                stroke_fill=(0, 0, 0),
+                stroke_fill=stroke_fill,
             )
             y += line_height + line_gap
 
@@ -2132,6 +2193,34 @@ class VideoRenderer:
                 self._font_dir,
             )
             return ImageFont.load_default()
+
+    def _load_overlay_font(self, size: int, bold: bool) -> ImageFont.ImageFont:
+        if self._font_dir.exists():
+            preferred_tokens = (
+                "tiktok",
+                "proxima",
+                "avenir",
+                "gotham",
+                "arialrounded",
+                "arial rounded",
+                "rounded",
+            )
+            font_files = sorted(self._font_dir.glob("*.ttf"))
+            for font_file in font_files:
+                name = font_file.name.lower().replace("_", " ").replace("-", " ")
+                if any(token in name for token in preferred_tokens):
+                    try:
+                        return ImageFont.truetype(str(font_file), size=size)
+                    except OSError:
+                        continue
+
+        for candidate in TIKTOK_OVERLAY_FONT_CANDIDATES:
+            try:
+                return ImageFont.truetype(candidate, size=size)
+            except OSError:
+                continue
+
+        return self._load_font(size=size, bold=bold)
 
     # ------------------------------------------------------------------
     # Output management

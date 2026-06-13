@@ -10,7 +10,7 @@ from PIL import Image, ImageDraw
 
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoType
-from app.render import VideoRenderer
+from app.render import FIXED_SCREEN_TEXT_MARGIN, HOOK_TEXT_STROKE_FILL, VideoRenderer
 
 
 def test_numbered_titleless_tip_keeps_number_with_body_for_rendering():
@@ -199,7 +199,72 @@ def test_type_1_still_embeds_caption_cards(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_2_long_titleless_tip_falls_back_to_caption_card(monkeypatch):
+def test_type_1_numbered_tip_uses_hook_paragraph_style():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    slide = SlidePlan(
+        index=2,
+        role=SlideRole.TIP1,
+        text=(
+            "1. Don't compete by slashing prices to the ground just to get your "
+            "first quick sale."
+        ),
+        media=_candidate(Path("source.jpg")),
+    )
+
+    assert renderer._uses_hook_paragraph_style(slide, VideoType.TYPE_1) is True
+
+
+def test_hook_text_uses_slightly_softer_stroke(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGBA", (1080, 1920), (20, 20, 20, 255))
+    captured: dict[str, object] = {}
+
+    def fake_draw_lines(*args, **kwargs):
+        captured["stroke_width"] = kwargs["stroke_width"]
+        captured["stroke_fill"] = kwargs["stroke_fill"]
+
+    monkeypatch.setattr(renderer, "_draw_lines", fake_draw_lines)
+
+    renderer._draw_hook_text(image, "I would have paid to know these 4 things")
+
+    assert captured["stroke_width"] == 3
+    assert captured["stroke_fill"] == HOOK_TEXT_STROKE_FILL
+
+
+def test_hook_text_uses_tiktok_overlay_font_loader(monkeypatch):
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGBA", (360, 640), (20, 20, 20, 255))
+    calls: list[tuple[int, bool]] = []
+
+    def fake_overlay_font(size: int, bold: bool):
+        calls.append((size, bold))
+        return renderer._load_font(size=size, bold=bold)
+
+    monkeypatch.setattr(renderer, "_load_overlay_font", fake_overlay_font)
+
+    renderer._draw_hook_text(image, "Mistakes I see small dropshippers making")
+
+    assert calls
+    assert all(bold for _size, bold in calls)
+
+
+def test_repeated_numbered_hook_paragraph_is_collapsed():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+
+    text = (
+        "1. Don't compete by slashing prices. Instead, build a better offer. "
+        "1. Don't compete by slashing prices. Instead, build a better offer."
+    )
+
+    assert (
+        renderer._normalise_hook_paragraph_text(text)
+        == "1. Don't compete by slashing prices. Instead, build a better offer."
+    )
+
+
+def test_type_2_long_titleless_tip_uses_hook_paragraph_style(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -230,7 +295,7 @@ def test_type_2_long_titleless_tip_falls_back_to_caption_card(monkeypatch):
             media=_candidate(image_path),
         )
 
-        assert renderer._uses_hook_paragraph_style(slide, VideoType.TYPE_2) is False
+        assert renderer._uses_hook_paragraph_style(slide, VideoType.TYPE_2) is True
         still = renderer.render_slide_still(slide, VideoType.TYPE_2)
         pixels = np.asarray(still)
         white = (
@@ -240,7 +305,8 @@ def test_type_2_long_titleless_tip_falls_back_to_caption_card(monkeypatch):
         )
         ys, _xs = np.where(white)
 
-        assert white.mean() > 0.04
+        assert white.mean() > 0.002
+        assert white.mean() < 0.04
         assert ys.max() - ys.min() < int(still.height * 0.48)
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -362,6 +428,29 @@ def test_fixed_laptop_slide_places_caption_above_screen(monkeypatch):
         assert ys.max() < 330
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_fixed_laptop_hook_paragraph_keeps_extra_screen_gap():
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    slide = SlidePlan(
+        index=3,
+        role=SlideRole.TIP3,
+        text="3. Vender lo mismo que todos",
+        media=_candidate(Path("source.jpg")),
+        fixed_asset=True,
+    )
+
+    y = renderer._clamp_fixed_screen_caption_y(
+        slide,
+        start_y=320,
+        block_height=80,
+        canvas_height=640,
+    )
+
+    screen_top = int(640 * 0.525)
+    expected_margin = max(1, int(FIXED_SCREEN_TEXT_MARGIN * 640 / 1920))
+    assert y + 80 <= screen_top - expected_margin
 
 
 def test_fixed_asset_is_fit_without_cropping_sides():
