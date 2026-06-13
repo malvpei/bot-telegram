@@ -13,15 +13,15 @@ from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoType
 from app.render import VideoRenderer
 
 
-def test_numbered_titleless_tip_splits_number_from_body_for_rendering():
+def test_numbered_titleless_tip_keeps_number_with_body_for_rendering():
     renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
 
     title, body = renderer._split_slide_text(
         "1. Don't compete by slashing prices to the ground just to get your first quick sale."
     )
 
-    assert title == "1."
-    assert body.startswith("Don't compete by slashing prices")
+    assert title == ""
+    assert body.startswith("1. Don't compete by slashing prices")
 
 
 def test_type_3_tool_slide_uses_icon_asset():
@@ -93,6 +93,24 @@ def test_type_3_hook_still_renders_hook_text():
         assert np.asarray(still).max() > 200
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_hook_text_prefers_exactly_two_lines():
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
+
+    _font, lines = renderer._fit_hook_two_lines(
+        "How to do Dropshipping in 2026",
+        draw,
+        max_width=960,
+        max_height=560,
+        base_size=96,
+        min_size=42,
+        stroke_width=4,
+    )
+
+    assert len(lines) == 2
 
 
 def test_type_1_still_embeds_caption_cards(monkeypatch):
@@ -190,8 +208,8 @@ def test_type_1_title_is_only_slightly_larger_than_body():
         draw,
         max_width=800,
         max_height=300,
-        base_size=50,
-        min_size=34,
+        base_size=42,
+        min_size=30,
         bold=False,
         stroke_width=0,
     )
@@ -200,8 +218,8 @@ def test_type_1_title_is_only_slightly_larger_than_body():
         draw,
         max_width=800,
         max_height=300,
-        base_size=47,
-        min_size=32,
+        base_size=40,
+        min_size=28,
         bold=False,
         stroke_width=0,
     )

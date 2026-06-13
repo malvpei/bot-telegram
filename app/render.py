@@ -87,16 +87,16 @@ TYPE_4_TEXT_STROKE_WIDTH = 3
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TEXT_CARD_FILL = (255, 255, 255, 246)
-TEXT_CARD_TEXT = (8, 8, 8)
-TEXT_CARD_SHADOW = (0, 0, 0, 60)
+TEXT_CARD_TEXT = (0, 0, 0)
 TEXT_FACE_AVOID_WEIGHT = 80.0
 TEXT_HEAD_AVOID_WEIGHT = 34.0
 TEXT_BODY_AVOID_WEIGHT = 2.0
-TEXT_CARD_EDGE_MARGIN = 92
-TEXT_CARD_PADDING_X = 22
-TEXT_CARD_PADDING_Y = 8
+TEXT_CARD_EDGE_MARGIN = 84
+TEXT_CARD_PADDING_X = 20
+TEXT_CARD_PADDING_Y = 7
 TEXT_CARD_LINE_OVERLAP = 3
 TEXT_CARD_GROUP_GAP = 20
+TEXT_CARD_FAUX_BOLD_PIXELS = 1
 TYPE_4_TITLE_LINES: dict[Language, tuple[str, str]] = {
     Language.ES: ("Empieza tu negocio online", "en 24h"),
     Language.EN: ("Start your online business", "in 24h"),
@@ -366,8 +366,11 @@ class VideoRenderer:
     ) -> np.ndarray:
         if video_type == VideoType.TYPE_3:
             return self._render_type_3_slide_frame(slide, source_image, progress)
-        canvas = self._cover_image(source_image, progress)
-        composed = Image.alpha_composite(canvas.convert("RGBA"), self._gradient_overlay)
+        image_progress = 0.0 if slide.fixed_asset else progress
+        canvas = self._cover_image(source_image, image_progress)
+        composed = canvas.convert("RGBA")
+        if not slide.fixed_asset:
+            composed = Image.alpha_composite(composed, self._gradient_overlay)
         self._draw_text(composed, slide)
         return np.asarray(composed.convert("RGB"))
 
@@ -1147,14 +1150,13 @@ class VideoRenderer:
         width, height = image.size
 
         stroke_width = max(2, _scale_x(4, width))
-        font, lines = self._fit_text(
+        font, lines = self._fit_hook_two_lines(
             text,
             draw,
             max_width=width - _scale_x(120, width),
             max_height=int(height * 0.30),
-            base_size=self._scaled_text_size(76, minimum=28),
+            base_size=self._scaled_text_size(96, minimum=34),
             min_size=self._scaled_text_size(42, minimum=18),
-            bold=True,
             stroke_width=stroke_width,
         )
         text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
@@ -1179,6 +1181,63 @@ class VideoRenderer:
             stroke_width=stroke_width,
         )
 
+    def _fit_hook_two_lines(
+        self,
+        text: str,
+        draw: ImageDraw.ImageDraw,
+        *,
+        max_width: int,
+        max_height: int,
+        base_size: int,
+        min_size: int,
+        stroke_width: int,
+    ) -> tuple[ImageFont.ImageFont, list[str]]:
+        words = text.split()
+        if len(words) < 2:
+            return self._fit_text(
+                text,
+                draw,
+                max_width=max_width,
+                max_height=max_height,
+                base_size=base_size,
+                min_size=min_size,
+                bold=True,
+                stroke_width=stroke_width,
+            )
+
+        for size in range(base_size, min_size - 1, -2):
+            font = self._load_font(size=size, bold=True)
+            best_lines: list[str] | None = None
+            best_score: float | None = None
+            for split_at in range(1, len(words)):
+                lines = [
+                    " ".join(words[:split_at]),
+                    " ".join(words[split_at:]),
+                ]
+                widths = [
+                    self._text_size(
+                        draw,
+                        line,
+                        font,
+                        stroke_width=stroke_width,
+                    )[0]
+                    for line in lines
+                ]
+                if max(widths) > max_width:
+                    continue
+                height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+                if height > max_height:
+                    continue
+                score = abs(widths[0] - widths[1]) + max(widths) * 0.05
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_lines = lines
+            if best_lines is not None:
+                return font, best_lines
+
+        font = self._load_font(size=min_size, bold=True)
+        return font, self._wrap_text(text, font, max_width, draw, stroke_width=stroke_width)[:2]
+
     def _draw_caption_card_text(
         self,
         image: Image.Image,
@@ -1201,8 +1260,8 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.18),
-            base_size=self._scaled_text_size(50, minimum=20),
-            min_size=self._scaled_text_size(34, minimum=15),
+            base_size=self._scaled_text_size(42, minimum=18),
+            min_size=self._scaled_text_size(30, minimum=14),
             bold=False,
             stroke_width=0,
         )
@@ -1211,8 +1270,8 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.40),
-            base_size=self._scaled_text_size(47, minimum=18),
-            min_size=self._scaled_text_size(32, minimum=14),
+            base_size=self._scaled_text_size(40, minimum=17),
+            min_size=self._scaled_text_size(28, minimum=13),
             bold=False,
             stroke_width=0,
         )
@@ -1343,7 +1402,6 @@ class VideoRenderer:
     ) -> int:
         y = start_y
         radius = max(6, _scale_x(12, canvas_width))
-        shadow_offset = max(1, _scale_x(2, canvas_width))
         for line in lines:
             bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=0)
             line_width = bbox[2] - bbox[0]
@@ -1352,21 +1410,16 @@ class VideoRenderer:
             box_height = line_height + padding_y * 2
             x = (canvas_width - box_width) // 2
             box = (x, y, x + box_width, y + box_height)
-            shadow_box = (
-                box[0],
-                box[1] + shadow_offset,
-                box[2],
-                box[3] + shadow_offset,
-            )
-            draw.rounded_rectangle(
-                shadow_box,
-                radius=radius,
-                fill=TEXT_CARD_SHADOW,
-            )
             draw.rounded_rectangle(box, radius=radius, fill=TEXT_CARD_FILL)
             text_x = x + padding_x - bbox[0]
             text_y = y + padding_y - bbox[1]
-            draw.text((text_x, text_y), line, font=font, fill=TEXT_CARD_TEXT)
+            self._draw_card_text(
+                draw,
+                (text_x, text_y),
+                line,
+                font,
+                canvas_width=canvas_width,
+            )
             y += box_height + line_gap
         return y - line_gap
 
@@ -1400,24 +1453,36 @@ class VideoRenderer:
             return start_y
 
         radius = max(5, _scale_x(9, canvas_width))
-        shadow_offset = max(1, _scale_x(2, canvas_width))
-        for box, _text_pos, _line in boxes:
-            shadow_box = (
-                box[0],
-                box[1] + shadow_offset,
-                box[2],
-                box[3] + shadow_offset,
-            )
-            draw.rounded_rectangle(
-                shadow_box,
-                radius=radius,
-                fill=TEXT_CARD_SHADOW,
-            )
         for box, _text_pos, _line in boxes:
             draw.rounded_rectangle(box, radius=radius, fill=TEXT_CARD_FILL)
         for _box, text_pos, line in boxes:
-            draw.text(text_pos, line, font=font, fill=TEXT_CARD_TEXT)
+            self._draw_card_text(
+                draw,
+                text_pos,
+                line,
+                font,
+                canvas_width=canvas_width,
+            )
         return boxes[-1][0][3]
+
+    def _draw_card_text(
+        self,
+        draw: ImageDraw.ImageDraw,
+        position: tuple[int, int],
+        text: str,
+        font: ImageFont.ImageFont,
+        *,
+        canvas_width: int,
+    ) -> None:
+        draw.text(position, text, font=font, fill=TEXT_CARD_TEXT)
+        faux_bold = _scale_x(TEXT_CARD_FAUX_BOLD_PIXELS, canvas_width)
+        if faux_bold > 0:
+            draw.text(
+                (position[0] + faux_bold, position[1]),
+                text,
+                font=font,
+                fill=TEXT_CARD_TEXT,
+            )
 
     def _block_width(
         self,
@@ -1655,10 +1720,7 @@ class VideoRenderer:
     def _split_slide_text(self, text: str) -> tuple[str, str]:
         parts = text.split("\n", 1)
         if len(parts) == 1:
-            marker, _, rest = parts[0].strip().partition(" ")
-            if marker.endswith(".") and marker[:-1].isdigit() and rest:
-                return marker, rest
-            return parts[0], ""
+            return "", parts[0].strip()
         return parts[0], parts[1]
 
     def _draw_lines(

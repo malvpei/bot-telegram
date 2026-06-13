@@ -924,7 +924,7 @@ class VideoCreationService:
                 normalized = self.renderer.render_slide_still(
                     slide, plan.video_type
                 ).convert("RGB")
-                normalized.save(out_path, format="JPEG", quality=92)
+                normalized.save(out_path, format="JPEG", quality=95, subsampling=0)
             except OSError as error:
                 LOGGER.warning(
                     "No pude normalizar %s: %s", source_path, error
@@ -948,7 +948,7 @@ class VideoCreationService:
             normalized = _cover_resize(
                 image.convert("RGB"), target_width, target_height
             )
-        normalized.save(out_path, format="JPEG", quality=92)
+        normalized.save(out_path, format="JPEG", quality=95, subsampling=0)
         media.local_path = out_path
         media.width = target_width
         media.height = target_height
