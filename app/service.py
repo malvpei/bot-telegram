@@ -4,6 +4,7 @@ import logging
 import os
 import random
 import shutil
+from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
@@ -936,9 +937,12 @@ class VideoCreationService:
                     "No pude normalizar %s: %s", source_path, error
                 )
                 continue
-            slide.media.local_path = out_path
-            slide.media.width = target_width
-            slide.media.height = target_height
+            slide.media = replace(
+                slide.media,
+                local_path=out_path,
+                width=target_width,
+                height=target_height,
+            )
 
     def _normalize_extra_image(
         self,

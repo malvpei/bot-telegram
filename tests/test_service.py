@@ -22,6 +22,7 @@ class FakeRenderer:
         self.template_input_video: Path | None = None
         self.template_language = None
         self.render_slide_still_calls: list[VideoType] = []
+        self.render_slide_still_sources: list[Path] = []
 
     def render(self, plan: VideoPlan, job_dir: Path):
         self.render_called = True
@@ -36,6 +37,7 @@ class FakeRenderer:
 
     def render_slide_still(self, slide: SlidePlan, video_type: VideoType) -> Image.Image:
         self.render_slide_still_calls.append(video_type)
+        self.render_slide_still_sources.append(slide.media.local_path)
         return Image.new("RGB", (72, 128), (40, 80, 120))
 
     def render_template_video(self, input_video: Path, job_dir: Path, language=None) -> Path:
@@ -208,6 +210,81 @@ def test_type_3_outputs_skip_full_video_render():
         assert plan.slides[1].media.local_path.name == "slide_02.jpg"
         assert plan.slides[0].media.local_path.exists()
         assert plan.slides[1].media.local_path.exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_slide_normalization_does_not_mutate_shared_media_candidate():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            width=72,
+            height=128,
+        )
+        renderer = FakeRenderer()
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = renderer
+
+        source_path = root / "fixed_tip.jpg"
+        Image.new("RGB", (72, 128), (120, 120, 120)).save(source_path)
+        shared_media = MediaCandidate(
+            source_account="fixed",
+            source_id="fixed:tip3",
+            local_path=source_path,
+            permalink="",
+            caption="",
+            width=72,
+            height=128,
+            created_at="",
+        )
+
+        first_plan = VideoPlan(
+            chosen_account="fixed",
+            video_type=VideoType.TYPE_2,
+            language=Language.EN,
+            slides=[
+                SlidePlan(
+                    index=1,
+                    role=SlideRole.TOOL_STORE,
+                    text="First",
+                    media=shared_media,
+                    fixed_asset=True,
+                )
+            ],
+            used_media_ids=[],
+        )
+        second_plan = VideoPlan(
+            chosen_account="fixed",
+            video_type=VideoType.TYPE_2,
+            language=Language.EN,
+            slides=[
+                SlidePlan(
+                    index=1,
+                    role=SlideRole.TOOL_STORE,
+                    text="Second",
+                    media=shared_media,
+                    fixed_asset=True,
+                )
+            ],
+            used_media_ids=[],
+        )
+
+        service._render_outputs(first_plan, root / "outputs" / "job-a")
+        service._render_outputs(second_plan, root / "outputs" / "job-b")
+
+        assert renderer.render_slide_still_sources == [source_path, source_path]
+        assert shared_media.local_path == source_path
+        assert first_plan.slides[0].media.local_path.name == "slide_01.jpg"
+        assert second_plan.slides[0].media.local_path.name == "slide_01.jpg"
+        assert first_plan.slides[0].media.local_path.parent.name == "slides"
+        assert second_plan.slides[0].media.local_path.parent.name == "slides"
+        assert first_plan.slides[0].media.local_path != second_plan.slides[0].media.local_path
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

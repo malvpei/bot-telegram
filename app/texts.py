@@ -546,7 +546,7 @@ class ScriptGenerator:
             "a": {
                 SlideRole.HOOK: "I would have paid to know these 4 things when I started Dropshipping",
                 SlideRole.TIP1: "1. Validate with a small budget\nDo not treat advertising like a bet. Invest small amounts to test which ads work and scale only when the data confirms profitability.",
-                SlideRole.TIP2: "2. Take care of the customer after payment\nThe sale does not end when you receive the money. Fast, friendly support prevents bank claims and protects the continuity of your account.",
+                SlideRole.TIP2: "2. Take care after-sale\nThe sale does not end when you receive the money. Fast, friendly support prevents bank claims and protects the continuity of your account.",
                 SlideRole.TIP3: "3. Prioritize niches over viral products\nAvoid saturated competition by looking for solutions for specific audiences. Use Dropradar to validate products with potential and gain an advantage over your competition.",
                 SlideRole.TIP4: "4. Project trust and transparency\nShow your real product in use, be honest about shipping times, and highlight clear guarantee policies. This authenticity eliminates viewer doubts, skyrocketing your conversions..",
             },
