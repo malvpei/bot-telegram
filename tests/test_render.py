@@ -421,6 +421,28 @@ def test_safe_text_position_avoids_face_region(monkeypatch):
     assert renderer._intersection_area(text_box, face_region) == 0
 
 
+def test_safe_text_position_centers_inside_clear_gap(monkeypatch):
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGBA", (360, 640), (80, 150, 210, 255))
+    occupied_region = (20, 285, 340, 640)
+    monkeypatch.setattr(
+        renderer,
+        "_text_avoid_regions",
+        lambda image: [(occupied_region, 90.0)],
+    )
+
+    y = renderer._safe_text_start_y(
+        image,
+        block_width=280,
+        block_height=80,
+        preferred_centers=(0.50,),
+    )
+
+    assert y > 105
+    assert y + 80 < occupied_region[1]
+
+
 def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_body_line():
     settings = replace(get_settings(), width=1080, height=1920)
     renderer = VideoRenderer(settings)

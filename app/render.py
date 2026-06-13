@@ -1220,7 +1220,7 @@ class VideoRenderer:
             image,
             block_width=block_width,
             block_height=text_height,
-            preferred_centers=(0.50, 0.54, 0.46, 0.58, 0.42, 0.62, 0.38),
+            preferred_centers=(0.38, 0.42, 0.34, 0.46, 0.50, 0.30, 0.54),
         )
         self._draw_lines(
             draw,
@@ -1264,7 +1264,7 @@ class VideoRenderer:
             image,
             block_width=block_width,
             block_height=text_height,
-            preferred_centers=(0.50, 0.54, 0.46, 0.58, 0.42, 0.62, 0.38),
+            preferred_centers=(0.40, 0.44, 0.36, 0.48, 0.52, 0.32, 0.56),
         )
         self._draw_lines(
             draw,
@@ -1655,17 +1655,31 @@ class VideoRenderer:
         centers = list(preferred_centers)
         centers.extend(value / 100.0 for value in range(18, 84, 4))
         candidates: list[int] = []
-        for center in centers:
-            y = int(round(center * height - block_height / 2))
+        def add_candidate(y: int) -> None:
             y = max(min_y, min(max_y, y))
             if y not in candidates:
                 candidates.append(y)
+
+        for center in centers:
+            y = int(round(center * height - block_height / 2))
+            add_candidate(y)
+        for y in self._clear_gap_text_candidates(
+            block_width=block_width,
+            block_height=block_height,
+            canvas_width=width,
+            canvas_height=height,
+            min_y=min_y,
+            max_y=max_y,
+            avoid_regions=regions,
+        ):
+            add_candidate(y)
         if min_y not in candidates:
             candidates.append(min_y)
         if max_y not in candidates:
             candidates.append(max_y)
 
         primary_center = preferred_centers[0] if preferred_centers else 0.55
+        luminance = np.asarray(image.convert("L"), dtype=np.float32)
         best_y = min(
             candidates,
             key=lambda y: self._text_position_score(
@@ -1676,9 +1690,60 @@ class VideoRenderer:
                 canvas_height=height,
                 avoid_regions=regions,
                 preferred_center=primary_center,
+                luminance=luminance,
             ),
         )
         return best_y
+
+    def _clear_gap_text_candidates(
+        self,
+        *,
+        block_width: int,
+        block_height: int,
+        canvas_width: int,
+        canvas_height: int,
+        min_y: int,
+        max_y: int,
+        avoid_regions: list[tuple[tuple[int, int, int, int], float]],
+    ) -> list[int]:
+        x = max(0, (canvas_width - block_width) // 2)
+        text_left = x
+        text_right = min(canvas_width, x + block_width)
+        margin = _scale_y(18, canvas_height)
+        forbidden: list[tuple[int, int]] = []
+        for region, _weight in avoid_regions:
+            if region[2] <= text_left or region[0] >= text_right:
+                continue
+            start = max(min_y, region[1] - block_height - margin)
+            end = min(max_y, region[3] + margin)
+            if end > start:
+                forbidden.append((start, end))
+        if not forbidden:
+            return []
+
+        forbidden.sort()
+        merged: list[list[int]] = []
+        for start, end in forbidden:
+            if not merged or start > merged[-1][1]:
+                merged.append([start, end])
+            else:
+                merged[-1][1] = max(merged[-1][1], end)
+
+        candidates: list[int] = []
+        gap_start = min_y
+        for start, end in merged:
+            if start > gap_start:
+                candidates.extend(self._gap_candidate_positions(gap_start, start))
+            gap_start = max(gap_start, end)
+        if gap_start < max_y:
+            candidates.extend(self._gap_candidate_positions(gap_start, max_y))
+        return candidates
+
+    def _gap_candidate_positions(self, start: int, end: int) -> list[int]:
+        if end <= start:
+            return []
+        center = (start + end) // 2
+        return [center, start, end]
 
     def _text_position_score(
         self,
@@ -1690,12 +1755,15 @@ class VideoRenderer:
         canvas_height: int,
         avoid_regions: list[tuple[tuple[int, int, int, int], float]],
         preferred_center: float,
+        luminance: np.ndarray,
     ) -> float:
         x = max(0, (canvas_width - block_width) // 2)
         box = (x, y, min(canvas_width, x + block_width), min(canvas_height, y + block_height))
         box_area = max(1, self._box_area(box))
         center = (box[1] + box[3]) / 2.0 / max(canvas_height, 1)
-        score = abs(center - preferred_center) * 3.0
+        score = abs(center - preferred_center) * 2.2
+        score += abs(center - 0.5) * 0.45
+        score += self._background_clutter_score(luminance, box) * 0.6
         for region, weight in avoid_regions:
             overlap = self._intersection_area(box, region)
             if overlap <= 0:
@@ -1703,6 +1771,30 @@ class VideoRenderer:
             region_area = max(1, self._box_area(region))
             score += weight * max(overlap / box_area, overlap / region_area)
         return score
+
+    def _background_clutter_score(
+        self,
+        luminance: np.ndarray,
+        box: tuple[int, int, int, int],
+    ) -> float:
+        left, top, right, bottom = box
+        crop = luminance[top:bottom, left:right]
+        if crop.size < 16:
+            return 0.0
+        if crop.shape[0] > 180 or crop.shape[1] > 180:
+            scale = min(180 / crop.shape[0], 180 / crop.shape[1])
+            crop = cv2.resize(
+                crop,
+                (
+                    max(1, int(crop.shape[1] * scale)),
+                    max(1, int(crop.shape[0] * scale)),
+                ),
+                interpolation=cv2.INTER_AREA,
+            )
+        contrast = float(np.std(crop)) / 80.0
+        edge_x = float(np.mean(np.abs(np.diff(crop, axis=1)))) / 26.0 if crop.shape[1] > 1 else 0.0
+        edge_y = float(np.mean(np.abs(np.diff(crop, axis=0)))) / 26.0 if crop.shape[0] > 1 else 0.0
+        return min(3.0, contrast + edge_x + edge_y)
 
     def _text_avoid_regions(
         self,
