@@ -724,10 +724,14 @@ class VideoRenderer:
         min_size: int,
         bold: bool,
         stroke_width: int,
+        font_loader: Callable[[int, bool], ImageFont.ImageFont] | None = None,
     ) -> ImageFont.ImageFont:
+        load_font = font_loader or (
+            lambda font_size, is_bold: self._load_font(size=font_size, bold=is_bold)
+        )
         size = base_size
         while size >= min_size:
-            font = self._load_font(size=size, bold=bold)
+            font = load_font(size, bold)
             height = self._block_height(lines, font, draw, stroke_width=stroke_width)
             widths = [
                 self._text_size(draw, line, font, stroke_width=stroke_width)[0]
@@ -736,7 +740,7 @@ class VideoRenderer:
             if height <= max_height and (not widths or max(widths) <= max_width):
                 return font
             size -= 2
-        return self._load_font(size=min_size, bold=bold)
+        return load_font(min_size, bold)
 
     def _type_3_body_lines(
         self,
@@ -1227,16 +1231,35 @@ class VideoRenderer:
         width, height = image.size
 
         stroke_width = max(2, _scale_x(3, width))
-        font, lines = self._fit_hook_two_lines(
-            text,
-            draw,
-            max_width=width - _scale_x(HOOK_SIDE_MARGIN, width),
-            max_height=int(height * 0.40),
-            base_size=self._scaled_text_size(HOOK_BASE_FONT_SIZE, minimum=38),
-            min_size=self._scaled_text_size(HOOK_MIN_FONT_SIZE, minimum=20),
-            stroke_width=stroke_width,
-            font_loader=self._load_overlay_font,
-        )
+        max_width = width - _scale_x(HOOK_SIDE_MARGIN, width)
+        max_height = int(height * 0.40)
+        base_size = self._scaled_text_size(HOOK_BASE_FONT_SIZE, minimum=38)
+        min_size = self._scaled_text_size(HOOK_MIN_FONT_SIZE, minimum=20)
+        manual_lines = [line.strip() for line in text.splitlines() if line.strip()]
+        if len(manual_lines) > 1:
+            lines = manual_lines
+            font = self._fit_prebroken_lines(
+                lines,
+                draw,
+                max_width=max_width,
+                max_height=max_height,
+                base_size=base_size,
+                min_size=min_size,
+                bold=True,
+                stroke_width=stroke_width,
+                font_loader=self._load_overlay_font,
+            )
+        else:
+            font, lines = self._fit_hook_two_lines(
+                text,
+                draw,
+                max_width=max_width,
+                max_height=max_height,
+                base_size=base_size,
+                min_size=min_size,
+                stroke_width=stroke_width,
+                font_loader=self._load_overlay_font,
+            )
         text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
         block_width = min(
             width - _scale_x(80, width),

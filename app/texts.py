@@ -47,6 +47,18 @@ FEMALE_ES_REPLACEMENTS: tuple[tuple[str, str], ...] = (
         "No soy una persona extraordinaria, soy una persona medianamente constante",
     ),
 )
+FEMALE_ES_HOOKS_BY_TYPE: dict[VideoType, str] = {
+    VideoType.TYPE_1: (
+        "Me dijeron que no iba a ganar\n"
+        "nada con el Dropshipping por\n"
+        "ser mujer y esto pasó..."
+    ),
+    VideoType.TYPE_2: (
+        "Con estos 4 tips demostré que las\n"
+        "mujeres también podemos tener\n"
+        "éxito en el Dropshipping"
+    ),
+}
 
 
 def _hash_signature(parts: list[str]) -> str:
@@ -87,6 +99,7 @@ class ScriptGenerator:
                 continue
             return self._format_package(
                 package,
+                video_type=video_type,
                 language=language,
                 gender=gender,
                 lowercase_text=lowercase_text,
@@ -99,6 +112,7 @@ class ScriptGenerator:
             if package.signature != last_signature:
                 return self._format_package(
                     package,
+                    video_type=video_type,
                     language=language,
                     gender=gender,
                     lowercase_text=lowercase_text,
@@ -110,6 +124,7 @@ class ScriptGenerator:
             package = builder()
         return self._format_package(
             package,
+            video_type=video_type,
             language=language,
             gender=gender,
             lowercase_text=lowercase_text,
@@ -119,12 +134,13 @@ class ScriptGenerator:
     def _format_package(
         package: ScriptPackage,
         *,
+        video_type: VideoType,
         language: Language,
         gender: VideoGender,
         lowercase_text: bool,
     ) -> ScriptPackage:
         if gender == VideoGender.FEMALE:
-            package = ScriptGenerator._feminize_package(package, language)
+            package = ScriptGenerator._feminize_package(package, language, video_type)
         if not lowercase_text:
             return package
         slides_by_role = {
@@ -150,6 +166,7 @@ class ScriptGenerator:
     def _feminize_package(
         package: ScriptPackage,
         language: Language,
+        video_type: VideoType,
     ) -> ScriptPackage:
         if language != Language.ES:
             return package
@@ -162,11 +179,16 @@ class ScriptGenerator:
             ScriptGenerator._feminize_text_es(text)
             for text in package.ordered_slides
         ]
+        hook = FEMALE_ES_HOOKS_BY_TYPE.get(video_type)
+        if hook is not None:
+            slides_by_role[SlideRole.HOOK] = hook
+            if ordered_slides:
+                ordered_slides[0] = hook
         return ScriptPackage(
             slides_by_role=slides_by_role,
             ordered_slides=ordered_slides,
             signature=package.signature,
-            plain_text=ScriptGenerator._feminize_text_es(package.plain_text),
+            plain_text="\n\n".join(ordered_slides),
             social_copy=SocialCopy(
                 title=ScriptGenerator._feminize_text_es(package.social_copy.title),
                 description=ScriptGenerator._feminize_text_es(

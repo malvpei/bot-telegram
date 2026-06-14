@@ -148,6 +148,14 @@ def test_type_1_es_female_gender_adapts_self_references(state_dir):
         gender=VideoGender.FEMALE,
     )
 
+    expected_hook = (
+        "Me dijeron que no iba a ganar\n"
+        "nada con el Dropshipping por\n"
+        "ser mujer y esto pasó..."
+    )
+    assert first.slides_by_role[SlideRole.HOOK] == expected_hook
+    assert first.ordered_slides[0] == expected_hook
+    assert first.plain_text.startswith(expected_hook)
     assert "supermotivada" in first.slides_by_role[SlideRole.OCTOBER]
     assert "supermotivado" not in first.slides_by_role[SlideRole.OCTOBER]
     assert "convencida" in first.social_copy.description
@@ -164,6 +172,26 @@ def test_type_1_es_female_gender_adapts_self_references(state_dir):
     assert "No soy millonaria" in march
     assert "no haberme rendido" in march
     assert "millonario" not in march
+
+
+def test_type_2_es_female_gender_uses_image_hook_in_three_lines(state_dir):
+    generator = _make_generator(state_dir)
+
+    package = generator.generate(
+        VideoType.TYPE_2,
+        Language.ES,
+        gender=VideoGender.FEMALE,
+    )
+
+    expected_hook = (
+        "Con estos 4 tips demostré que las\n"
+        "mujeres también podemos tener\n"
+        "éxito en el Dropshipping"
+    )
+    assert package.slides_by_role[SlideRole.HOOK] == expected_hook
+    assert package.ordered_slides[0] == expected_hook
+    assert package.plain_text.startswith(expected_hook)
+    assert len(expected_hook.splitlines()) == 3
 
 
 def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):

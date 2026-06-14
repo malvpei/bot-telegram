@@ -134,6 +134,28 @@ def test_hook_text_prefers_exactly_two_lines():
     assert len(lines) == 2
 
 
+def test_hook_text_respects_manual_three_line_breaks(monkeypatch):
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+    image = Image.new("RGB", (1080, 1920), (0, 0, 0))
+    text = (
+        "Me dijeron que no iba a ganar\n"
+        "nada con el Dropshipping por\n"
+        "ser mujer y esto pasó..."
+    )
+    captured: dict[str, list[str]] = {}
+
+    monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 100)
+
+    def capture_lines(draw, lines, font, **kwargs):
+        captured["lines"] = list(lines)
+
+    monkeypatch.setattr(renderer, "_draw_lines", capture_lines)
+
+    renderer._draw_hook_text(image, text)
+
+    assert captured["lines"] == text.splitlines()
+
+
 def test_hook_text_renders_in_middle_third_without_avoid_regions(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
