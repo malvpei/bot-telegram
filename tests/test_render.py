@@ -43,7 +43,7 @@ def test_numbered_titleless_tip_merges_line_broken_number_with_body():
     assert body.startswith("1. Don't compete by slashing prices")
 
 
-def test_type_3_tool_slide_uses_icon_asset():
+def test_type_3_tool_slide_uses_icon_asset_and_hook_text_style():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -73,7 +73,7 @@ def test_type_3_tool_slide_uses_icon_asset():
         pixels = np.asarray(still)
         icon_region = pixels[290:430, 120:240]
         text_region = pixels[50:250, 20:340]
-        white_card_pixels = (
+        white_text_pixels = (
             (text_region[..., 0] > 230)
             & (text_region[..., 1] > 230)
             & (text_region[..., 2] > 230)
@@ -82,7 +82,9 @@ def test_type_3_tool_slide_uses_icon_asset():
         assert icon_region[..., 0].mean() > 70
         assert icon_region[..., 1].mean() > 60
         assert icon_region[..., 2].mean() > 150
-        assert white_card_pixels.mean() > 0.08
+        assert white_text_pixels.mean() > 0.005
+        assert white_text_pixels.mean() < 0.12
+        assert not (white_text_pixels.mean(axis=1) > 0.7).any()
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

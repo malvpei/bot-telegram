@@ -629,56 +629,58 @@ class VideoRenderer:
         width, height = image.size
         title, subtitle, cta = self._split_type_3_tool_text(slide.text)
         edge_margin = _scale_x(TEXT_CARD_EDGE_MARGIN, width)
-        padding_x = _scale_x(TEXT_CARD_PADDING_X, width)
-        padding_y = _scale_y(TEXT_CARD_PADDING_Y, height)
-        connected_line_gap = -_scale_y(TEXT_CARD_LINE_OVERLAP, height)
+        max_text_width = width - edge_margin * 2
+        stroke_width = max(2, _scale_x(TYPE_3_TEXT_STROKE_WIDTH, width))
+        body_line_gap = _scale_y(8, height)
 
         title_font = self._fit_single_line_text(
             title,
             draw,
-            max_width=width - edge_margin * 2 - padding_x * 2,
+            max_width=max_text_width,
             base_size=72,
             min_size=46,
-            bold=False,
-            stroke_width=0,
+            bold=True,
+            stroke_width=stroke_width,
         )
-        body_font = self._load_font(size=TYPE_3_BODY_FONT_SIZE, bold=False)
+        body_font = self._load_overlay_font(TYPE_3_BODY_FONT_SIZE, True)
         body_lines = self._type_3_body_lines(
             subtitle,
             cta,
             draw=draw,
             font=body_font,
-            max_width=width - edge_margin * 2 - padding_x * 2,
+            max_width=max_text_width,
         )
         title_lines = [title] if title else []
-        title_height = self._pill_lines_height(
+        title_height = self._block_height(
             title_lines,
             title_font,
             draw,
-            padding_y=padding_y,
+            stroke_width=stroke_width,
             line_gap=0,
         )
         title_y = int(height * 0.270) - title_height // 2
-        self._draw_pill_lines(
+        self._draw_lines(
             draw,
             title_lines,
             title_font,
             start_y=max(70, title_y),
-            canvas_width=width,
-            padding_x=padding_x,
-            padding_y=padding_y,
+            width=width,
+            fill=(255, 255, 255),
+            stroke_width=stroke_width,
+            stroke_fill=HOOK_TEXT_STROKE_FILL,
             line_gap=0,
         )
         if body_lines:
-            self._draw_connected_pill_lines(
+            self._draw_lines(
                 draw,
                 body_lines,
                 body_font,
                 start_y=int(height * 0.32),
-                canvas_width=width,
-                padding_x=padding_x,
-                padding_y=padding_y,
-                line_gap=connected_line_gap,
+                width=width,
+                fill=(255, 255, 255),
+                stroke_width=stroke_width,
+                stroke_fill=HOOK_TEXT_STROKE_FILL,
+                line_gap=body_line_gap,
             )
 
         tool_key = self._type_3_tool_key(slide.role, slide.text)
