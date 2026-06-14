@@ -75,6 +75,19 @@ def test_type_1_es_visible_text_avoids_unapproved_hook_typos(state_dir):
         assert "facture" not in visible_text.lower()
 
 
+def test_type_1_es_rejects_unapproved_exactamente_hook():
+    with pytest.raises(RuntimeError, match="hook no aprobado"):
+        ScriptGenerator._assert_type_1_rules(
+            Language.ES,
+            {
+                SlideRole.HOOK: (
+                    "Exactamente cuánto facturé haciendo Dropshipping en mis primeros 6 meses"
+                ),
+                SlideRole.FEBRUARY: "Febrero - 800€\nDropradar",
+            },
+        )
+
+
 def test_type_1_amounts_are_coherent(state_dir):
     generator = _make_generator(state_dir)
     for _ in range(20):

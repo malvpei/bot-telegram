@@ -227,73 +227,6 @@ class ScriptGenerator:
             },
         }
         return self._compose_type_1_fixed(language=Language.ES, variants=variants)
-        hook_options = {
-            "h1": "Exactamente cuánto dinero gané con Dropshipping en 6 meses empezando desde cero",
-            "h2": "Exactamente cuánto facturé con Dropshipping en 6 meses desde 0€",
-            "h3": "Exactamente cuánto dinero hice con Dropshipping mes a mes siendo principiante",
-            "h4": "Exactamente cuánto dinero gané con Dropshipping después de casi rendirme",
-            "h5": "Exactamente cuánto dinero facturé haciendo Dropshipping sin saber lo que hacía",
-            "h6": "Exactamente cuánto dinero me dejó Dropshipping en mis primeros 6 meses",
-            "h7": "Exactamente cuánto dinero gané con Dropshipping antes de entender los datos",
-            "h8": "Exactamente cuánto dinero facturé con Dropshipping durante mis primeros meses",
-            "h9": "Exactamente cuánto dinero gané con Dropshipping cuando dejé de elegir productos a ojo",
-            "h10": "Exactamente cuánto dinero hice con Dropshipping de octubre a marzo",
-        }
-        october = {
-            "o1": "Octubre - 0€\nEmpecé con muchas ganas pero me quedé en parálisis por análisis pensando tanto cada paso que al final no lancé nada de verdad",
-            "o2": "Octubre - 0€\nArranqué motivado aunque perdí demasiado tiempo con el logo y los colores sintiendo que trabajaba muchísimo mientras no avanzaba",
-            "o3": "Octubre - 0€\nTenía todo montado en mi cabeza pero me daba miedo poner anuncios y perder dinero así que me bloqueé yo solo sin empezar",
-            "o4": "Octubre - 0€\nMe metí con muchísimas ganas dudando de cada decisión y acabé con una tienda a medias y cero ventas después de semanas",
-            "o5": "Octubre - 0€\nLancé mi primera tienda motivado, metí algo de dinero en anuncios y tuve visitas, pero nadie compró y perdí casi todo el presupuesto",
-            "o6": "Octubre - 0€\nPensaba que tener la tienda publicada ya era avanzar, hasta que vi tráfico entrando y ni una sola persona pasando por caja",
-        }
-        november = {
-            "n1": "Noviembre - 0€\nSeguí en cero intentando vender solo con contenido orgánico mientras veía a otros facturar y yo atascado en el mismo punto",
-            "n2": "Noviembre - 0€\nQuise moverlo sin gastar mis ahorros pero el miedo a invertir me frenó y pasó otro mes entero sin que cambiara nada",
-            "n3": "Noviembre - 0€\nLo peor fue ver a otros sacar ventas mientras yo seguía a cero y esa comparación constante me dejó bastante rallado la verdad",
-            "n4": "Noviembre - 0€\nProbé un par de productos al azar sin que pegara ninguno y entendí que ir a ciegas no me iba a funcionar nunca",
-            "n5": "Noviembre - 0€\nCambie fotos, textos y precios mil veces, pero el problema real era que seguía probando productos sin ningún criterio claro",
-            "n6": "Noviembre - 0€\nMe convencí de que el fallo era el anuncio, luego la web y luego el precio, pero en realidad no sabía qué estaba vendiendo",
-        }
-        december = {
-            "d1": "Diciembre - {amount}€\nLlegó la primera venta gracias al empujón de Navidad y pensé que ya había descubierto el secreto del ecommerce yo solo",
-            "d2": "Diciembre - {amount}€\nEntró una venta pequeña por la locura navideña y me vine arriba creyendo que a partir de ahí todo sería igual de fácil",
-            "d3": "Diciembre - {amount}€\nPor fin cayó la primera venta en Navidad y sentí que lo había pillado aunque me monté una película mucho más grande de la cuenta",
-            "d4": "Diciembre - {amount}€\nLa primera venta me dio una motivación brutal, pero también me hizo confiarme demasiado rápido sin entender por qué había pasado",
-            "d5": "Diciembre - {amount}€\nVendí algo por fin y durante dos días pensé que ya estaba dentro, hasta que miré los números reales y se me bajó la emoción",
-        }
-        january = {
-            "j1": "Enero - 0€\nSe acabaron las fiestas y las ventas murieron por completo así que pagar Shopify para no facturar me dejó sin motivación real",
-            "j2": "Enero - 0€\nVolví a cero en cuanto pasó Navidad y estuve a punto de dejarlo todo para buscar un trabajo normal y olvidarme del tema",
-            "j3": "Enero - 0€\nEl golpe fue duro porque después de Navidad no entró nada y me frustraba seguir pagando la tienda sin ver ningún resultado",
-            "j4": "Enero - 0€\nMe di cuenta de que una venta suelta no significaba tener un negocio y ese mes fue el que más cerca estuve de cerrarlo todo",
-            "j5": "Enero - 0€\nSeguía entrando a mirar estadísticas cada rato, pero la tienda estaba muerta y yo ya no sabía qué tocar para arreglarla",
-        }
-        february = {
-            "f1": "Febrero - {amount}€\nVi a un dropshipper usando Dropradar y me di una última oportunidad eligiendo productos por datos reales y no por intuición",
-            "f2": "Febrero - {amount}€\nDescubrí Dropradar por otro chaval al que seguía y con una última bala guiada por métricas por fin empezaron a entrar ventas",
-            "f3": "Febrero - {amount}€\nProbé Dropradar después de ver que otros sacaban productos con datos y al dejar de escoger por gusto personal la tienda arrancó",
-            "f4": "Febrero - {amount}€\nEmpecé a usar Dropradar para mirar productos con señales reales y por primera vez sentí que no estaba apostando a ciegas",
-            "f5": "Febrero - {amount}€\nDejé de elegir lo que a mí me gustaba, miré Dropradar con calma y las primeras ventas empezaron a tener sentido",
-        }
-        march = {
-            "m1": "Marzo - {amount}€\nNo me hice millonario ni me compré un Ferrari pero por fin tenía ingresos estables y dejé de ir totalmente a ciegas cada semana",
-            "m2": "Marzo - {amount}€\nNada de jets ni mansiones porque la diferencia real fue empezar a usar métricas de verdad y dejar de adivinar cada decisión",
-            "m3": "Marzo - {amount}€\nNo vivo con lujos pero ya tenía ventas sólidas cada mes y aprendí que los datos mandan muchísimo más que la intuición",
-            "m4": "Marzo - {amount}€\nNo fue una locura de dinero, pero ya podía explicar qué estaba funcionando y repetirlo sin sentir que todo dependía de suerte",
-            "m5": "Marzo - {amount}€\nLa diferencia no fue hacerme rico, fue dejar de improvisar y tener un sistema que por fin me devolvía ventas con sentido",
-        }
-        return self._compose_type_1(
-            language=Language.ES,
-            currency="€",
-            hook_options=hook_options,
-            october=october,
-            november=november,
-            december=december,
-            january=january,
-            february=february,
-            march=march,
-        )
 
     def _build_type_1_en(self) -> ScriptPackage:
         variants = {
@@ -326,73 +259,6 @@ class ScriptGenerator:
             },
         }
         return self._compose_type_1_fixed(language=Language.EN, variants=variants)
-        hook_options = {
-            "h1": "Exactly how much money I made with Dropshipping in my first 6 months",
-            "h2": "Exactly how much I billed with Dropshipping starting from $0",
-            "h3": "Exactly how much money Dropshipping made me month by month",
-            "h4": "Exactly how much money I made with Dropshipping after almost quitting",
-            "h5": "Exactly how much money I billed doing Dropshipping with zero experience",
-            "h6": "Exactly how much money I kept from my first Dropshipping months",
-            "h7": "Exactly how much money I really made with Dropshipping before data",
-            "h8": "Exactly how much money I billed with Dropshipping in 6 months",
-            "h9": "Exactly how much money I made with Dropshipping after I stopped guessing products",
-            "h10": "Exactly how much money Dropshipping made me from October to March",
-        }
-        october = {
-            "o1": "October - $0\nI started excited but got stuck in analysis paralysis overthinking every step and never really launching anything real",
-            "o2": "October - $0\nI was motivated yet wasted way too much time on the logo and colors feeling busy while nothing actually moved",
-            "o3": "October - $0\nEverything looked ready in my head but I was too scared to run ads and lose money so I just kept delaying the launch",
-            "o4": "October - $0\nI jumped in with energy but doubted every decision and ended up with a half built store and zero sales after weeks",
-            "o5": "October - $0\nI launched the first store motivated, put some money into ads and got visitors, but nobody bought and most of the budget disappeared",
-            "o6": "October - $0\nI thought publishing the store meant progress until I saw traffic coming in and not one person going through checkout",
-        }
-        november = {
-            "n1": "November - $0\nI stayed at zero trying to force organic sales while watching other people making money and feeling stuck in the same spot",
-            "n2": "November - $0\nI wanted to avoid risking my savings so fear kept me frozen and another month passed with the exact same numbers",
-            "n3": "November - $0\nThe worst part was seeing everyone else getting sales while I had nothing and that comparison really got into my head",
-            "n4": "November - $0\nI tested a couple of random products without a single one landing and realized winging it was never going to work",
-            "n5": "November - $0\nI changed photos, copy and prices again and again, but the real problem was still testing products without a clear reason",
-            "n6": "November - $0\nFirst I blamed the ad, then the store and then the price, but honestly I did not know what I was really selling",
-        }
-        december = {
-            "d1": "December - ${amount}\nMy first sale came in thanks to the Christmas push and I thought I had finally cracked ecommerce by myself",
-            "d2": "December - ${amount}\nA small Christmas sale hit and I got carried away believing it would stay that easy from there on out",
-            "d3": "December - ${amount}\nThat first sale during Christmas made me think I had figured it out and I got way too confident way too quickly",
-            "d4": "December - ${amount}\nThe first sale gave me a crazy amount of motivation, but it also made me trust myself before I understood why it happened",
-            "d5": "December - ${amount}\nI finally sold something and for two days thought I was in, until I checked the real numbers and calmed down fast",
-        }
-        january = {
-            "j1": "January - $0\nThe holidays ended and sales completely died so paying Shopify for nothing was killing my motivation every single week",
-            "j2": "January - $0\nAs soon as Christmas was over I went right back to zero and was close to quitting for a normal job and forgetting everything",
-            "j3": "January - $0\nReality hit hard because after the holidays nothing came in and I hated paying for a store with no results at all",
-            "j4": "January - $0\nI realized one random sale did not mean I had a business, and that was the month I got closest to shutting it all down",
-            "j5": "January - $0\nI kept checking analytics every few hours, but the store was dead and I had no idea what to change next",
-        }
-        february = {
-            "f1": "February - ${amount}\nI saw another dropshipper using Dropradar and gave myself one last shot picking products from real data and not gut",
-            "f2": "February - ${amount}\nI found Dropradar through someone I followed and with one last try guided by metrics sales finally started to move",
-            "f3": "February - ${amount}\nI tested Dropradar after seeing others rely on data and once I stopped choosing products by taste the store woke up",
-            "f4": "February - ${amount}\nI started using Dropradar to check products with real signals and for once it did not feel like blind betting",
-            "f5": "February - ${amount}\nI stopped picking what I personally liked, studied Dropradar calmly and the first sales finally made sense",
-        }
-        march = {
-            "m1": "March - ${amount}\nI did not become a millionaire and did not buy a Ferrari but I finally had stable income and stopped guessing every single week",
-            "m2": "March - ${amount}\nNo jets or mansions because the real change was using solid metrics instead of pure intuition in every single decision",
-            "m3": "March - ${amount}\nI am not living some crazy luxury life but the income finally felt stable and I learned data beats guessing every time",
-            "m4": "March - ${amount}\nIt was not insane money, but I could finally explain what was working and repeat it without feeling like it was luck",
-            "m5": "March - ${amount}\nThe difference was not getting rich, it was having a system that finally turned tests into sales I could understand",
-        }
-        return self._compose_type_1(
-            language=Language.EN,
-            currency="$",
-            hook_options=hook_options,
-            october=october,
-            november=november,
-            december=december,
-            january=january,
-            february=february,
-            march=march,
-        )
 
     def _compose_type_1(
         self,
@@ -455,11 +321,7 @@ class ScriptGenerator:
             ]
         )
 
-        # Type 1 narrative must always reach the Dropradar mention in February.
-        if "Dropradar" not in slides_by_role[SlideRole.FEBRUARY]:
-            raise RuntimeError("Tipo 1: el slide de febrero perdió la mención a Dropradar.")
-        if "Dropshipping" not in slides_by_role[SlideRole.HOOK]:
-            raise RuntimeError("Tipo 1: el hook debe mencionar Dropshipping.")
+        self._assert_type_1_rules(language, slides_by_role)
 
         return ScriptPackage(
             slides_by_role=slides_by_role,
@@ -482,10 +344,7 @@ class ScriptGenerator:
         social_key, social_copy = self._choose_social_copy(VideoType.TYPE_1, language)
         signature = _hash_signature([choice_key, *ordered, social_key])
 
-        if "Dropradar" not in slides_by_role[SlideRole.FEBRUARY]:
-            raise RuntimeError("Tipo 1: el slide de febrero perdió la mención a Dropradar.")
-        if "Dropshipping" not in slides_by_role[SlideRole.HOOK]:
-            raise RuntimeError("Tipo 1: el hook debe mencionar Dropshipping.")
+        self._assert_type_1_rules(language, slides_by_role)
 
         return ScriptPackage(
             slides_by_role=slides_by_role,
@@ -496,6 +355,33 @@ class ScriptGenerator:
             choice_key=choice_key,
             social_choice_key=self._copy_choice_from_social_key(social_key),
         )
+
+    @staticmethod
+    def _assert_type_1_rules(
+        language: Language,
+        slides_by_role: dict[SlideRole, str],
+    ) -> None:
+        if "Dropradar" not in slides_by_role[SlideRole.FEBRUARY]:
+            raise RuntimeError("Tipo 1: el slide de febrero perdió la mención a Dropradar.")
+
+        hook = slides_by_role[SlideRole.HOOK]
+        if "Dropshipping" not in hook:
+            raise RuntimeError("Tipo 1: el hook debe mencionar Dropshipping.")
+
+        allowed_hooks = {
+            Language.ES: {
+                "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y por qué casi lo dejo...",
+                "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo....",
+                "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo...",
+            },
+            Language.EN: {
+                "How much I earned doing Dropshipping in my first 6 months and why I almost quit...",
+                "How much I made doing Dropshipping in my first 6 months and why I almost quit...",
+                "Exactly how much I made doing Dropshipping in my first 6 months and why I almost quit.",
+            },
+        }
+        if hook not in allowed_hooks[language]:
+            raise RuntimeError(f"Tipo 1: hook no aprobado: {hook!r}")
 
     def _next_type_1_choice(
         self,
