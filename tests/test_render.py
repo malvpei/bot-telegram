@@ -17,6 +17,8 @@ from app.render import (
     HOOK_MIN_FONT_SIZE,
     HOOK_SIDE_MARGIN,
     HOOK_TEXT_STROKE_FILL,
+    SAFE_TEXT_BOTTOM_MARGIN,
+    SAFE_TEXT_TOP_MARGIN,
     VideoRenderer,
 )
 
@@ -132,6 +134,27 @@ def test_hook_text_prefers_exactly_two_lines():
     )
 
     assert len(lines) == 2
+
+
+def test_hook_text_fallback_keeps_the_complete_hook():
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    draw = ImageDraw.Draw(Image.new("RGB", (360, 640)))
+    text = "4 consejos de Dropshipping que me habrían ahorrado muchos errores"
+
+    font, lines = renderer._fit_hook_two_lines(
+        text,
+        draw,
+        max_width=230,
+        max_height=210,
+        base_size=76,
+        min_size=40,
+        stroke_width=3,
+    )
+
+    assert " ".join(lines) == text
+    assert renderer._block_height(lines, font, draw, stroke_width=3) <= 210
+    assert len(lines) > 2
 
 
 def test_hook_text_respects_manual_three_line_breaks(monkeypatch):
@@ -613,6 +636,23 @@ def test_safe_text_position_centers_inside_clear_gap(monkeypatch):
 
     assert y > 105
     assert y + 80 < occupied_region[1]
+
+
+def test_safe_text_position_respects_top_and_bottom_margins(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGBA", (1080, 1920), (20, 20, 20, 255))
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+
+    y = renderer._safe_text_start_y(
+        image,
+        block_width=760,
+        block_height=300,
+        preferred_centers=(0.02, 0.98),
+    )
+
+    assert y >= SAFE_TEXT_TOP_MARGIN
+    assert y + 300 <= 1920 - SAFE_TEXT_BOTTOM_MARGIN
 
 
 def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_body_line():

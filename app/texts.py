@@ -325,7 +325,11 @@ class ScriptGenerator:
         }
 
         ordered = [slides_by_role[role] for role in TYPE_1_ROLES]
-        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_1, language)
+        social_key, social_copy = self._choose_social_copy_for_text_choice(
+            VideoType.TYPE_1,
+            language,
+            choice_key,
+        )
         signature = _hash_signature(
             [
                 hook_key,
@@ -482,7 +486,11 @@ class ScriptGenerator:
     ) -> ScriptPackage:
         choice_key = self._next_type_2_choice(language, variants)
         slides_by_role = dict(variants[choice_key])
-        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_2, language)
+        social_key, social_copy = self._choose_social_copy_for_text_choice(
+            VideoType.TYPE_2,
+            language,
+            choice_key,
+        )
         ordered = [slides_by_role[role] for role in TYPE_2_ROLES]
         self._assert_type_2_rules(slides_by_role)
         return ScriptPackage(
@@ -621,6 +629,25 @@ class ScriptGenerator:
             hashtags=self._prepare_social_hashtags(hashtags),
         )
 
+    def _choose_social_copy_for_text_choice(
+        self,
+        video_type: VideoType,
+        language: Language,
+        choice_key: str,
+    ) -> tuple[str, SocialCopy]:
+        variants = self._social_copy_variants(video_type, language)
+        ordered_keys = list(variants)
+        choice_index = {"a": 0, "b": 1, "c": 2}.get(choice_key)
+        if choice_index is None or choice_index >= len(ordered_keys):
+            return self._choose_social_copy(video_type, language)
+        copy_key = ordered_keys[choice_index]
+        title, description, hashtags = variants[copy_key]
+        return f"{copy_key}:default", SocialCopy(
+            title=title,
+            description=description,
+            hashtags=self._prepare_social_hashtags(hashtags),
+        )
+
     @staticmethod
     def _prepare_social_hashtags(hashtags: list[str]) -> list[str]:
         prepared = [
@@ -671,7 +698,10 @@ class ScriptGenerator:
             variants = self._social_copy_variants_en(video_type)
         else:
             variants = self._social_copy_variants_es(video_type)
-        variants.update(self._extra_social_copy_variants(video_type, language))
+        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
+            variants = dict(list(variants.items())[:3])
+        else:
+            variants.update(self._extra_social_copy_variants(video_type, language))
         return self._prepare_social_copy_variants(video_type, language, variants)
 
     def _social_title_variants(
@@ -679,6 +709,8 @@ class ScriptGenerator:
         video_type: VideoType,
         language: Language,
     ) -> dict[str, str]:
+        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
+            return {}
         if language == Language.EN:
             titles = self._social_title_variants_en(video_type)
         else:
@@ -687,36 +719,8 @@ class ScriptGenerator:
         return titles
 
     def _social_title_variants_es(self, video_type: VideoType) -> dict[str, str]:
-        if video_type == VideoType.TYPE_1:
-            return {
-                "t1": "Lo que facturé cuando dejé de adivinar",
-                "t2": "Mi cambio real con dropshipping",
-                "t3": "De perder meses a entender los numeros",
-                "t4": "La parte que nadie me explico al empezar",
-                "t5": "Cuanto hice cuando empece a usar datos",
-                "t6": "El mes donde todo empezo a tener sentido",
-                "t7": "Lo que habria querido saber antes",
-                "t8": "Mi progreso real montando una tienda online",
-                "t9": "De probar al azar a vender con criterio",
-                "t10": "Asi cambio mi tienda en 6 meses",
-                "t11": "El error que me estaba costando dinero",
-                "t12": "La diferencia entre intentarlo y medirlo",
-            }
-        if video_type == VideoType.TYPE_2:
-            return {
-                "t1": "Antes de gastar mas dinero mira esto",
-                "t2": "4 errores que frenan una tienda online",
-                "t3": "La revision que haria antes de vender",
-                "t4": "Si haces dropshipping revisa esto",
-                "t5": "Lo que miraria antes de lanzar anuncios",
-                "t6": "4 puntos que pueden salvar tu presupuesto",
-                "t7": "La base que casi nadie revisa al empezar",
-                "t8": "Esto separa una tienda floja de una seria",
-                "t9": "Antes de buscar otro producto arregla esto",
-                "t10": "Los detalles que te hacen perder ventas",
-                "t11": "Una checklist rapida para tu tienda",
-                "t12": "Si no vendes revisa estas 4 cosas",
-            }
+        if video_type != VideoType.TYPE_3:
+            return {}
         return {
             "t1": "Herramientas simples para empezar en 2026",
             "t2": "El stack que usaria para lanzar una tienda",
@@ -733,36 +737,8 @@ class ScriptGenerator:
         }
 
     def _social_title_variants_en(self, video_type: VideoType) -> dict[str, str]:
-        if video_type == VideoType.TYPE_1:
-            return {
-                "t1": "What changed when I stopped guessing",
-                "t2": "My real dropshipping progress",
-                "t3": "From random tests to clearer numbers",
-                "t4": "The part I wish I knew earlier",
-                "t5": "How my store changed in 6 months",
-                "t6": "The month dropshipping started making sense",
-                "t7": "The mistake that kept costing me money",
-                "t8": "What helped me read the numbers better",
-                "t9": "From almost quitting to a real process",
-                "t10": "The shift that made my tests useful",
-                "t11": "What I learned after months of trying",
-                "t12": "The difference between guessing and measuring",
-            }
-        if video_type == VideoType.TYPE_2:
-            return {
-                "t1": "Check this before spending more",
-                "t2": "4 mistakes that slow down online stores",
-                "t3": "The review I would do before selling",
-                "t4": "If you dropship, check these first",
-                "t5": "Before running ads, look at this",
-                "t6": "4 points that can save your budget",
-                "t7": "The base most beginners skip",
-                "t8": "What separates weak stores from solid ones",
-                "t9": "Fix this before testing another product",
-                "t10": "Small details that cost sales",
-                "t11": "A quick checklist for your store",
-                "t12": "If sales are slow, review these 4 things",
-            }
+        if video_type != VideoType.TYPE_3:
+            return {}
         return {
             "t1": "Simple tools to start in 2026",
             "t2": "The stack I would use to launch a store",
@@ -783,25 +759,9 @@ class ScriptGenerator:
         video_type: VideoType,
         language: Language,
     ) -> dict[str, str]:
+        if video_type != VideoType.TYPE_3:
+            return {}
         if language == Language.EN:
-            if video_type == VideoType.TYPE_1:
-                return {
-                    "t13": "The months that taught me patience",
-                    "t14": "Why my first store finally moved",
-                    "t15": "The honest part of my first sales",
-                    "t16": "What I fixed before the numbers changed",
-                    "t17": "How data made the process calmer",
-                    "t18": "A realistic look at my first 6 months",
-                }
-            if video_type == VideoType.TYPE_2:
-                return {
-                    "t13": "The store audit beginners skip",
-                    "t14": "Read this before blaming the ad",
-                    "t15": "4 checks before you scale traffic",
-                    "t16": "What I would fix before launching",
-                    "t17": "A calmer way to review your store",
-                    "t18": "The boring basics that protect profit",
-                }
             return {
                 "t13": "The starter tools with a real order",
                 "t14": "A simple workflow for your first tests",
@@ -809,24 +769,6 @@ class ScriptGenerator:
                 "t16": "The stack I would keep at the start",
                 "t17": "Tools that help you publish faster",
                 "t18": "Start lean and learn from the market",
-            }
-        if video_type == VideoType.TYPE_1:
-            return {
-                "t13": "Los meses que me enseñaron paciencia",
-                "t14": "Por que mi primera tienda empezo a moverse",
-                "t15": "La parte honesta de mis primeras ventas",
-                "t16": "Lo que arregle antes de ver resultados",
-                "t17": "Como los datos hicieron el proceso mas claro",
-                "t18": "Una mirada realista a mis primeros 6 meses",
-            }
-        if video_type == VideoType.TYPE_2:
-            return {
-                "t13": "La auditoria que casi nadie hace al empezar",
-                "t14": "Lee esto antes de culpar al anuncio",
-                "t15": "4 revisiones antes de escalar trafico",
-                "t16": "Lo que arreglaria antes de lanzar",
-                "t17": "Una forma mas tranquila de revisar tu tienda",
-                "t18": "La base aburrida que protege tu margen",
             }
         return {
             "t13": "Herramientas iniciales con un orden real",
@@ -850,42 +792,8 @@ class ScriptGenerator:
         self,
         video_type: VideoType,
     ) -> dict[str, tuple[str, str, list[str]]]:
-        if video_type == VideoType.TYPE_1:
-            return {
-                "es6": (
-                    "El mes donde deje de improvisar",
-                    "Durante mucho tiempo pense que mi problema era no encontrar el producto correcto, pero mirando atras veo que el fallo era mas simple y mas incomodo: estaba improvisando casi todo. Improvisaba el producto, el anuncio, el precio, la pagina y hasta la forma de interpretar los resultados. Por eso cada venta parecia suerte y cada semana mala parecia una sentencia. Cuando empece a escribir por que elegia un producto y que dato tenia que confirmar antes de seguir gastando, el proceso se hizo menos dramatico. No vendia mas por magia, vendia mejor porque dejaba menos cosas al azar.",
-                    ["#dropshipping", "#ecommerce", "#shopify", "#productresearch", "#dropradar"],
-                ),
-                "es7": (
-                    "Mi tienda no necesitaba mas ruido",
-                    "Lo que mas me desgastaba no era trabajar, era no saber si lo que hacia servia para algo. Un dia cambiaba el precio, otro dia la foto principal, luego el producto completo y despues el texto de la pagina, todo sin dejar respirar las pruebas. Asi es imposible aprender, porque nunca sabes que fue lo que cambio el resultado. El avance llego cuando quite ruido y me obligue a probar menos cosas, pero con una razon clara. Dropradar me ayudo a mirar productos con datos antes de enamorarme de una idea, y esa pequena pausa antes de gastar fue mas valiosa de lo que esperaba. Si estas en esa etapa de tocarlo todo cada noche, igual no necesitas hacer mas cambios, necesitas decidir mejor cual cambio merece existir.",
-                    ["#dropshippingtips", "#negociosonline", "#ecommerce", "#emprender", "#dropradar"],
-                ),
-                "es8": (
-                    "La historia real detras de esos numeros",
-                    "Es facil ver un carrusel de ingresos y pensar que todo fue una subida limpia, pero por dentro se sintio bastante mas torpe. Hubo dias de revisar Shopify veinte veces, dias de cerrar el portatil enfadado y dias de pensar que quizas habia caido en otra promesa de internet. Lo que me saco de ahi fue dejar de tratar cada resultado como una emocion y empezar a tratarlo como informacion. Si no habia ventas, tenia que entender si fallaba el producto, la oferta, el creativo o la confianza de la tienda. Cuando separas esas piezas, el camino sigue siendo dificil, pero deja de parecer una pared gigante. Esa fue la diferencia que mas se noto en mis primeros meses.",
-                    ["#dropshipping", "#ecommercejourney", "#tiendaonline", "#shopify", "#dropradar"],
-                ),
-            }
-        if video_type == VideoType.TYPE_2:
-            return {
-                "es6": (
-                    "La revision que haria antes de tocar anuncios",
-                    "Antes de cambiar otro creativo, revisaria la tienda como si fuera una persona que no te conoce de nada. En los primeros segundos deberia entender que vendes, por que deberia importarle y si puede confiar en comprarte. Si esa parte falla, el anuncio puede ser buenisimo y aun asi perder ventas en silencio. Tambien miraria el margen real, porque una tienda puede facturar y seguir perdiendo dinero cuando entran comisiones, devoluciones y costes de envio. Son revisiones poco emocionantes, pero justamente por eso suelen quedarse sin hacer.",
-                    ["#dropshipping", "#ecommerce", "#shopifytips", "#marketingdigital", "#dropradar"],
-                ),
-                "es7": (
-                    "No todo se arregla con mas presupuesto",
-                    "Uno de los errores mas caros es pensar que si algo no vende, la respuesta siempre es meter mas dinero. A veces el problema esta en la promesa, en una pagina que no genera seguridad, en un producto que no tiene una razon clara para comprarse ahora o en una atencion al cliente que se improvisa demasiado tarde. Mas trafico solo hace que esos problemas aparezcan mas rapido. Por eso esta checklist no busca frenar, busca protegerte. Si corriges lo basico antes de escalar, cada euro que gastas te devuelve una lectura mas limpia y no solo una mezcla confusa de clics, dudas y abandono.",
-                    ["#dropshippingtips", "#tiendaonline", "#ventas", "#ecommerce", "#dropradar"],
-                ),
-                "es8": (
-                    "La base que sostiene una tienda seria",
-                    "Una tienda seria no necesita parecer enorme, pero si necesita sentirse clara. El cliente quiere saber que compra, cuando llega, que pasa si algo sale mal y por que tu oferta merece su dinero. Si esas preguntas quedan flotando, la persona se va aunque el producto le guste. Por eso los cuatro puntos del video son tan importantes: margen, confianza, producto y soporte. No son trucos, son el suelo. Cuando el suelo esta firme, los anuncios tienen una oportunidad real. Cuando esta flojo, cualquier visita nueva solo confirma lo que ya estaba roto.",
-                    ["#ecommerce", "#dropshipping", "#emprenderonline", "#shopify", "#dropradar"],
-                ),
-            }
+        if video_type != VideoType.TYPE_3:
+            return {}
         return {
             "es6": (
                 "Empieza con pocas piezas bien elegidas",
@@ -908,42 +816,8 @@ class ScriptGenerator:
         self,
         video_type: VideoType,
     ) -> dict[str, tuple[str, str, list[str]]]:
-        if video_type == VideoType.TYPE_1:
-            return {
-                "en6": (
-                    "The month I stopped improvising",
-                    "For a long time I thought my problem was not finding the right product, but looking back the issue was simpler and more uncomfortable: I was improvising almost everything. I improvised the product, the ad, the price, the page and even the way I read the results. That made every sale feel like luck and every bad week feel personal. Once I started writing why I chose a product and which signal had to be true before spending more, the process became calmer. I did not sell more because of magic. I sold better because fewer decisions were random.",
-                    ["#dropshipping", "#ecommerce", "#shopify", "#productresearch", "#dropradar"],
-                ),
-                "en7": (
-                    "My store did not need more noise",
-                    "The exhausting part was not the work, it was not knowing whether the work meant anything. One day I changed the price, the next day the main image, then the product, then the copy, all without letting any test breathe. You cannot learn that way because you never know what actually moved the result. Progress started when I removed noise and tested fewer things with a clearer reason. Dropradar helped me look at products with data before falling in love with the idea, and that short pause before spending mattered more than I expected. If you keep touching everything every night, maybe you do not need more changes. Maybe you need a better reason for the next one.",
-                    ["#dropshippingtips", "#onlinebusiness", "#ecommerce", "#entrepreneur", "#dropradar"],
-                ),
-                "en8": (
-                    "The real story behind those numbers",
-                    "It is easy to see a revenue carousel and imagine a clean upward line, but inside it felt much messier. There were days of checking Shopify too often, days of closing the laptop annoyed and days where I wondered if I had just fallen for another internet promise. What changed was learning to treat each result less like an emotion and more like information. If there were no sales, I had to ask whether the product, the offer, the creative or the trust on the page was weak. When you separate those pieces, the path is still hard, but it stops feeling like one giant wall. That was the biggest difference in my first months.",
-                    ["#dropshipping", "#ecommercejourney", "#shopifystore", "#onlineincome", "#dropradar"],
-                ),
-            }
-        if video_type == VideoType.TYPE_2:
-            return {
-                "en6": (
-                    "The review before touching ads",
-                    "Before changing another creative, I would review the store like a person who has never heard of you. In the first few seconds they should understand what you sell, why it matters and whether buying from you feels safe. If that part fails, a strong ad can still lose sales quietly. I would also check real margin because a store can show revenue and still lose money after fees, refunds and shipping costs. These checks are not exciting, which is exactly why people skip them until traffic makes the weakness expensive.",
-                    ["#dropshipping", "#ecommerce", "#shopifytips", "#digitalmarketing", "#dropradar"],
-                ),
-                "en7": (
-                    "More budget does not fix everything",
-                    "One expensive beginner mistake is thinking that if something is not selling, the answer is always more budget. Sometimes the issue is the promise, a page that does not create trust, a product with no clear reason to buy now or support that gets improvised too late. More traffic only makes those issues appear faster. This checklist is not meant to slow you down. It is meant to protect you. When the basics are fixed before scaling, each dollar gives you a cleaner reading instead of a confusing mix of clicks, doubts and abandoned checkouts.",
-                    ["#dropshippingtips", "#onlinestore", "#sales", "#ecommerce", "#dropradar"],
-                ),
-                "en8": (
-                    "The base behind a serious store",
-                    "A serious store does not need to look huge, but it does need to feel clear. The buyer wants to know what they are getting, when it arrives, what happens if something goes wrong and why your offer deserves their money. If those questions stay unanswered, they leave even if they like the product. That is why the four points in the video matter so much: margin, trust, product and support. They are not tricks. They are the floor. When the floor is solid, ads have a real chance. When it is weak, every new visit only exposes what was already broken.",
-                    ["#ecommerce", "#dropshipping", "#onlinebusiness", "#shopify", "#dropradar"],
-                ),
-            }
+        if video_type != VideoType.TYPE_3:
+            return {}
         return {
             "en6": (
                 "Start with a few well chosen pieces",
@@ -968,6 +842,8 @@ class ScriptGenerator:
         language: Language,
         variants: dict[str, tuple[str, str, list[str]]],
     ) -> dict[str, tuple[str, str, list[str]]]:
+        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
+            return variants
         expansions = self._social_description_expansions(video_type, language)
         fallback = self._social_description_fallback(video_type, language)
         prepared: dict[str, tuple[str, str, list[str]]] = {}
@@ -992,20 +868,8 @@ class ScriptGenerator:
         return self._social_description_expansions_es(video_type)
 
     def _social_description_expansions_es(self, video_type: VideoType) -> tuple[str, ...]:
-        if video_type == VideoType.TYPE_1:
-            return (
-                "La parte importante no es copiar mis cifras ni esperar que tu primer mes se parezca al mío. Lo importante es entender la secuencia. Primero viene la ilusión, luego aparece el choque con la realidad, después empiezas a distinguir entre estar ocupado y estar tomando mejores decisiones. Si solo miras el resultado final, parece que todo cambió de golpe, pero por dentro fue mucho más lento: revisar por qué un producto no se vendió, mirar si el anuncio atraía curiosos o compradores, comprobar si la tienda generaba confianza y aceptar que algunos tests tenían que cerrarse aunque me hubiera encariñado con la idea. Esa disciplina es menos emocionante que enseñar capturas, pero es la que evita repetir el mismo error durante meses. Si estás en una etapa parecida, usa este contenido como una pausa para ordenar tu propio proceso. Escribe qué estás probando, qué métrica estás mirando y qué decisión vas a tomar si los datos salen mal. Cuando haces eso, incluso una semana floja empieza a darte información útil.",
-                "Lo que más me costó aprender fue dejar de buscar una señal perfecta antes de actuar. Quería garantías, quería que alguien me dijera qué producto lanzar, cuánto invertir y cuándo escalar, pero el ecommerce no funciona con esa claridad desde el primer día. Funciona con hipótesis pequeñas, pruebas controladas y ajustes que se acumulan. Por eso esta historia no va de hacerse rico rápido, va de sobrevivir a la parte confusa sin convertir cada fallo en una prueba de que no sirves. Si un producto no convierte, quizá el ángulo está mal. Si la gente hace clic pero no compra, quizá la tienda no sostiene la promesa del anuncio. Si nadie guarda el contenido, quizá el problema no es el algoritmo sino la oferta. Separar esas piezas me ayudó a respirar y a decidir con más calma. Guarda este post si necesitas recordar que avanzar no siempre se siente como avanzar mientras lo estás viviendo.",
-                "También hay algo que casi nadie dice: los meses malos suelen ser caros porque mezclan emoción con prisa. Cuando estás frustrado, cambias de producto demasiado rápido, tocas la tienda sin una razón clara, compras herramientas nuevas para sentir que estás haciendo algo y terminas más disperso que antes. El cambio real empezó cuando limité las decisiones. Un producto cada vez, una hipótesis clara, una métrica principal y un periodo suficiente para leer resultados. Eso no hace que todo funcione, pero reduce el caos y te permite distinguir un mal producto de una mala ejecución. En dropshipping, esa diferencia vale mucho. Si hoy estás probando sin estructura, no necesitas motivarte más: necesitas bajar el ruido, definir el criterio y dejar que los datos te digan qué parte corregir primero.",
-                "No tomes este carrusel como una promesa, tómalo como un mapa de errores comunes. La mayoría de principiantes abandona porque interpreta el silencio del mercado como un juicio personal, cuando muchas veces solo es feedback mal leído. Nadie compra porque el producto no queda claro, porque la oferta no justifica el precio, porque la web genera dudas o porque el contenido atrae a gente que mira pero no tiene intención de pagar. Cuando empiezas a nombrar el problema con precisión, dejas de sentir que todo está roto a la vez. Ahí aparece el progreso real: no en acertar siempre, sino en saber qué cambiar después de cada intento. Esa es la mentalidad que me habría ahorrado más tiempo al principio.",
-            )
-        if video_type == VideoType.TYPE_2:
-            return (
-                "La razón por la que estos cuatro puntos importan tanto es que funcionan como una prueba de presión antes de meter tráfico. Una tienda puede verse bonita en una captura y aun así romperse cuando llegan compradores reales: el margen se queda corto, la promesa del anuncio no coincide con la página, las dudas de envío aparecen demasiado tarde y el soporte se improvisa cuando ya hay dinero de por medio. Revisar esto antes no es perder tiempo, es comprar claridad. Si detectas un problema en cualquiera de las cuatro áreas, no lo tapes con más presupuesto. Corrígelo, vuelve a mirar la experiencia como si fueras cliente y pregúntate si tú comprarías sin conocer la marca. Esa pregunta incomoda, pero suele enseñar más que otra tarde mirando videos de tácticas.",
-                "Piensa en esta checklist como un filtro para tomar mejores decisiones, no como una lista decorativa. Si el margen real no aguanta, cualquier venta puede convertirse en un problema. Si la tienda no inspira confianza, el tráfico solo hará más visible la debilidad. Si el producto no resuelve un dolor concreto, el anuncio tendrá que exagerar para llamar la atención. Y si el soporte no está preparado, la primera duda del cliente puede transformarse en una devolución. Lo bueno es que estas áreas se pueden trabajar antes de gastar fuerte. Puedes recalcular precios, mejorar pruebas sociales, comparar productos con datos y preparar respuestas básicas. No es glamuroso, pero es exactamente lo que separa una prueba seria de una apuesta.",
-                "Muchos principiantes creen que el problema siempre está en el anuncio porque es la parte más visible. Pero un anuncio solo trae gente; no arregla márgenes, no construye confianza por ti y no convierte un producto débil en una oferta sólida. Antes de culpar al creativo, mira el recorrido completo. Qué ve la persona al entrar, qué dudas aparecen, qué promesa le hiciste, cuánto tarda en entender el beneficio y qué pasa después del pago. Cuando haces esa revisión, encuentras fugas que estaban escondidas a plena vista. A veces el ajuste no es cambiar todo, sino ordenar lo básico para que el tráfico tenga una oportunidad real de convertirse.",
-                "La ventaja de revisar estos puntos es que te obliga a pensar como negocio y no solo como creador de anuncios. Un negocio necesita margen, confianza, demanda y una experiencia mínima que no destruya lo que vendiste. Si falta una pieza, lo notarás tarde o temprano, normalmente cuando ya has gastado tiempo o dinero. Por eso conviene parar antes de escalar y hacer una auditoría honesta. No busques perfección; busca que nada importante esté roto. Una tienda simple pero clara suele ser más fuerte que una tienda cargada de trucos que no responde a las preguntas básicas del comprador.",
-            )
+        if video_type != VideoType.TYPE_3:
+            return ()
         return (
             "La clave de este stack no es que cada herramienta sea la única opción posible, sino que cada una cumple un trabajo concreto dentro del flujo. Shopify te da la base para vender, Dropradar te ayuda a investigar con datos, ChatGPT acelera guiones y ángulos, PayPal o Stripe reducen fricción en el cobro, CapCut mantiene la producción de contenido ligera e Instagram o TikTok te dan un lugar donde practicar la respuesta del mercado. Cuando entiendes el papel de cada herramienta, dejas de coleccionar apps y empiezas a construir una rutina. Esa rutina es lo que importa al principio: publicar, medir, ajustar y volver a probar sin convertir cada decisión en una semana de dudas.",
             "Empezar con pocas herramientas también protege tu atención. Al principio es muy fácil pensar que el siguiente plugin, plantilla o software va a resolver la falta de ventas, pero casi siempre el bloqueo está en otro sitio: no has validado bien el producto, no publicas contenido suficiente, no sabes qué dato mirar o cambias de idea antes de terminar una prueba. Un stack simple te obliga a mirar lo esencial. Qué vendes, por qué alguien lo compraría, cómo lo explicas, cómo cobras y cómo generas tráfico. Si esas preguntas no están claras, añadir más herramientas solo hace que el problema parezca más profesional, pero no más resuelto.",
@@ -1014,20 +878,8 @@ class ScriptGenerator:
         )
 
     def _social_description_expansions_en(self, video_type: VideoType) -> tuple[str, ...]:
-        if video_type == VideoType.TYPE_1:
-            return (
-                "The important part is not copying my numbers or expecting your first month to look like mine. The important part is understanding the sequence. First comes motivation, then the reality check, and then the slow skill of separating busy work from better decisions. If you only look at the final result, it seems like everything changed at once, but inside the process it was much slower: checking why a product did not sell, asking whether the ad attracted viewers or buyers, seeing if the store created trust and accepting that some tests had to be closed even when I liked the idea. That discipline is less exciting than showing screenshots, but it keeps you from repeating the same mistake for months. If you are in a similar stage, use this as a pause to organize your own process. Write down what you are testing, which metric matters and what you will change if the data comes back weak.",
-                "What took me the longest to learn was to stop waiting for a perfect signal before acting. I wanted guarantees, I wanted someone to tell me which product to launch, how much to spend and when to scale, but ecommerce does not start with that kind of clarity. It starts with small hypotheses, controlled tests and adjustments that compound. This story is not about getting rich quickly, it is about surviving the confusing part without treating every failed test as proof that you are not built for it. If a product does not convert, maybe the angle is wrong. If people click but do not buy, maybe the store does not support the promise. If nobody saves the content, maybe the problem is not the algorithm but the offer. Separating those pieces made the work calmer and more useful.",
-                "There is also a part almost nobody says clearly: bad months become expensive when emotion and urgency mix together. When you are frustrated, you switch products too fast, edit the store without a clear reason, buy new tools to feel productive and end up more scattered than before. The real change started when I limited the decisions. One product at a time, one clear hypothesis, one main metric and enough time to read the result. That does not make everything work, but it reduces the chaos and helps you tell the difference between a bad product and weak execution. In dropshipping, that difference matters a lot. If you are testing without structure, you may not need more motivation. You may need less noise and a clearer reason for the next move.",
-                "Do not read this carousel as a promise. Read it as a map of common mistakes. Most beginners quit because they treat silence from the market like a personal verdict, when it is often just feedback they have not learned to read yet. People may not buy because the product is unclear, because the offer does not justify the price, because the store creates doubt or because the content attracts people who watch but never intended to pay. When you name the problem more precisely, the whole project stops feeling broken at once. That is where real progress begins: not in always being right, but in knowing what to change after each attempt.",
-            )
-        if video_type == VideoType.TYPE_2:
-            return (
-                "These four points matter because they work like a pressure test before you send traffic. A store can look good in a screenshot and still break when real buyers arrive: the margin is too thin, the ad promise does not match the page, shipping doubts appear too late and support is improvised after money has already changed hands. Reviewing this first is not wasted time, it is clarity. If one of the four areas is weak, do not hide it under a bigger budget. Fix it, look at the experience like a customer and ask whether you would buy from the brand without knowing who is behind it. That question is uncomfortable, but it usually teaches more than another afternoon watching tactics.",
-                "Treat this checklist as a filter for better decisions, not as a decorative list. If the real margin does not hold, every sale can become a problem. If the store does not create trust, traffic only makes the weakness more visible. If the product does not solve a concrete problem, the ad has to exaggerate to get attention. And if support is not prepared, the first customer question can become a refund. The good news is that these areas can be improved before spending heavily. You can recalculate prices, improve social proof, compare products with data and prepare basic answers. It is not glamorous, but it is exactly what separates a serious test from a guess.",
-                "Many beginners assume the problem is always the ad because that is the most visible part. But an ad only brings people in; it does not fix margins, create trust for you or turn a weak product into a strong offer. Before blaming the creative, look at the whole path. What does the buyer see first, which doubts appear, what promise did you make, how quickly is the benefit clear and what happens after payment? When you review the full journey, you find leaks that were hiding in plain sight. Sometimes the answer is not changing everything. Sometimes it is making the basics solid enough for traffic to have a real chance.",
-                "The value of these checks is that they force you to think like a business, not only like someone making ads. A business needs margin, trust, demand and a minimum customer experience that does not destroy the sale after checkout. If one piece is missing, you will feel it sooner or later, usually after spending time or money. That is why it helps to pause before scaling and run an honest audit. Do not look for perfection; look for nothing important being obviously broken. A simple store with a clear offer is often stronger than a store full of tricks that cannot answer the buyer's basic questions.",
-            )
+        if video_type != VideoType.TYPE_3:
+            return ()
         return (
             "The value of this stack is not that every tool is the only possible option, but that each one has a clear job inside the workflow. Shopify gives you the selling base, Dropradar helps with product research, ChatGPT speeds up scripts and angles, PayPal or Stripe reduce payment friction, CapCut keeps content production light and Instagram or TikTok give you a place to practice market response. When you understand the role of each tool, you stop collecting apps and start building a routine. That routine is what matters at the beginning: publish, measure, adjust and test again without turning every decision into another week of doubt.",
             "Starting with fewer tools also protects your attention. It is easy to believe the next plugin, template or software will solve the lack of sales, but the real block is usually somewhere else: the product was not validated, you are not posting enough content, you do not know which metric to watch or you change ideas before finishing a test. A simple stack forces you to look at the essentials. What are you selling, why would someone buy it, how do you explain it, how do you take payment and how do you get traffic? If those questions are unclear, adding more tools only makes the problem look more professional, not more solved.",
@@ -1041,15 +893,7 @@ class ScriptGenerator:
         language: Language,
     ) -> str:
         if language == Language.EN:
-            if video_type == VideoType.TYPE_1:
-                return "Keep the focus on the process, not on the fantasy of a perfect result. One clear test, one useful metric and one honest adjustment can teach more than another week of random changes."
-            if video_type == VideoType.TYPE_2:
-                return "Use it as a quick audit before spending more. The goal is not to make the store perfect, but to remove the obvious leaks before traffic makes them expensive."
             return "Keep the setup simple enough to repeat. The tools only matter when they help you publish, measure and improve with less friction every week."
-        if video_type == VideoType.TYPE_1:
-            return "Quédate con el proceso, no con la fantasía de un resultado perfecto. Una prueba clara, una métrica útil y un ajuste honesto enseñan más que otra semana de cambios aleatorios."
-        if video_type == VideoType.TYPE_2:
-            return "Úsalo como auditoría rápida antes de gastar más. La meta no es tener una tienda perfecta, sino quitar las fugas evidentes antes de que el tráfico las vuelva caras."
         return "Mantén el sistema lo bastante simple como para repetirlo. Las herramientas importan cuando te ayudan a publicar, medir y mejorar con menos fricción cada semana."
 
     def _social_copy_variants_es(
@@ -1073,16 +917,6 @@ class ScriptGenerator:
                     "Si estás empezando con dropshipping y sientes que todo va demasiado lento, lee esto antes de pensar que el problema eres tú. Yo pasé meses enteros creyendo que no valía para esto, me levantaba temprano, cerraba tarde, abría y cerraba la tienda una y otra vez, probaba productos que veía en TikTok y seguía esperando ese momento mágico en el que los pedidos empezaran a entrar solos. Nunca llegó, porque lo estaba haciendo sin ningún criterio real. El bloqueo no era trabajar poco, era trabajar sin método, probar productos sin pensarlos, copiar tiendas sin entenderlas y no saber qué datos mirar hacía que cada mes se pareciera demasiado al anterior. Cuando por fin tuve un sistema claro para elegir mejor, cada prueba me devolvía información útil en vez de solo restarme dinero. El cambio no fue espectacular, fue progresivo, y eso es precisamente lo que lo hizo sostenible. Este carrusel es lo que me habría gustado ver cuando pensaba en rendirme, porque muchas veces el problema no es la constancia, es la falta de criterio para saber qué toca probar esta semana.",
                     ["#dropshipping", "#negociosonline", "#ecommercetips", "#shopify", "#dropradar"],
                 ),
-                "es4": (
-                    "Mis numeros cambiaron cuando cambie el metodo",
-                    "El salto no vino del producto perfecto ni de una tienda impecable a la primera, vino de aceptar algo bastante incómodo, que mi gusto personal no era una estrategia. Durante meses elegí productos porque a mí me gustaban, porque los veía bonitos o porque alguien los mencionaba en un reel, y el resultado era el que todos conocemos en silencio, mucho esfuerzo, poca venta y cero aprendizaje claro. Cuando por fin empecé a comparar datos, mirar demanda real, creativos, tendencia y señales de venta, todo se volvió menos emocional y más ordenado. Tomé decisiones con menos ego y los números empezaron a moverse en una dirección que, por primera vez, podía explicar con cabeza. Para mí esa fue la diferencia real entre adivinar y construir un proceso que se puede repetir mes a mes. No soy un caso extraordinario, soy un caso medianamente constante, y creo que ese es el tipo de historia que más le sirve a alguien que está pensando en empezar, porque evita la parte más cara del proceso, que es perder meses confundiendo gusto personal con estrategia real.",
-                    ["#emprendimiento", "#dropshipping", "#productoganador", "#ecommerce", "#dropradar"],
-                ),
-                "es5": (
-                    "Cuanto facturé realmente con Dropshipping",
-                    "Este carrusel resume una parte que casi nunca se cuenta con calma, los meses donde abres la tienda, te ilusionas con cada visita y aun así no entra dinero suficiente para justificar todo el esfuerzo. Al principio yo confundía movimiento con progreso, tocar la web, cambiar textos, mirar productos y revisar estadísticas cada rato me hacía sentir ocupado, pero no me acercaba a una decisión mejor. La diferencia llegó cuando dejé de buscar el producto perfecto por intuición y empecé a mirar datos con más humildad, demanda, anuncios que ya estaban funcionando, margen y señales reales de compra. Dropradar no convirtió el proceso en magia, pero sí me dio una forma más ordenada de filtrar antes de gastar. Eso cambió mi cabeza más que mis números al principio, porque cada prueba dejó de ser una apuesta emocional y empezó a ser una decisión que podía entender. Si estás en esa fase rara de trabajar mucho y facturar poco, quizá no te falta motivación, quizá te falta un criterio más limpio para elegir qué probar.",
-                    ["#dropshipping", "#facturacion", "#ecommerce", "#productresearch", "#dropradar"],
-                ),
             }
         if video_type == VideoType.TYPE_2:
             return {
@@ -1100,16 +934,6 @@ class ScriptGenerator:
                     "Antes de lanzar anuncios revisa esto",
                     "Muchos fallos no vienen del producto en sí, vienen de lanzar sin tener los números claros, sin estructura y sin un criterio real para decidir qué probar. Antes de gastar un euro en anuncios conviene revisar cosas básicas con calma. ¿Tu margen real aguanta comisiones, devoluciones y coste de adquisición? ¿Tu tienda transmite confianza en los primeros segundos, tanto en móvil como en ordenador? ¿Tu producto se eligió mirando datos o solo porque era bonito en la foto del proveedor? ¿Tienes una respuesta preparada cuando el primer cliente escriba con dudas sobre envío o devolución? Un buen producto ayuda, pero una estructura floja puede matar la venta antes incluso de que empiece. Todo esto parece básico cuando lo lees, pero en la práctica la mayoría lanza con una o dos de estas piezas a medio hacer. Esta checklist no es teoría bonita, es el tipo de revisión práctica que conviene hacer antes de meter más presupuesto o asumir que el problema es solo el creativo del anuncio en ese momento concreto de la semana.",
                     ["#dropshipping", "#marketingdigital", "#shopifytips", "#negociosonline", "#dropradar"],
-                ),
-                "es4": (
-                    "4 lecciones para no empezar a ciegas",
-                    "Si llevas un tiempo probando productos al azar, cambia el enfoque antes de seguir quemando presupuesto sin aprender nada. El dropshipping se vuelve mucho más claro cuando entiendes qué revisar primero, números reales, percepción de marca, demanda real en el mercado y experiencia del cliente después del cobro. No es cuestión de tener la tienda más bonita ni el producto más viral, es cuestión de entender qué hace que una tienda funcione en el día a día, más allá del anuncio inicial que te trajo la primera venta. Cuando cada decisión parte de un criterio en vez de una corazonada, todo se vuelve más ordenado y los fallos dejan de ser golpes inesperados para convertirse en información útil que puedes usar al mes siguiente. Este video no es teoría bonita ni motivación vacía, es una guía rápida para evitar los errores que más caros se pagan al principio. Si una de las cuatro partes te pilla dudando, probablemente ese sea el lugar exacto por el que empezar esta semana, antes de tocar presupuestos o cambiar de producto una vez más sin tener la base revisada.",
-                    ["#ecommerce", "#dropshippingespana", "#emprendedores", "#ventasonline", "#dropradar"],
-                ),
-                "es5": (
-                    "Antes de gastar mas en tu tienda",
-                    "Antes de meter más dinero en anuncios, revisa si la base de la tienda tiene sentido de verdad. Muchas veces el problema no es que falte presupuesto, es que estás empujando tráfico hacia una estructura que todavía no está preparada para convertir. Si el margen real no aguanta comisiones, devoluciones y coste de adquisición, cada venta puede parecer buena en pantalla y seguir siendo mala para tu bolsillo. Si la web no transmite confianza, el cliente se va antes de leer tu oferta. Si eliges productos por intuición, cada prueba se parece demasiado a una apuesta. Y si después del pago no hay soporte claro, cualquier duda puede terminar en reembolso o disputa. Estas cuatro partes no son espectaculares, pero son las que hacen que una tienda sobreviva cuando empieza a llegar tráfico real. Guárdalo como una revisión rápida para no seguir arreglando solo el anuncio cuando la fuga quizá está mucho antes.",
-                    ["#dropshippingtips", "#tiendaonline", "#marketingdigital", "#ecommerce", "#dropradar"],
                 ),
             }
         return {
@@ -1161,16 +985,6 @@ class ScriptGenerator:
                     "If you are starting out and feel like things are painfully slow, watch this before blaming yourself for the results on the screen. I spent a long time thinking I was not built for this, I woke up early, stayed up late, opened and closed the store countless times and tested random products I saw trending on TikTok. The sales did not come, not because I was lazy, but because I had no real system behind my choices. Testing products without criteria, copying stores without understanding them and ignoring the data you should actually watch keeps every month looking too similar to the last one. A cleaner decision system will not make dropshipping easy overnight, but it makes every test more useful and every loss less expensive because you can explain it. The shift was not dramatic, it was gradual, and that is exactly why it became sustainable for me. This carousel is the version of the story I wish I had seen during the months I was that close to giving up, and if any slide here feels familiar, take it as a sign that your problem is probably not effort.",
                     ["#dropshipping", "#ecommercejourney", "#shopifystore", "#onlineincome", "#dropradar"],
                 ),
-                "en4": (
-                    "The lesson my first sales taught me",
-                    "The product was only part of it, and that took me longer to accept than I would like to admit out loud. The real unlock was understanding that personal taste is not a strategy and that every time I chose a product because I liked it, I was rolling a dice with my own money without even noticing. Once I stepped back from that ego and started picking with cleaner data around demand, creatives, competition and real sales signals, the whole thing shifted. Dropshipping started feeling less like gambling and more like a process I could actually improve over time, my wins were easier to repeat and my losses finally made sense. I was not smarter than before, I just had a better way of asking questions about a product before spending real money on it. You do not need to become obsessed with analytics to see a difference, you just need enough structure to stop trusting pure gut feeling alone. If you keep hitting walls without knowing why, this carousel might give you the order of decisions I wish I had found earlier.",
-                    ["#ecommerce", "#dropshippingbusiness", "#digitalbusiness", "#shopifytips", "#dropradar"],
-                ),
-                "en5": (
-                    "How much I really billed dropshipping",
-                    "This carousel is about the part that rarely looks clean while you are living it, opening the store, getting excited about every visitor and still not making enough money to justify the hours. At first I confused movement with progress. Changing the site, rewriting copy, scrolling products and checking analytics made me feel busy, but it did not make my decisions any better. The shift came when I stopped chasing products by instinct and started looking at cleaner signals, demand, working ads, margin and real buying intent. Dropradar did not make the process magic, but it gave me a calmer way to filter before spending. That changed my mindset before it changed the numbers, because every test stopped feeling like an emotional bet and became something I could explain. If you are working hard but billing very little, the missing piece might not be motivation. It might be a better reason for choosing what to test next.",
-                    ["#dropshipping", "#ecommercejourney", "#productresearch", "#onlineincome", "#dropradar"],
-                ),
             }
         if video_type == VideoType.TYPE_2:
             return {
@@ -1188,16 +1002,6 @@ class ScriptGenerator:
                     "Watch this before running ads",
                     "A lot of stores fail before traffic even has a fair chance, because the numbers and product logic were never clear in the first place. Before running ads, it is worth checking a few things honestly and with calm. Can your margin really survive platform fees, refunds and acquisition costs at the same time? Does the store build trust within the first few seconds on both mobile and desktop? Was the product chosen using data or just because it looked cool on your screen while scrolling? Do you have at least a basic answer prepared for when a buyer writes asking about shipping or refunds the first week? A good product helps, but a weak setup can kill the sale before the buyer even gets close to checkout. All of this sounds basic when you read it, yet most people launch with one or two of these pieces half done. This checklist is not theory, it is the type of quick review worth doing before spending more money or assuming the creative is the only problem on the store right now that you should be fixing.",
                     ["#dropshippingtips", "#ecommercemarketing", "#shopifytips", "#digitalmarketing", "#dropradar"],
-                ),
-                "en4": (
-                    "4 lessons so you do not start blind",
-                    "If you have been testing random products for a while, change the approach before burning more budget without learning anything that you can actually reuse later. Dropshipping becomes clearer once you know what to check first, real numbers, perceived trust, actual demand in the market and the customer experience after checkout. It is not about having the prettiest store or the most viral product, it is about understanding what makes a store work day after day, beyond the hype of a single ad or a single lucky week. When every decision comes from a reason instead of a feeling, the losses become information instead of random hits and you stop reacting to every noise on social media. You stop reacting and start improving. This is a short practical guide for avoiding the beginner mistakes that end up costing the most. If one of the four points here catches you hesitating, that is probably the exact place worth starting this week before touching anything else in the store or in the creatives this week.",
-                    ["#dropshipping", "#ecommercebusiness", "#entrepreneurtips", "#onlinestore", "#dropradar"],
-                ),
-                "en5": (
-                    "Check this before spending more",
-                    "Before putting more money into ads, check whether the base of the store actually makes sense. A lot of the time the problem is not a lack of budget, it is sending traffic into a setup that is not ready to convert. If the real margin cannot survive fees, refunds and acquisition cost, every order can look good on the dashboard and still be bad for your pocket. If the website does not build trust, the buyer leaves before the offer has a chance. If the product was chosen on instinct, every test becomes too close to a gamble. And if support is unclear after payment, a simple question can become a refund or dispute. These four areas are not flashy, but they are what help a store survive when real traffic arrives. Save this as a quick review before blaming only the creative again.",
-                    ["#dropshippingtips", "#shopifystore", "#ecommerce", "#digitalmarketing", "#dropradar"],
                 ),
             }
         return {

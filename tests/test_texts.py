@@ -400,6 +400,7 @@ def test_consecutive_generations_differ(state_dir):
     first = generator.generate(VideoType.TYPE_1, Language.ES)
     # Persist the previous signature like the service does.
     generator.state.set_last_signature(VideoType.TYPE_1, Language.ES, first.signature)
+    generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, first.choice_key)
     generator.state.remember_signature(
         VideoType.TYPE_1, Language.ES, first.signature
     )
@@ -408,16 +409,17 @@ def test_consecutive_generations_differ(state_dir):
 
 
 @pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
-def test_type_1_and_2_have_many_script_variants(state_dir, video_type):
+def test_type_1_and_2_have_exactly_three_script_variants(state_dir, video_type):
     generator = _make_generator(state_dir)
     signatures: set[str] = set()
     for _ in range(12):
         package = generator.generate(video_type, Language.ES)
         generator.state.set_last_signature(video_type, Language.ES, package.signature)
+        generator.state.set_last_text_choice(video_type, Language.ES, package.choice_key)
         generator.state.remember_signature(video_type, Language.ES, package.signature)
         signatures.add(package.signature)
 
-    assert len(signatures) >= 10
+    assert len(signatures) == 3
 
 
 def test_type_3_has_tool_stack_without_hosting(state_dir):
@@ -558,44 +560,67 @@ def test_social_hashtags_shuffle_order(monkeypatch):
     assert hashtags[0] == "#dropshipping"
 
 
-@pytest.mark.parametrize(
-    ("video_type", "language"),
-    [
-        (VideoType.TYPE_1, Language.ES),
-        (VideoType.TYPE_2, Language.ES),
-        (VideoType.TYPE_3, Language.ES),
-        (VideoType.TYPE_1, Language.EN),
-        (VideoType.TYPE_2, Language.EN),
-        (VideoType.TYPE_3, Language.EN),
-    ],
-)
-def test_social_copy_has_many_rotating_descriptions_with_varied_lengths(state_dir, video_type, language):
+@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
+@pytest.mark.parametrize("language", [Language.ES, Language.EN])
+def test_type_1_and_2_social_copy_has_exactly_three_defined_variants(
+    state_dir,
+    video_type,
+    language,
+):
     generator = _make_generator(state_dir)
     variants = generator._social_copy_variants(video_type, language)
+
+    lengths = [len(description) for _, description, _ in variants.values()]
+    assert len(variants) == 3
+    assert all(500 <= length <= 3500 for length in lengths)
+    assert generator._social_title_variants(video_type, language) == {}
+
+    first_key, first_copy = generator._choose_social_copy_for_text_choice(
+        video_type,
+        language,
+        "a",
+    )
+    second_key, second_copy = generator._choose_social_copy_for_text_choice(
+        video_type,
+        language,
+        "b",
+    )
+
+    assert generator._copy_choice_from_social_key(first_key) == list(variants)[0]
+    assert generator._copy_choice_from_social_key(second_key) == list(variants)[1]
+    assert second_copy.description != first_copy.description
+
+
+@pytest.mark.parametrize("language", [Language.ES, Language.EN])
+def test_type_3_social_copy_keeps_rotating_descriptions_with_varied_lengths(
+    state_dir,
+    language,
+):
+    generator = _make_generator(state_dir)
+    variants = generator._social_copy_variants(VideoType.TYPE_3, language)
 
     lengths = [len(description) for _, description, _ in variants.values()]
     assert len(variants) >= 8
     assert all(500 <= length <= 3500 for length in lengths)
     assert len(set(lengths)) >= 4
 
-    first_key, first_copy = generator._choose_social_copy(video_type, language)
+    first_key, first_copy = generator._choose_social_copy(VideoType.TYPE_3, language)
     generator.state.set_last_social_choice(
-        video_type,
+        VideoType.TYPE_3,
         language,
         generator._copy_choice_from_social_key(first_key),
     )
-    second_key, second_copy = generator._choose_social_copy(video_type, language)
+    second_key, second_copy = generator._choose_social_copy(VideoType.TYPE_3, language)
 
     assert generator._copy_choice_from_social_key(second_key) != generator._copy_choice_from_social_key(first_key)
     assert second_copy.description != first_copy.description
 
 
-@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3])
 @pytest.mark.parametrize("language", [Language.ES, Language.EN])
-def test_social_copy_has_many_title_variants(state_dir, video_type, language):
+def test_type_3_social_copy_has_many_title_variants(state_dir, language):
     generator = _make_generator(state_dir)
 
-    titles = generator._social_title_variants(video_type, language)
+    titles = generator._social_title_variants(VideoType.TYPE_3, language)
 
     assert len(titles) >= 12
     assert len(set(titles.values())) == len(titles)

@@ -55,6 +55,8 @@ FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 40
 HOOK_BASE_FONT_SIZE = 126
 HOOK_MIN_FONT_SIZE = 54
 HOOK_SIDE_MARGIN = 48
+SAFE_TEXT_TOP_MARGIN = 132
+SAFE_TEXT_BOTTOM_MARGIN = 150
 TYPE_3_TOOL_BADGES: dict[str, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
     "shopify": ("Shopify", (255, 255, 255), (92, 156, 55)),
     "dropradar": ("Dropradar", (163, 245, 48), (20, 20, 20)),
@@ -1416,8 +1418,28 @@ class VideoRenderer:
             if best_lines is not None:
                 return font, best_lines
 
-        font = load_font(min_size, True)
-        return font, self._wrap_text(text, font, max_width, draw, stroke_width=stroke_width)[:2]
+        emergency_min_size = max(18, int(min_size * 0.65))
+        for size in range(min_size, emergency_min_size - 1, -2):
+            font = load_font(size, True)
+            lines = self._wrap_text(
+                text,
+                font,
+                max_width,
+                draw,
+                stroke_width=stroke_width,
+            )
+            height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+            if height <= max_height:
+                return font, lines
+
+        font = load_font(emergency_min_size, True)
+        return font, self._wrap_text(
+            text,
+            font,
+            max_width,
+            draw,
+            stroke_width=stroke_width,
+        )
 
     def _draw_caption_card_text(
         self,
@@ -1560,8 +1582,9 @@ class VideoRenderer:
         else:
             return start_y
         screen_top = int(canvas_height * 0.525)
-        max_start_y = max(0, screen_top - margin - block_height)
-        return min(start_y, max_start_y)
+        min_y, _max_y = self._safe_text_vertical_bounds(canvas_height, block_height)
+        max_start_y = max(min_y, screen_top - margin - block_height)
+        return max(min_y, min(start_y, max_start_y))
 
     def _scaled_text_size(self, base_size: int, *, minimum: int) -> int:
         return max(minimum, _scale_x(base_size, self.settings.width))
@@ -1733,10 +1756,7 @@ class VideoRenderer:
         preferred_centers: tuple[float, ...],
     ) -> int:
         width, height = image.size
-        top_margin = max(16, _scale_y(70, height))
-        bottom_margin = max(16, _scale_y(110, height))
-        min_y = top_margin
-        max_y = max(min_y, height - block_height - bottom_margin)
+        min_y, max_y = self._safe_text_vertical_bounds(height, block_height)
         regions = self._text_avoid_regions(image)
         centers = list(preferred_centers)
         centers.extend(value / 100.0 for value in range(18, 84, 4))
@@ -1780,6 +1800,17 @@ class VideoRenderer:
             ),
         )
         return best_y
+
+    @staticmethod
+    def _safe_text_vertical_bounds(
+        canvas_height: int,
+        block_height: int,
+    ) -> tuple[int, int]:
+        top_margin = max(16, _scale_y(SAFE_TEXT_TOP_MARGIN, canvas_height))
+        bottom_margin = max(16, _scale_y(SAFE_TEXT_BOTTOM_MARGIN, canvas_height))
+        min_y = top_margin
+        max_y = max(min_y, canvas_height - block_height - bottom_margin)
+        return min_y, max_y
 
     def _clear_gap_text_candidates(
         self,
