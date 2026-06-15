@@ -25,5 +25,6 @@ COPY . .
 RUN mkdir -p /app/data/downloads /app/data/outputs /app/data/state
 
 VOLUME ["/app/data"]
+EXPOSE 8000
 
 CMD ["python", "-m", "app.main"]

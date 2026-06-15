@@ -156,7 +156,9 @@ class ImageSelector:
             return self._create_type_1_plan(catalog, language)
         if video_type == VideoType.TYPE_2:
             return self._create_type_2_plan(catalog, language)
-        return self._create_type_3_plan(catalog, language)
+        if video_type == VideoType.TYPE_3:
+            return self._create_type_3_plan(catalog, language)
+        raise ValueError(f"El tipo {video_type.value} no usa selector de Instagram.")
 
     def pick_extra_image(
         self,

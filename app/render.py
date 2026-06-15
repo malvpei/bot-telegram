@@ -179,6 +179,13 @@ TYPE_4_TEMPLATE_ROWS: tuple[
     ("ads", "meta_ads", "Meta Ads", 120, 1329, 127, 82, 306, 1300, 170, 507, 1363, 45),
     ("editing", "capcut", "CapCut", 92, 1504, 216, 82, 368, 1476, 130, 542, 1530, 47),
 )
+TYPE_4_STORY_CAPTION_ROLES = {
+    SlideRole.STORY_MCDONALD,
+    SlideRole.STORY_BUILDING_STORE,
+    SlideRole.STORY_FIRST_FAILURE,
+    SlideRole.STORY_DEEP_FAILURE,
+    SlideRole.STORY_DROPRADAR,
+}
 
 
 def _scale_x(value: int, width: int) -> int:
@@ -1576,6 +1583,8 @@ class VideoRenderer:
         self,
         slide: SlidePlan | None,
     ) -> tuple[float, ...]:
+        if slide is not None and slide.role in TYPE_4_STORY_CAPTION_ROLES:
+            return (0.20, 0.24, 0.16, 0.28, 0.32)
         if (
             slide is not None and slide.fixed_asset and slide.role == SlideRole.TIP3
         ):

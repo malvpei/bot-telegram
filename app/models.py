@@ -9,6 +9,7 @@ class VideoType(str, Enum):
     TYPE_1 = "1"
     TYPE_2 = "2"
     TYPE_3 = "3"
+    TYPE_4 = "4"
 
 
 class VideoGender(str, Enum):
@@ -39,6 +40,13 @@ class SlideRole(str, Enum):
     TOOL_PAYMENTS = "tool_payments"
     TOOL_EDITING = "tool_editing"
     TOOL_MARKETING = "tool_marketing"
+    STORY_MCDONALD = "story_mcdonald"
+    STORY_BUILDING_STORE = "story_building_store"
+    STORY_FIRST_FAILURE = "story_first_failure"
+    STORY_DEEP_FAILURE = "story_deep_failure"
+    STORY_DROPRADAR = "story_dropradar"
+    STORY_SUCCESS_COMIC = "story_success_comic"
+    STORY_ORIGINAL_REFERENCE = "story_original_reference"
 
 
 TYPE_1_ROLES: tuple[SlideRole, ...] = (
@@ -69,6 +77,16 @@ TYPE_3_ROLES: tuple[SlideRole, ...] = (
     SlideRole.TOOL_MARKETING,
 )
 
+TYPE_4_ROLES: tuple[SlideRole, ...] = (
+    SlideRole.STORY_MCDONALD,
+    SlideRole.STORY_BUILDING_STORE,
+    SlideRole.STORY_FIRST_FAILURE,
+    SlideRole.STORY_DEEP_FAILURE,
+    SlideRole.STORY_DROPRADAR,
+    SlideRole.STORY_SUCCESS_COMIC,
+    SlideRole.STORY_ORIGINAL_REFERENCE,
+)
+
 FIXED_ROLE_BY_TYPE: dict[VideoType, SlideRole] = {
     VideoType.TYPE_1: SlideRole.FEBRUARY,
     VideoType.TYPE_2: SlideRole.TIP3,
@@ -85,6 +103,7 @@ class VideoRequest:
     gender: VideoGender = VideoGender.MALE
     skip_accounts: list[str] = field(default_factory=list)
     lowercase_text: bool = False
+    reference_image_path: Path | None = None
 
 
 @dataclass

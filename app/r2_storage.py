@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import mimetypes
 from pathlib import Path
 
 from app.config import Settings
 
 
 R2_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
+R2_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif"}
 R2_ACCESS_KEY_ID_LENGTH = 32
 
 
@@ -46,9 +48,75 @@ class R2StorageClient:
         return sorted(objects, key=lambda item: item.key)[0]
 
     def list_videos(self, prefix: str) -> list[R2Object]:
+        return self._list_objects_by_extension(prefix, R2_VIDEO_EXTENSIONS)
+
+    def list_images(self, prefix: str) -> list[R2Object]:
+        return self._list_objects_by_extension(prefix, R2_IMAGE_EXTENSIONS)
+
+    def upload_bytes(
+        self,
+        key: str,
+        data: bytes,
+        *,
+        content_type: str | None = None,
+    ) -> R2Object:
+        normalized_key = self._normalize_key(key)
+        resolved_content_type = (
+            content_type
+            or mimetypes.guess_type(normalized_key)[0]
+            or "application/octet-stream"
+        )
+        self._boto_client().put_object(
+            Bucket=self.settings.r2_bucket,
+            Key=normalized_key,
+            Body=data,
+            ContentType=resolved_content_type,
+        )
+        return R2Object(key=normalized_key, size=len(data))
+
+    def download_bytes(self, key: str) -> tuple[bytes, str]:
+        normalized_key = self._normalize_key(key)
+        response = self._boto_client().get_object(
+            Bucket=self.settings.r2_bucket,
+            Key=normalized_key,
+        )
+        body = response["Body"].read()
+        content_type = str(
+            response.get("ContentType")
+            or mimetypes.guess_type(normalized_key)[0]
+            or "application/octet-stream"
+        )
+        return body, content_type
+
+    def object_exists(self, key: str) -> bool:
+        try:
+            self._boto_client().head_object(
+                Bucket=self.settings.r2_bucket,
+                Key=self._normalize_key(key),
+            )
+        except Exception as error:  # noqa: BLE001 - boto3 exceptions are dynamic.
+            response = getattr(error, "response", {})
+            error_data = response.get("Error", {}) if isinstance(response, dict) else {}
+            metadata = (
+                response.get("ResponseMetadata", {}) if isinstance(response, dict) else {}
+            )
+            code = str(error_data.get("Code", ""))
+            status = metadata.get("HTTPStatusCode")
+            if status == 404:
+                return False
+            if code in {"404", "NoSuchKey", "NotFound"}:
+                return False
+            raise
+        return True
+
+    def _list_objects_by_extension(
+        self,
+        prefix: str,
+        extensions: set[str],
+    ) -> list[R2Object]:
         client = self._boto_client()
         paginator = client.get_paginator("list_objects_v2")
-        videos: list[R2Object] = []
+        objects: list[R2Object] = []
         for page in paginator.paginate(
             Bucket=self.settings.r2_bucket,
             Prefix=prefix.strip().lstrip("/"),
@@ -57,10 +125,10 @@ class R2StorageClient:
                 key = str(item.get("Key") or "")
                 if not key or key.endswith("/"):
                     continue
-                if Path(key).suffix.lower() not in R2_VIDEO_EXTENSIONS:
+                if Path(key).suffix.lower() not in extensions:
                     continue
-                videos.append(R2Object(key=key, size=int(item.get("Size") or 0)))
-        return videos
+                objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
+        return objects
 
     def download(self, key: str, destination: Path) -> Path:
         destination.parent.mkdir(parents=True, exist_ok=True)
@@ -70,6 +138,15 @@ class R2StorageClient:
             str(destination),
         )
         return destination
+
+    @staticmethod
+    def _normalize_key(key: str) -> str:
+        normalized = key.strip().replace("\\", "/").lstrip("/")
+        if not normalized or normalized.endswith("/"):
+            raise R2StorageError("La clave R2 no puede estar vacia.")
+        if any(part == ".." for part in normalized.split("/")):
+            raise R2StorageError("La clave R2 no puede contener '..'.")
+        return normalized
 
     def _boto_client(self):
         if not self.is_configured:

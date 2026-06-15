@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import NetworkError, RetryAfter, TelegramError
@@ -13,6 +15,8 @@ from telegram.ext import (
     CommandHandler,
     ContextTypes,
     ConversationHandler,
+    MessageHandler,
+    filters,
 )
 
 from app.accounts import (
@@ -32,7 +36,7 @@ from app.service import VideoCreationService
 from app.state import StateStore
 
 
-GENDER_STATE, TYPE_STATE, LANGUAGE_STATE, LOWERCASE_STATE = range(4)
+GENDER_STATE, TYPE_STATE, LANGUAGE_STATE, LOWERCASE_STATE, STORY_PHOTO_STATE = range(5)
 REGENERATE_ACCEPT = "regen:accept"
 REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
@@ -80,10 +84,12 @@ def run_bot() -> None:
         entry_points=[
             CommandHandler("create", create_command),
             CommandHandler("wizard", create_command),
+            CommandHandler("story_carousel", story_carousel_command),
         ],
         states={
             GENDER_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
+                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:4$"),
                 CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:"),
             ],
             TYPE_STATE: [
@@ -97,6 +103,9 @@ def run_bot() -> None:
             LOWERCASE_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(wizard_lowercase, pattern=r"^wizard:lowercase:"),
+            ],
+            STORY_PHOTO_STATE: [
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, wizard_story_photo),
             ],
         },
         fallbacks=[CommandHandler("cancel", wizard_cancel)],
@@ -145,6 +154,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
         "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
+        "/story_carousel - crear carrusel IA comic desde una foto\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
@@ -164,14 +174,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Flujo:\n"
         "1. /create\n"
         "2. elige Hombres o Mujeres\n"
-        "3. elige Tipo 1, Tipo 2 o Tipo 3\n"
+        "3. elige Tipo 1, Tipo 2, Tipo 3 o Tipo 4\n"
         "4. elige Español o English\n"
         "5. elige si quieres textos normales o todo en minúscula\n"
         "6. el bot usa el pool si hay stock o busca dinamicamente si falta\n\n"
         "Tipos:\n"
         "1 = historia de 7 imágenes (slide 6 = tip3_dropradar.jpg, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = tip3_dropradar.jpg, tip3)\n"
-        "3 = hook + herramientas para empezar dropshipping en 2026\n\n"
+        "3 = hook + herramientas para empezar dropshipping en 2026\n"
+        "4 = carrusel IA estilo comic desde una foto de referencia "
+        "(6 escenas generadas + foto original)\n\n"
         "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
         "accounts_women.txt (una por línea). Para cambiarlas edita el archivo "
         "y guarda; se releen en cada /create.\n\n"
@@ -521,6 +533,19 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     )
 
 
+async def story_carousel_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    if not await _ensure_allowed(update):
+        return ConversationHandler.END
+    _prepare_story_carousel_state(context)
+    await update.effective_message.reply_text(
+        "Mandame la foto de referencia y creo el carrusel IA estilo comic."
+    )
+    return STORY_PHOTO_STATE
+
+
 async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not await _ensure_allowed(update):
         return ConversationHandler.END
@@ -544,14 +569,20 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         "Video tools R2 EN",
                         callback_data=TEMPLATE_VIDEO_CREATE_EN,
                     ),
-                ]
+                ],
+                [
+                    InlineKeyboardButton(
+                        "Carrusel IA desde foto",
+                        callback_data="wizard:type:4",
+                    ),
+                ],
             ]
         )
         await update.effective_message.reply_text(
             (
                 "Que quieres crear?\n\n"
-                "No encontre cuentas cargadas, asi que por ahora solo esta "
-                "disponible el video de herramientas R2."
+                "No encontre cuentas cargadas, asi que por ahora estan "
+                "disponibles el video de herramientas R2 y el carrusel IA desde foto."
             ),
             reply_markup=keyboard,
         )
@@ -578,7 +609,13 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"Mujeres ({len(accounts_by_gender[VideoGender.FEMALE])})",
                     callback_data="wizard:gender:female",
                 ),
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    "Carrusel IA desde foto",
+                    callback_data="wizard:type:4",
+                ),
+            ],
         ]
     )
     await update.effective_message.reply_text(
@@ -623,6 +660,12 @@ async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 InlineKeyboardButton("Tipo 1", callback_data="wizard:type:1"),
                 InlineKeyboardButton("Tipo 2", callback_data="wizard:type:2"),
                 InlineKeyboardButton("Tipo 3", callback_data="wizard:type:3"),
+            ],
+            [
+                InlineKeyboardButton(
+                    "Tipo 4 - Carrusel IA",
+                    callback_data="wizard:type:4",
+                ),
             ]
         ]
     )
@@ -644,6 +687,13 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         await query.edit_message_text("Tipo no reconocido. Lanza /create otra vez.")
         return ConversationHandler.END
     context.user_data["video_type"] = raw_type
+
+    if raw_type == VideoType.TYPE_4.value:
+        _prepare_story_carousel_state(context)
+        await query.edit_message_text(
+            "Perfecto. Mandame la foto de referencia y creo el carrusel IA estilo comic."
+        )
+        return STORY_PHOTO_STATE
 
     keyboard = InlineKeyboardMarkup(
         [
@@ -747,6 +797,41 @@ async def wizard_lowercase(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         f"Preparando video de {_gender_label_plural(gender)} tipo "
         f"{video_type.value} en {language.value} "
         f"con {len(accounts)} cuentas ({lowercase_line})."
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
+
+
+async def wizard_story_photo(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    if not await _ensure_allowed(update):
+        return ConversationHandler.END
+    message = update.effective_message
+    if message is None:
+        return STORY_PHOTO_STATE
+
+    try:
+        reference_path = await _download_story_reference_photo(update, context)
+    except Exception as error:
+        LOGGER.exception("Story reference photo download failed")
+        await message.reply_text(f"No pude descargar la foto.\n\n{error}")
+        return STORY_PHOTO_STATE
+
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.TYPE_4,
+        language=Language.ES,
+        account_inputs=[],
+        gender=VideoGender.MALE,
+        lowercase_text=False,
+        reference_image_path=reference_path,
+    )
+    await message.reply_text(
+        "Foto recibida. Voy a generar las 6 escenas IA y preparar la original como cierre."
     )
     await _execute_job(update, context, request)
     _clear_wizard_state(context)
@@ -869,12 +954,18 @@ async def _execute_job(
     request: VideoRequest,
 ) -> None:
     chat = update.effective_chat
-    status_message = await context.bot.send_message(
-        chat_id=chat.id,
-        text=(
+    if request.video_type == VideoType.TYPE_4:
+        status_text = (
+            "Estoy generando el carrusel IA. Esto puede tardar porque son 6 escenas."
+        )
+    else:
+        status_text = (
             "Estoy seleccionando imagenes. Uso el pool si hay stock; "
             "si no, busco dinamicamente una cuenta viable."
-        ),
+        )
+    status_message = await context.bot.send_message(
+        chat_id=chat.id,
+        text=status_text,
     )
     service: VideoCreationService = context.application.bot_data["service"]
 
@@ -885,18 +976,28 @@ async def _execute_job(
         await status_message.edit_text(f"No pude generar el video.\n\n{error}")
         return
 
-    header = (
-        f"Cuenta elegida: @{result.chosen_account}\n"
-        f"Protagonista: {_gender_label_plural(request.gender)}\n"
-        f"Tipo: {result.video_type.value}\n"
-        f"Idioma: {result.language.value}"
-    )
+    if result.video_type == VideoType.TYPE_4:
+        header = (
+            "Carrusel IA listo\n"
+            "Tipo: 4\n"
+            "Fuente: foto de referencia\n"
+            "Entrega: 6 escenas generadas + foto original"
+        )
+    else:
+        header = (
+            f"Cuenta elegida: @{result.chosen_account}\n"
+            f"Protagonista: {_gender_label_plural(request.gender)}\n"
+            f"Tipo: {result.video_type.value}\n"
+            f"Idioma: {result.language.value}"
+        )
     await status_message.edit_text("Enviando imágenes con su texto.")
     try:
         await _send_message(context, chat.id, header)
         for message in result.social_copy.messages:
             await _send_message(context, chat.id, message)
         await _send_slides_text_then_image(context, chat.id, result.slides)
+        if result.video_type == VideoType.TYPE_4:
+            return
         context.user_data["repeat_request"] = {
             "chosen_account": result.chosen_account,
             "requested_accounts": request.account_inputs,
@@ -1102,12 +1203,48 @@ def _parse_template_video_command_args(args) -> tuple[Language, str | None]:
     return Language.ES, " ".join(values).strip() or None
 
 
+def _prepare_story_carousel_state(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data["video_type"] = VideoType.TYPE_4.value
+    context.user_data["language"] = Language.ES.value
+    context.user_data["video_gender"] = VideoGender.MALE.value
+    context.user_data["accounts_snapshot"] = []
+
+
+async def _download_story_reference_photo(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> Path:
+    message = update.effective_message
+    if message is None:
+        raise ValueError("No encontre el mensaje con la foto.")
+
+    suffix = ".jpg"
+    telegram_file = None
+    if message.photo:
+        telegram_file = await message.photo[-1].get_file()
+    elif message.document and message.document.mime_type:
+        if not message.document.mime_type.startswith("image/"):
+            raise ValueError("El documento recibido no parece ser una imagen.")
+        telegram_file = await message.document.get_file()
+        suffix = Path(message.document.file_name or "").suffix or ".jpg"
+    if telegram_file is None:
+        raise ValueError("Mandame una foto o un documento de imagen.")
+
+    settings = get_settings()
+    target_dir = settings.downloads_dir / "_story_references"
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_path = target_dir / f"story_reference_{uuid4().hex}{suffix.lower()}"
+    await telegram_file.download_to_drive(custom_path=str(target_path))
+    return target_path
+
+
 def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop("accounts_by_gender", None)
     context.user_data.pop("accounts_snapshot", None)
     context.user_data.pop("video_gender", None)
     context.user_data.pop("video_type", None)
     context.user_data.pop("language", None)
+    context.user_data.pop("reference_image_path", None)
 
 
 def _accounts_path_for_gender(settings, gender: VideoGender):

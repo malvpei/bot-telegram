@@ -12,6 +12,7 @@ from app.models import (
     TYPE_1_ROLES,
     TYPE_2_ROLES,
     TYPE_3_ROLES,
+    TYPE_4_ROLES,
     VideoGender,
     VideoType,
 )
@@ -87,6 +88,14 @@ class ScriptGenerator:
         lowercase_text: bool = False,
     ) -> ScriptPackage:
         builder = self._builder_for(video_type, language)
+        if video_type == VideoType.TYPE_4:
+            return self._format_package(
+                builder(),
+                video_type=video_type,
+                language=language,
+                gender=gender,
+                lowercase_text=False,
+            )
         last_signature = self.state.get_last_signature(video_type, language)
         known_signatures = self.state.get_known_signatures(video_type, language)
 
@@ -139,6 +148,8 @@ class ScriptGenerator:
         gender: VideoGender,
         lowercase_text: bool,
     ) -> ScriptPackage:
+        if video_type == VideoType.TYPE_4:
+            return package
         if gender == VideoGender.FEMALE:
             package = ScriptGenerator._feminize_package(package, language, video_type)
         if not lowercase_text:
@@ -212,6 +223,8 @@ class ScriptGenerator:
             return self._build_type_1_es if language == Language.ES else self._build_type_1_en
         if video_type == VideoType.TYPE_2:
             return self._build_type_2_es if language == Language.ES else self._build_type_2_en
+        if video_type == VideoType.TYPE_4:
+            return self._build_type_4_es
         return self._build_type_3_es if language == Language.ES else self._build_type_3_en
 
     # ------------------------------------------------------------------
@@ -608,6 +621,65 @@ class ScriptGenerator:
             social_choice_key=self._copy_choice_from_social_key(social_key),
         )
 
+    # ------------------------------------------------------------------
+    # Type 4 - AI comic story from one reference photo
+    # ------------------------------------------------------------------
+
+    def _build_type_4_es(self) -> ScriptPackage:
+        slides_by_role = {
+            SlideRole.STORY_MCDONALD: (
+                "Así es como pasé de trabajar en el MacDonald a cumplir mi sueño "
+                "de comprarme un Porsche 911 GT3"
+            ),
+            SlideRole.STORY_BUILDING_STORE: (
+                "Monte mi tienda estuve horas analizando un buen producto y "
+                "estudiando creativos"
+            ),
+            SlideRole.STORY_FIRST_FAILURE: (
+                "El primer mes tuve 0 ventas simplemente era un producto que no "
+                "causaba interés"
+            ),
+            SlideRole.STORY_DEEP_FAILURE: (
+                "En los siguientes mesese fue peor tuve 0 ventas y probé 3 productos "
+                "diferentes ninguno se vendia, estuve a punto de dejarlo para siempre"
+            ),
+            SlideRole.STORY_DROPRADAR: (
+                "Investigando encontré Dropradar me dio un gran producto y empecé "
+                "de 0 ese mes tuve mi primera venta"
+            ),
+            SlideRole.STORY_SUCCESS_COMIC: "",
+            SlideRole.STORY_ORIGINAL_REFERENCE: "",
+        }
+        ordered = [slides_by_role[role] for role in TYPE_4_ROLES]
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_4, Language.ES)
+        self._assert_type_4_rules(slides_by_role)
+        return ScriptPackage(
+            slides_by_role=slides_by_role,
+            ordered_slides=ordered,
+            signature=_hash_signature([*ordered, social_key]),
+            plain_text="\n\n".join(ordered),
+            social_copy=social_copy,
+            choice_key="fixed",
+            social_choice_key=self._copy_choice_from_social_key(social_key),
+        )
+
+    @staticmethod
+    def _assert_type_4_rules(slides_by_role: dict[SlideRole, str]) -> None:
+        expected_roles = set(TYPE_4_ROLES)
+        if set(slides_by_role) != expected_roles:
+            raise ValueError("Tipo 4: faltan slides de la historia.")
+        required_texts = [
+            slides_by_role[SlideRole.STORY_MCDONALD],
+            slides_by_role[SlideRole.STORY_BUILDING_STORE],
+            slides_by_role[SlideRole.STORY_FIRST_FAILURE],
+            slides_by_role[SlideRole.STORY_DEEP_FAILURE],
+            slides_by_role[SlideRole.STORY_DROPRADAR],
+        ]
+        if any(not text.strip() for text in required_texts):
+            raise ValueError("Tipo 4: los 5 textos narrativos son obligatorios.")
+        if "Dropradar" not in slides_by_role[SlideRole.STORY_DROPRADAR]:
+            raise ValueError("Tipo 4: el punto de inflexion debe mencionar Dropradar.")
+
     def _choose_social_copy(
         self,
         video_type: VideoType,
@@ -719,6 +791,8 @@ class ScriptGenerator:
         return titles
 
     def _social_title_variants_es(self, video_type: VideoType) -> dict[str, str]:
+        if video_type == VideoType.TYPE_4:
+            return {}
         if video_type != VideoType.TYPE_3:
             return {}
         return {
@@ -737,6 +811,8 @@ class ScriptGenerator:
         }
 
     def _social_title_variants_en(self, video_type: VideoType) -> dict[str, str]:
+        if video_type == VideoType.TYPE_4:
+            return {}
         if video_type != VideoType.TYPE_3:
             return {}
         return {
@@ -842,7 +918,7 @@ class ScriptGenerator:
         language: Language,
         variants: dict[str, tuple[str, str, list[str]]],
     ) -> dict[str, tuple[str, str, list[str]]]:
-        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
+        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_4}:
             return variants
         expansions = self._social_description_expansions(video_type, language)
         fallback = self._social_description_fallback(video_type, language)
@@ -900,6 +976,24 @@ class ScriptGenerator:
         self,
         video_type: VideoType,
     ) -> dict[str, tuple[str, str, list[str]]]:
+        if video_type == VideoType.TYPE_4:
+            return {
+                "es_story": (
+                    "De trabajar en el MacDonald al Porsche 911 GT3",
+                    (
+                        "Carrusel estilo comic sobre el camino de montar una tienda "
+                        "de dropshipping, fallar con productos sin demanda, descubrir "
+                        "Dropradar y encontrar por fin un producto con ventas reales."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#ecommerce",
+                        "#dropradar",
+                        "#shopify",
+                        "#negocioonline",
+                    ],
+                ),
+            }
         if video_type == VideoType.TYPE_1:
             return {
                 "es1": (
@@ -968,6 +1062,8 @@ class ScriptGenerator:
         self,
         video_type: VideoType,
     ) -> dict[str, tuple[str, str, list[str]]]:
+        if video_type == VideoType.TYPE_4:
+            return self._social_copy_variants_es(video_type)
         if video_type == VideoType.TYPE_1:
             return {
                 "en1": (

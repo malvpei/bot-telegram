@@ -6,7 +6,14 @@ from uuid import uuid4
 import pytest
 
 import app.texts as texts_module
-from app.models import Language, SlideRole, TYPE_3_ROLES, VideoGender, VideoType
+from app.models import (
+    Language,
+    SlideRole,
+    TYPE_3_ROLES,
+    TYPE_4_ROLES,
+    VideoGender,
+    VideoType,
+)
 from app.state import StateStore
 from app.texts import FORBIDDEN_TYPE_2_TOKENS, ScriptGenerator
 
@@ -479,6 +486,43 @@ def test_type_3_has_tool_stack_without_hosting(state_dir):
         package.slides_by_role[SlideRole.TOOL_MARKETING],
         ("instagram", "tiktok"),
     )
+
+
+def test_type_4_story_texts_are_exactly_fixed(state_dir):
+    generator = _make_generator(state_dir)
+    package = generator.generate(
+        VideoType.TYPE_4,
+        Language.ES,
+        lowercase_text=True,
+        gender=VideoGender.FEMALE,
+    )
+
+    assert len(package.ordered_slides) == len(TYPE_4_ROLES)
+    assert package.ordered_slides[:5] == [
+        (
+            "Así es como pasé de trabajar en el MacDonald a cumplir mi sueño "
+            "de comprarme un Porsche 911 GT3"
+        ),
+        (
+            "Monte mi tienda estuve horas analizando un buen producto y "
+            "estudiando creativos"
+        ),
+        (
+            "El primer mes tuve 0 ventas simplemente era un producto que no "
+            "causaba interés"
+        ),
+        (
+            "En los siguientes mesese fue peor tuve 0 ventas y probé 3 productos "
+            "diferentes ninguno se vendia, estuve a punto de dejarlo para siempre"
+        ),
+        (
+            "Investigando encontré Dropradar me dio un gran producto y empecé "
+            "de 0 ese mes tuve mi primera venta"
+        ),
+    ]
+    assert package.ordered_slides[5:] == ["", ""]
+    assert package.slides_by_role[SlideRole.STORY_MCDONALD].startswith("Así es")
+    assert package.slides_by_role[SlideRole.STORY_DROPRADAR].startswith("Investigando")
 
 
 def test_type_3_can_use_paypal_and_instagram(state_dir, monkeypatch):

@@ -165,6 +165,37 @@ cooldown durante `ACCOUNT_COOLDOWN_DAYS`. Después, **/create** elige desde ese
 pool local, rota cuentas para evitar favoritismo, y permite **Pasar cuenta** si
 quieres forzar la siguiente cuenta disponible.
 
+### Web para subir imagenes a R2
+
+El proyecto incluye una web interna para subir imagenes al mismo bucket R2 que
+usa el video plantilla. Sirve para cargar referencias o creatividades en una
+carpeta/prefijo sin entrar manualmente en Cloudflare.
+
+Variables principales:
+
+| Variable | Default | Que hace |
+|---|---|---|
+| `UPLOAD_SITE_ENABLED` | `false` | si es `true`, arranca la web junto al bot |
+| `UPLOAD_SITE_HOST` / `UPLOAD_SITE_PORT` | `0.0.0.0` / `8000` | host y puerto de escucha |
+| `UPLOAD_SITE_USERNAME` / `UPLOAD_SITE_PASSWORD` | `admin` / vacio | auth basica; si la password queda vacia, no pide login |
+| `UPLOAD_SITE_MAX_IMAGE_MB` | `20` | limite por imagen |
+| `R2_IMAGE_PREFIX` | `imagenes/referencias` | carpeta R2 por defecto para las subidas |
+
+Arranque junto al bot:
+
+```bash
+UPLOAD_SITE_ENABLED=true python -m app.main
+```
+
+Arranque standalone:
+
+```bash
+python -m app.upload_site
+```
+
+La web acepta JPG, PNG, WEBP, HEIC, HEIF y AVIF, permite subir varias imagenes
+a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
+
 ## Salida
 
 - `.mp4` enviado al chat (si supera 50MB, se avisa y se deja en disco)

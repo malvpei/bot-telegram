@@ -7,6 +7,8 @@ services:
       DATA_DIR: /app/data
     volumes:
       - bot_telegram_data:/app/data
+    ports:
+      - "8000:8000"
     restart: unless-stopped
 
 volumes:

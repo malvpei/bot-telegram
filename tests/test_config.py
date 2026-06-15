@@ -86,12 +86,98 @@ def test_template_videos_dir_env_is_resolved_from_project_root(monkeypatch):
         get_settings.cache_clear()
 
 
+def test_upload_site_defaults_are_enabled_for_image_uploads(monkeypatch):
+    for key in (
+        "UPLOAD_SITE_ENABLED",
+        "UPLOAD_SITE_HOST",
+        "UPLOAD_SITE_PORT",
+        "UPLOAD_SITE_USERNAME",
+        "UPLOAD_SITE_PASSWORD",
+        "UPLOAD_SITE_MAX_IMAGE_MB",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.upload_site_enabled is True
+        assert settings.upload_site_host == "0.0.0.0"
+        assert settings.upload_site_port == 8000
+        assert settings.upload_site_username == "admin"
+        assert settings.upload_site_password == "pon_una_password"
+        assert settings.upload_site_max_image_mb == 20
+        assert settings.r2_image_prefix == "videos/imagenes"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_fal_image_provider_defaults_are_loaded(monkeypatch):
+    for key in (
+        "IMAGE_PROVIDER",
+        "FAL_KEY",
+        "FAL_MODEL",
+        "FAL_IMAGE_ASPECT_RATIO",
+        "FAL_OUTPUT_FORMAT",
+        "FAL_SAFETY_TOLERANCE",
+        "FAL_GUIDANCE_SCALE",
+        "FAL_POLL_INTERVAL_SECONDS",
+        "FAL_REQUEST_TIMEOUT_SECONDS",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.image_provider == "fal"
+        assert settings.fal_key == ""
+        assert settings.fal_model == "fal-ai/flux-pro/kontext"
+        assert settings.fal_image_aspect_ratio == "9:16"
+        assert settings.fal_output_format == "png"
+        assert settings.fal_safety_tolerance == "2"
+        assert settings.fal_guidance_scale == 3.5
+        assert settings.fal_poll_interval_seconds == 2.0
+        assert settings.fal_request_timeout_seconds == 240.0
+    finally:
+        get_settings.cache_clear()
+
+
+def test_fal_image_provider_env_is_loaded(monkeypatch):
+    monkeypatch.setenv("IMAGE_PROVIDER", "fal")
+    monkeypatch.setenv("FAL_KEY", "fal-secret")
+    monkeypatch.setenv("FAL_MODEL", "fal-ai/flux-pro/kontext")
+    monkeypatch.setenv("FAL_IMAGE_ASPECT_RATIO", "9:16")
+    monkeypatch.setenv("FAL_OUTPUT_FORMAT", "jpeg")
+    monkeypatch.setenv("FAL_SAFETY_TOLERANCE", "3")
+    monkeypatch.setenv("FAL_GUIDANCE_SCALE", "4.25")
+    monkeypatch.setenv("FAL_POLL_INTERVAL_SECONDS", "0.5")
+    monkeypatch.setenv("FAL_REQUEST_TIMEOUT_SECONDS", "90")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.image_provider == "fal"
+        assert settings.fal_key == "fal-secret"
+        assert settings.fal_model == "fal-ai/flux-pro/kontext"
+        assert settings.fal_image_aspect_ratio == "9:16"
+        assert settings.fal_output_format == "jpeg"
+        assert settings.fal_safety_tolerance == "3"
+        assert settings.fal_guidance_scale == 4.25
+        assert settings.fal_poll_interval_seconds == 0.5
+        assert settings.fal_request_timeout_seconds == 90.0
+    finally:
+        get_settings.cache_clear()
+
+
 def test_r2_settings_are_loaded_from_env(monkeypatch):
     monkeypatch.setenv("R2_ACCOUNT_ID", "acct")
     monkeypatch.setenv("R2_ACCESS_KEY_ID", "key")
     monkeypatch.setenv("R2_SECRET_ACCESS_KEY", "secret")
     monkeypatch.setenv("R2_BUCKET", "bucket")
     monkeypatch.setenv("R2_INPUT_PREFIX", "/inputs/videos")
+    monkeypatch.setenv("R2_IMAGE_PREFIX", "/inputs/images")
+    monkeypatch.setenv("UPLOAD_SITE_ENABLED", "true")
+    monkeypatch.setenv("UPLOAD_SITE_PORT", "9001")
+    monkeypatch.setenv("UPLOAD_SITE_PASSWORD", "secret")
     get_settings.cache_clear()
     try:
         settings = get_settings()
@@ -101,6 +187,10 @@ def test_r2_settings_are_loaded_from_env(monkeypatch):
         assert settings.r2_secret_access_key == "secret"
         assert settings.r2_bucket == "bucket"
         assert settings.r2_input_prefix == "inputs/videos"
+        assert settings.r2_image_prefix == "inputs/images"
+        assert settings.upload_site_enabled is True
+        assert settings.upload_site_port == 9001
+        assert settings.upload_site_password == "secret"
     finally:
         get_settings.cache_clear()
 

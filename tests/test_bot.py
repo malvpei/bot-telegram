@@ -13,6 +13,7 @@ from app.bot import (
     REGENERATE_ACCEPT,
     REGENERATE_CANCEL,
     REGENERATE_SKIP_ACCOUNT,
+    STORY_PHOTO_STATE,
     TELEGRAM_TEXT_LIMIT,
     TEMPLATE_VIDEO_CREATE,
     TEMPLATE_VIDEO_CREATE_EN,
@@ -27,6 +28,7 @@ from app.bot import (
     _send_message,
     _send_slides_text_then_image,
     create_command,
+    story_carousel_command,
 )
 from app.config import get_settings
 from app.models import (
@@ -392,11 +394,28 @@ def test_create_command_offers_template_video_without_accounts():
 
     assert state == GENDER_STATE
     buttons = update.effective_message.reply_markup.inline_keyboard
-    assert len(buttons) == 1
+    assert len(buttons) == 2
     assert buttons[0][0].text == "Video herramientas R2 ES"
     assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
     assert buttons[0][1].text == "Video tools R2 EN"
     assert buttons[0][1].callback_data == TEMPLATE_VIDEO_CREATE_EN
+    assert buttons[1][0].text == "Carrusel IA desde foto"
+    assert buttons[1][0].callback_data == "wizard:type:4"
+
+
+def test_story_carousel_command_waits_for_photo():
+    async def allow(update):
+        return True
+
+    context = FakeContext()
+    update = FakeUpdate()
+
+    with patch("app.bot._ensure_allowed", allow):
+        state = asyncio.run(story_carousel_command(update, context))
+
+    assert state == STORY_PHOTO_STATE
+    assert context.user_data["video_type"] == "4"
+    assert "foto de referencia" in update.effective_message.text
 
 
 def test_template_video_sends_queue_restart_warning():

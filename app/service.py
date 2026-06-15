@@ -21,14 +21,18 @@ from app.models import (
     MediaCandidate,
     SocialCopy,
     TemplateVideoResult,
+    TYPE_4_ROLES,
     VideoPlan,
     VideoRequest,
     VideoType,
+    SlidePlan,
+    SlideRole,
 )
 from app.r2_storage import R2StorageClient
 from app.render import VideoRenderer
 from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.state import StateStore
+from app.story_images import StoryCarouselImageGenerator
 from app.texts import ScriptGenerator
 
 
@@ -256,6 +260,7 @@ class VideoCreationService:
         self.script_generator = ScriptGenerator(self.state)
         self.renderer = VideoRenderer(self.settings)
         self.r2_storage = R2StorageClient(self.settings)
+        self.story_image_generator = StoryCarouselImageGenerator(self.settings)
         # instaloader holds session/cookies that aren't safe to share across
         # concurrent threads, so we serialize the whole pipeline. Telegram
         # video generation is a single-tenant workflow anyway.
@@ -305,6 +310,14 @@ class VideoCreationService:
             LOGGER.info(
                 "No fonts directory at %s; will fall back to system fonts.",
                 self.settings.fonts_dir,
+            )
+        if self.settings.image_provider == "fal" and not self.settings.fal_key:
+            warnings.append(
+                "Falta FAL_KEY; el carrusel IA tipo 4 no podra generar imagenes con fal.ai."
+            )
+        if self.settings.image_provider == "openai" and not self.settings.openai_api_key:
+            warnings.append(
+                "Falta OPENAI_API_KEY; el carrusel IA tipo 4 no podra generar imagenes con OpenAI."
             )
         return warnings
 
@@ -426,6 +439,9 @@ class VideoCreationService:
         }
 
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
+        if request.video_type == VideoType.TYPE_4:
+            return self._create_story_carousel_locked(request)
+
         usernames = extract_usernames(
             request.account_inputs, len(request.account_inputs) or 1
         )
@@ -529,6 +545,87 @@ class VideoCreationService:
                 if hasattr(self, "pool")
                 else False
             ),
+        )
+
+    def _create_story_carousel_locked(self, request: VideoRequest) -> GenerationResult:
+        reference_image_path = request.reference_image_path
+        if reference_image_path is None:
+            raise ValueError("El tipo 4 necesita una foto de referencia.")
+        if not reference_image_path.exists():
+            raise FileNotFoundError(
+                f"No encuentro la foto de referencia: {reference_image_path}"
+            )
+
+        job_id = self._build_job_id()
+        job_dir = self.settings.outputs_dir / job_id
+        script_package = self.script_generator.generate(
+            VideoType.TYPE_4,
+            Language.ES,
+            gender=request.gender,
+            lowercase_text=False,
+        )
+        generated_media = self.story_image_generator.generate_slides(
+            reference_image_path,
+            job_dir,
+        )
+        if len(generated_media) != len(TYPE_4_ROLES) - 1:
+            raise RuntimeError(
+                "El generador IA no devolvio las 6 imagenes esperadas para el tipo 4."
+            )
+
+        reference_media = self._copy_story_reference_image(reference_image_path, job_dir)
+        media_by_role = {
+            role: media
+            for role, media in zip(TYPE_4_ROLES[:-1], generated_media, strict=True)
+        }
+        media_by_role[SlideRole.STORY_ORIGINAL_REFERENCE] = reference_media
+
+        slides = [
+            SlidePlan(
+                index=index,
+                role=role,
+                text=script_package.slides_by_role[role],
+                media=media_by_role[role],
+                fixed_asset=role == SlideRole.STORY_ORIGINAL_REFERENCE,
+            )
+            for index, role in enumerate(TYPE_4_ROLES, start=1)
+        ]
+        plan = VideoPlan(
+            chosen_account="story_reference",
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            slides=slides,
+            used_media_ids=[],
+            fallback_accounts=[],
+        )
+        video_path, script_path = self._render_outputs(plan, job_dir)
+
+        self.state.log_job(
+            self.state.build_job_record(
+                job_id=job_id,
+                chosen_account=plan.chosen_account,
+                requested_accounts=[],
+                fallback_accounts=[],
+                video_type=VideoType.TYPE_4,
+                language=Language.ES,
+                video_path=str(video_path) if video_path is not None else None,
+                script_path=str(script_path),
+                gender=request.gender.value,
+            )
+        )
+        self._cleanup_old_outputs()
+        return GenerationResult(
+            video_path=video_path,
+            script_path=script_path,
+            preview_text=script_package.plain_text,
+            social_copy=script_package.social_copy,
+            chosen_account=plan.chosen_account,
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            fallback_accounts=[],
+            slides=list(plan.slides),
+            pool_remaining=0,
+            pool_low_stock=False,
         )
 
     def _create_extra_image_locked(self, request: VideoRequest) -> MediaCandidate:
@@ -926,6 +1023,20 @@ class VideoCreationService:
             source_path = slide.media.local_path
             if not source_path.exists():
                 continue
+            if (
+                plan.video_type == VideoType.TYPE_4
+                and slide.role == SlideRole.STORY_ORIGINAL_REFERENCE
+            ):
+                out_path = self._copy_original_story_slide(source_path, slides_dir, slide.index)
+                with Image.open(out_path) as image:
+                    width, height = image.size
+                slide.media = replace(
+                    slide.media,
+                    local_path=out_path,
+                    width=width,
+                    height=height,
+                )
+                continue
             out_path = slides_dir / f"slide_{slide.index:02d}.jpg"
             try:
                 normalized = self.renderer.render_slide_still(
@@ -943,6 +1054,40 @@ class VideoCreationService:
                 width=target_width,
                 height=target_height,
             )
+
+    def _copy_story_reference_image(
+        self,
+        reference_image_path: Path,
+        job_dir: Path,
+    ) -> MediaCandidate:
+        reference_dir = job_dir / "story_reference"
+        reference_dir.mkdir(parents=True, exist_ok=True)
+        suffix = reference_image_path.suffix.lower() or ".jpg"
+        output_path = reference_dir / f"original_reference{suffix}"
+        shutil.copy2(reference_image_path, output_path)
+        with Image.open(output_path) as image:
+            width, height = image.size
+        return MediaCandidate(
+            source_account="story_reference",
+            source_id=f"story_reference:{output_path.name}",
+            local_path=output_path,
+            permalink=f"file://{output_path.name}",
+            caption="original reference image",
+            width=width,
+            height=height,
+            created_at="reference",
+        )
+
+    def _copy_original_story_slide(
+        self,
+        source_path: Path,
+        slides_dir: Path,
+        slide_index: int,
+    ) -> Path:
+        suffix = source_path.suffix.lower() or ".jpg"
+        out_path = slides_dir / f"slide_{slide_index:02d}_original{suffix}"
+        shutil.copy2(source_path, out_path)
+        return out_path
 
     def _normalize_extra_image(
         self,

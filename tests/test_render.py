@@ -598,6 +598,18 @@ def test_fixed_february_caption_sits_lower_but_above_screen():
     assert y > 200
 
 
+def test_type_4_story_caption_prefers_top_area():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    slide = SlidePlan(
+        index=1,
+        role=SlideRole.STORY_MCDONALD,
+        text="Así es como pasé de trabajar en el MacDonald",
+        media=_candidate(Path("source.jpg")),
+    )
+
+    assert renderer._caption_preferred_centers(slide)[0] == 0.20
+
+
 def test_fixed_february_title_card_has_symmetric_minimum_width(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)

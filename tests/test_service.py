@@ -13,6 +13,7 @@ from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan
 from app.r2_storage import R2Object
 from app.service import VideoCreationService
 from app.state import StateStore
+from app.texts import ScriptGenerator
 
 
 class FakeRenderer:
@@ -23,6 +24,7 @@ class FakeRenderer:
         self.template_language = None
         self.render_slide_still_calls: list[VideoType] = []
         self.render_slide_still_sources: list[Path] = []
+        self.written_plan: VideoPlan | None = None
 
     def render(self, plan: VideoPlan, job_dir: Path):
         self.render_called = True
@@ -30,6 +32,7 @@ class FakeRenderer:
 
     def write_script(self, plan: VideoPlan, job_dir: Path) -> Path:
         self.write_script_called = True
+        self.written_plan = plan
         job_dir.mkdir(parents=True, exist_ok=True)
         script_path = job_dir / "script.txt"
         script_path.write_text("script", encoding="utf-8")
@@ -137,6 +140,47 @@ class FakeR2Storage:
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(b"r2-video")
         return destination
+
+
+class FakeStoryImageGenerator:
+    def __init__(self) -> None:
+        self.reference_image_path: Path | None = None
+        self.job_dir: Path | None = None
+
+    def generate_slides(
+        self,
+        reference_image_path: Path,
+        job_dir: Path,
+    ) -> list[MediaCandidate]:
+        self.reference_image_path = reference_image_path
+        self.job_dir = job_dir
+        generated_dir = job_dir / "generated"
+        generated_dir.mkdir(parents=True, exist_ok=True)
+        media: list[MediaCandidate] = []
+        roles = [
+            SlideRole.STORY_MCDONALD,
+            SlideRole.STORY_BUILDING_STORE,
+            SlideRole.STORY_FIRST_FAILURE,
+            SlideRole.STORY_DEEP_FAILURE,
+            SlideRole.STORY_DROPRADAR,
+            SlideRole.STORY_SUCCESS_COMIC,
+        ]
+        for index, role in enumerate(roles, start=1):
+            path = generated_dir / f"generated_{index}.png"
+            Image.new("RGB", (72, 128), (index * 20, 80, 120)).save(path)
+            media.append(
+                MediaCandidate(
+                    source_account="ai_story",
+                    source_id=f"ai:{index}",
+                    local_path=path,
+                    permalink="",
+                    caption=role.value,
+                    width=72,
+                    height=128,
+                    created_at="generated",
+                )
+            )
+        return media
 
 
 def test_type_3_outputs_skip_full_video_render():
@@ -334,6 +378,55 @@ def test_type_1_outputs_skip_full_video_render():
         assert service.renderer.render_slide_still_calls == [VideoType.TYPE_1]
         assert plan.slides[0].media.local_path.name == "slide_01.jpg"
         assert plan.slides[0].media.local_path.exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_4_generates_six_ai_slides_and_keeps_original_reference():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            width=72,
+            height=128,
+        )
+        reference = root / "reference.jpg"
+        Image.new("RGB", (90, 120), (20, 40, 60)).save(reference)
+        renderer = FakeRenderer()
+        story_generator = FakeStoryImageGenerator()
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.script_generator = ScriptGenerator(service.state)
+        service.renderer = renderer
+        service.story_image_generator = story_generator
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            account_inputs=[],
+            reference_image_path=reference,
+        )
+
+        result = service._create_story_carousel_locked(request)
+
+        assert result.video_path is None
+        assert result.video_type == VideoType.TYPE_4
+        assert len(result.slides) == 7
+        assert story_generator.reference_image_path == reference
+        assert renderer.render_slide_still_calls == [VideoType.TYPE_4] * 6
+        assert result.slides[-1].role == SlideRole.STORY_ORIGINAL_REFERENCE
+        assert result.slides[-1].media.local_path.name == "slide_07_original.jpg"
+        assert result.slides[-1].media.local_path.read_bytes() == reference.read_bytes()
+        assert renderer.written_plan is not None
+        assert renderer.written_plan.slides[0].text.startswith("Así es como pasé")
+        assert renderer.written_plan.slides[4].text.startswith("Investigando encontré")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

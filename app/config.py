@@ -10,6 +10,25 @@ from dotenv import load_dotenv
 
 DEFAULT_ACCOUNT_PICK_ATTEMPTS = 24
 DEFAULT_POOL_REFILL_MAX_FRESH_ACCOUNTS = 8
+DEFAULT_R2_IMAGE_PREFIX = "videos/imagenes"
+DEFAULT_UPLOAD_SITE_ENABLED = True
+DEFAULT_UPLOAD_SITE_HOST = "0.0.0.0"
+DEFAULT_UPLOAD_SITE_PORT = 8000
+DEFAULT_UPLOAD_SITE_USERNAME = "admin"
+DEFAULT_UPLOAD_SITE_PASSWORD = "pon_una_password"
+DEFAULT_UPLOAD_SITE_MAX_IMAGE_MB = 20
+DEFAULT_IMAGE_PROVIDER = "fal"
+DEFAULT_FAL_MODEL = "fal-ai/flux-pro/kontext"
+DEFAULT_FAL_IMAGE_ASPECT_RATIO = "9:16"
+DEFAULT_FAL_OUTPUT_FORMAT = "png"
+DEFAULT_FAL_SAFETY_TOLERANCE = "2"
+DEFAULT_FAL_GUIDANCE_SCALE = 3.5
+DEFAULT_FAL_POLL_INTERVAL_SECONDS = 2.0
+DEFAULT_FAL_REQUEST_TIMEOUT_SECONDS = 240.0
+DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
+DEFAULT_OPENAI_IMAGE_SIZE = "1024x1536"
+DEFAULT_OPENAI_IMAGE_QUALITY = "high"
+DEFAULT_OPENAI_REQUEST_TIMEOUT_SECONDS = 180.0
 
 
 def _split_chat_ids(raw_value: str) -> set[int]:
@@ -109,6 +128,27 @@ class Settings:
     r2_bucket: str
     r2_endpoint_url: str
     r2_input_prefix: str
+    r2_image_prefix: str
+    upload_site_enabled: bool
+    upload_site_host: str
+    upload_site_port: int
+    upload_site_username: str
+    upload_site_password: str
+    upload_site_max_image_mb: int
+    image_provider: str
+    fal_key: str
+    fal_model: str
+    fal_image_aspect_ratio: str
+    fal_output_format: str
+    fal_safety_tolerance: str
+    fal_guidance_scale: float
+    fal_poll_interval_seconds: float
+    fal_request_timeout_seconds: float
+    openai_api_key: str
+    openai_image_model: str
+    openai_image_size: str
+    openai_image_quality: str
+    openai_request_timeout_seconds: float
 
 
 @lru_cache(maxsize=1)
@@ -197,4 +237,76 @@ def get_settings() -> Settings:
         r2_bucket=os.getenv("R2_BUCKET", "").strip(),
         r2_endpoint_url=os.getenv("R2_ENDPOINT_URL", "").strip(),
         r2_input_prefix=os.getenv("R2_INPUT_PREFIX", "").strip().lstrip("/"),
+        r2_image_prefix=os.getenv("R2_IMAGE_PREFIX", DEFAULT_R2_IMAGE_PREFIX)
+        .strip()
+        .lstrip("/"),
+        upload_site_enabled=_env_bool(
+            "UPLOAD_SITE_ENABLED",
+            DEFAULT_UPLOAD_SITE_ENABLED,
+        ),
+        upload_site_host=os.getenv(
+            "UPLOAD_SITE_HOST",
+            DEFAULT_UPLOAD_SITE_HOST,
+        ).strip()
+        or DEFAULT_UPLOAD_SITE_HOST,
+        upload_site_port=_env_int("UPLOAD_SITE_PORT", DEFAULT_UPLOAD_SITE_PORT),
+        upload_site_username=os.getenv(
+            "UPLOAD_SITE_USERNAME",
+            DEFAULT_UPLOAD_SITE_USERNAME,
+        ).strip()
+        or DEFAULT_UPLOAD_SITE_USERNAME,
+        upload_site_password=os.getenv(
+            "UPLOAD_SITE_PASSWORD",
+            DEFAULT_UPLOAD_SITE_PASSWORD,
+        ).strip()
+        or DEFAULT_UPLOAD_SITE_PASSWORD,
+        upload_site_max_image_mb=_env_int(
+            "UPLOAD_SITE_MAX_IMAGE_MB",
+            DEFAULT_UPLOAD_SITE_MAX_IMAGE_MB,
+        ),
+        image_provider=os.getenv("IMAGE_PROVIDER", DEFAULT_IMAGE_PROVIDER).strip().lower()
+        or DEFAULT_IMAGE_PROVIDER,
+        fal_key=os.getenv("FAL_KEY", "").strip(),
+        fal_model=os.getenv("FAL_MODEL", DEFAULT_FAL_MODEL).strip()
+        or DEFAULT_FAL_MODEL,
+        fal_image_aspect_ratio=os.getenv(
+            "FAL_IMAGE_ASPECT_RATIO",
+            DEFAULT_FAL_IMAGE_ASPECT_RATIO,
+        ).strip()
+        or DEFAULT_FAL_IMAGE_ASPECT_RATIO,
+        fal_output_format=os.getenv("FAL_OUTPUT_FORMAT", DEFAULT_FAL_OUTPUT_FORMAT)
+        .strip()
+        .lower()
+        or DEFAULT_FAL_OUTPUT_FORMAT,
+        fal_safety_tolerance=os.getenv(
+            "FAL_SAFETY_TOLERANCE",
+            DEFAULT_FAL_SAFETY_TOLERANCE,
+        ).strip()
+        or DEFAULT_FAL_SAFETY_TOLERANCE,
+        fal_guidance_scale=_env_float("FAL_GUIDANCE_SCALE", DEFAULT_FAL_GUIDANCE_SCALE),
+        fal_poll_interval_seconds=_env_float(
+            "FAL_POLL_INTERVAL_SECONDS",
+            DEFAULT_FAL_POLL_INTERVAL_SECONDS,
+        ),
+        fal_request_timeout_seconds=_env_float(
+            "FAL_REQUEST_TIMEOUT_SECONDS",
+            DEFAULT_FAL_REQUEST_TIMEOUT_SECONDS,
+        ),
+        openai_api_key=os.getenv("OPENAI_API_KEY", "").strip(),
+        openai_image_model=os.getenv(
+            "OPENAI_IMAGE_MODEL",
+            DEFAULT_OPENAI_IMAGE_MODEL,
+        ).strip()
+        or DEFAULT_OPENAI_IMAGE_MODEL,
+        openai_image_size=os.getenv("OPENAI_IMAGE_SIZE", DEFAULT_OPENAI_IMAGE_SIZE).strip()
+        or DEFAULT_OPENAI_IMAGE_SIZE,
+        openai_image_quality=os.getenv(
+            "OPENAI_IMAGE_QUALITY",
+            DEFAULT_OPENAI_IMAGE_QUALITY,
+        ).strip()
+        or DEFAULT_OPENAI_IMAGE_QUALITY,
+        openai_request_timeout_seconds=_env_float(
+            "OPENAI_REQUEST_TIMEOUT_SECONDS",
+            DEFAULT_OPENAI_REQUEST_TIMEOUT_SECONDS,
+        ),
     )
