@@ -181,6 +181,41 @@ def test_hook_text_respects_manual_three_line_breaks(monkeypatch):
     assert captured["lines"] == text.splitlines()
 
 
+def test_hook_text_manual_lines_fit_inside_side_margins(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGB", (1080, 1920), (0, 0, 0))
+    text = (
+        "How much I earned doing Dropshipping\n"
+        "in my first 6 months and why I almost quit..."
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 100)
+
+    def capture_lines(draw, lines, font, **kwargs):
+        captured["draw"] = draw
+        captured["lines"] = list(lines)
+        captured["font"] = font
+        captured["stroke_width"] = kwargs["stroke_width"]
+
+    monkeypatch.setattr(renderer, "_draw_lines", capture_lines)
+
+    renderer._draw_hook_text(image, text)
+
+    max_width = image.width - (HOOK_SIDE_MARGIN * 2)
+    draw = captured["draw"]
+    font = captured["font"]
+    stroke_width = captured["stroke_width"]
+    widths = [
+        renderer._text_size(draw, line, font, stroke_width=stroke_width)[0]
+        for line in captured["lines"]
+    ]
+
+    assert captured["lines"] == text.splitlines()
+    assert max(widths) <= max_width
+
+
 def test_hook_text_renders_in_middle_third_without_avoid_regions(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -308,7 +343,7 @@ def test_hook_text_uses_larger_two_line_fit(monkeypatch):
 
     renderer._draw_hook_text(image, "Errores frecuentes que veo en dropshippers novatos")
 
-    assert captured["max_width"] == 1080 - HOOK_SIDE_MARGIN
+    assert captured["max_width"] == 1080 - (HOOK_SIDE_MARGIN * 2)
     assert captured["max_height"] == int(1920 * 0.40)
     assert captured["base_size"] == HOOK_BASE_FONT_SIZE
     assert captured["min_size"] == HOOK_MIN_FONT_SIZE

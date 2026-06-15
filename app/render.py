@@ -745,7 +745,18 @@ class VideoRenderer:
             if height <= max_height and (not widths or max(widths) <= max_width):
                 return font
             size -= 2
-        return load_font(min_size, bold)
+        emergency_min_size = max(12, int(min_size * 0.55))
+        while size >= emergency_min_size:
+            font = load_font(size, bold)
+            height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+            widths = [
+                self._text_size(draw, line, font, stroke_width=stroke_width)[0]
+                for line in lines
+            ]
+            if height <= max_height and (not widths or max(widths) <= max_width):
+                return font
+            size -= 2
+        return load_font(emergency_min_size, bold)
 
     def _type_3_body_lines(
         self,
@@ -1236,7 +1247,8 @@ class VideoRenderer:
         width, height = image.size
 
         stroke_width = max(2, _scale_x(3, width))
-        max_width = width - _scale_x(HOOK_SIDE_MARGIN, width)
+        side_margin = _scale_x(HOOK_SIDE_MARGIN, width)
+        max_width = width - (side_margin * 2)
         max_height = int(height * 0.40)
         base_size = self._scaled_text_size(HOOK_BASE_FONT_SIZE, minimum=38)
         min_size = self._scaled_text_size(HOOK_MIN_FONT_SIZE, minimum=20)

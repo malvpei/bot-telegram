@@ -1,5 +1,6 @@
 import asyncio
 import shutil
+from dataclasses import replace
 from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
@@ -21,11 +22,13 @@ from app.bot import (
     _format_pool_refill_summary,
     _format_pool_status,
     _main_menu_markup,
+    regenerate_choice,
     _execute_template_video,
     _send_message,
     _send_slides_text_then_image,
     create_command,
 )
+from app.config import get_settings
 from app.models import (
     ImageMetrics,
     MediaCandidate,
@@ -128,6 +131,42 @@ class FakeTemplateService:
             ),
             queue_restarted=True,
         )
+
+
+class FakeRegenerateQuery:
+    def __init__(self, data: str) -> None:
+        self.data = data
+        self.answered = False
+        self.edited_text = ""
+
+    async def answer(self) -> None:
+        self.answered = True
+
+    async def edit_message_text(self, text: str) -> None:
+        self.edited_text = text
+
+
+class FakeUser:
+    id = 456
+    username = "tester"
+    full_name = "Tester"
+
+
+class FakeRegenerateUpdate:
+    def __init__(self, query: FakeRegenerateQuery) -> None:
+        self.callback_query = query
+        self.effective_chat = FakeChat()
+        self.effective_user = FakeUser()
+        self.effective_message = None
+
+
+class FakeRegenerateService:
+    def __init__(self) -> None:
+        self.excluded_accounts: list[str] = []
+
+    def exclude_account(self, account: str) -> int:
+        self.excluded_accounts.append(account)
+        return 3
 
 
 class FlakyMessageTelegramBot(FakeTelegramBot):
@@ -272,6 +311,57 @@ def test_repeat_prompt_has_accept_and_cancel_buttons():
         REGENERATE_SKIP_ACCOUNT,
         REGENERATE_CANCEL,
     ]
+
+
+def test_skip_account_button_removes_account_file_entry_and_uses_next_account(tmp_path):
+    async def allow(update):
+        return True
+
+    captured = {}
+
+    async def capture_execute_job(update, context, request):
+        captured["request"] = request
+
+    accounts_path = tmp_path / "accounts.txt"
+    accounts_path.write_text(
+        "@alpha\nhttps://www.instagram.com/beta/\n",
+        encoding="utf-8",
+    )
+    settings = replace(
+        get_settings(),
+        accounts_file=accounts_path,
+        women_accounts_file=tmp_path / "accounts_women.txt",
+    )
+    service = FakeRegenerateService()
+    context = FakeContext()
+    context.application = FakeApplication(service)
+    context.user_data["repeat_request"] = {
+        "chosen_account": "alpha",
+        "requested_accounts": ["@alpha", "https://www.instagram.com/beta/"],
+        "video_type": "1",
+        "language": "es",
+        "video_gender": "male",
+    }
+    query = FakeRegenerateQuery(REGENERATE_SKIP_ACCOUNT)
+    update = FakeRegenerateUpdate(query)
+
+    with patch("app.bot._ensure_allowed", allow), patch(
+        "app.bot.get_settings",
+        return_value=settings,
+    ), patch("app.bot._execute_job", capture_execute_job):
+        asyncio.run(regenerate_choice(update, context))
+
+    assert query.answered is True
+    assert "Elimine @alpha de accounts.txt" in query.edited_text
+    assert (
+        accounts_path.read_text(encoding="utf-8")
+        == "https://www.instagram.com/beta/\n"
+    )
+    assert service.excluded_accounts == ["alpha"]
+    assert captured["request"].account_inputs == ["https://www.instagram.com/beta/"]
+    assert captured["request"].skip_accounts == ["alpha"]
+    assert context.user_data["accounts_snapshot"] == ["https://www.instagram.com/beta/"]
+    assert "repeat_request" not in context.user_data
 
 
 def test_main_menu_has_template_video_button():

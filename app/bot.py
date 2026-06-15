@@ -15,7 +15,12 @@ from telegram.ext import (
     ConversationHandler,
 )
 
-from app.accounts import AccountsFileError, load_accounts
+from app.accounts import (
+    AccountsFileError,
+    load_accounts,
+    normalize_account,
+    remove_account,
+)
 from app.config import get_settings
 from app.models import (
     Language,
@@ -773,26 +778,45 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     try:
+        chosen_account = repeat_request["chosen_account"]
         account_inputs = list(repeat_request.get("requested_accounts") or [])
         if not account_inputs:
-            account_inputs = [repeat_request["chosen_account"]]
+            account_inputs = [chosen_account]
+        gender = VideoGender(
+            repeat_request.get("video_gender", VideoGender.MALE.value)
+        )
+        removed_from_file = 0
+        accounts_path = _accounts_path_for_gender(get_settings(), gender)
+        if query.data == REGENERATE_SKIP_ACCOUNT:
+            removed_from_file = await asyncio.to_thread(
+                remove_account,
+                accounts_path,
+                chosen_account,
+            )
+            account_inputs = _remove_account_from_inputs(account_inputs, chosen_account)
+            if not account_inputs:
+                try:
+                    account_inputs = await asyncio.to_thread(
+                        load_accounts,
+                        accounts_path,
+                    )
+                except AccountsFileError:
+                    account_inputs = []
         request = VideoRequest(
             chat_id=update.effective_chat.id,
             user_id=update.effective_user.id,
             video_type=VideoType(repeat_request["video_type"]),
             language=Language(repeat_request["language"]),
             account_inputs=account_inputs,
-            gender=VideoGender(
-                repeat_request.get("video_gender", VideoGender.MALE.value)
-            ),
+            gender=gender,
             skip_accounts=(
-                [repeat_request["chosen_account"]]
+                [chosen_account]
                 if query.data == REGENERATE_SKIP_ACCOUNT
                 else []
             ),
             lowercase_text=bool(repeat_request.get("lowercase_text", False)),
         )
-    except (KeyError, ValueError):
+    except (AccountsFileError, KeyError, ValueError):
         context.user_data.pop("repeat_request", None)
         await query.edit_message_text(
             "No pude recuperar bien la última selección. Lanza /create otra vez."
@@ -803,11 +827,23 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         service: VideoCreationService = context.application.bot_data["service"]
         removed = await asyncio.to_thread(
             service.exclude_account,
-            repeat_request["chosen_account"],
+            chosen_account,
         )
         context.user_data.pop("repeat_request", None)
+        context.user_data["accounts_snapshot"] = list(request.account_inputs)
+        if not request.account_inputs:
+            await query.edit_message_text(
+                f"Elimine @{chosen_account} de {accounts_path.name} y del pool "
+                f"({removed} fotos quitadas). No quedan mas cuentas cargadas."
+            )
+            return
+        file_line = (
+            f"Elimine @{chosen_account} de {accounts_path.name}"
+            if removed_from_file
+            else f"@{chosen_account} ya no estaba en {accounts_path.name}"
+        )
         await query.edit_message_text(
-            f"Elimino @{repeat_request['chosen_account']} del pool "
+            f"{file_line}. Tambien quite sus fotos del pool "
             f"({removed} fotos quitadas) y busco la siguiente cuenta."
         )
         await _execute_job(update, context, request)
@@ -1094,6 +1130,13 @@ def _load_accounts_by_gender(settings) -> dict[VideoGender, list[str]]:
         except AccountsFileError:
             accounts_by_gender[gender] = []
     return accounts_by_gender
+
+
+def _remove_account_from_inputs(account_inputs: list[str], account: str) -> list[str]:
+    target = normalize_account(account)
+    if not target:
+        return list(account_inputs)
+    return [item for item in account_inputs if normalize_account(item) != target]
 
 
 def _accounts_status_line(settings, gender: VideoGender) -> str:
