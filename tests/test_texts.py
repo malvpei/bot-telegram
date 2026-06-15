@@ -41,9 +41,9 @@ def test_type_1_es_has_seven_slides_and_dropradar_in_february(state_dir):
 def test_type_1_hooks_are_short_and_example_like(state_dir):
     generator = _make_generator(state_dir)
     allowed_hooks = {
-        "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y por qué casi lo dejo...",
-        "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo....",
-        "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo...",
+        "Cuanto facturé haciendo Dropshipping\nen mis primeros 6 meses y por qué casi lo dejo...",
+        "Cuanto gané haciendo Dropshipping\nen estos 6 meses y por qué casi lo dejo....",
+        "Cuanto facturé haciendo Dropshipping\nen mis primeros 6 meses y porqué casi lo dejo...",
     }
     hooks = set()
     for _ in range(3):
@@ -51,6 +51,7 @@ def test_type_1_hooks_are_short_and_example_like(state_dir):
         generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, package.choice_key)
         hook = package.slides_by_role[SlideRole.HOOK]
         assert len(hook) <= 95
+        assert len(hook.splitlines()) == 2
         assert hook in allowed_hooks
         hooks.add(hook)
     assert len(hooks) == 3
@@ -59,9 +60,9 @@ def test_type_1_hooks_are_short_and_example_like(state_dir):
 def test_type_1_es_visible_text_avoids_unapproved_hook_typos(state_dir):
     generator = _make_generator(state_dir)
     allowed_hooks = {
-        "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y por qué casi lo dejo...",
-        "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo....",
-        "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo...",
+        "Cuanto facturé haciendo Dropshipping\nen mis primeros 6 meses y por qué casi lo dejo...",
+        "Cuanto gané haciendo Dropshipping\nen estos 6 meses y por qué casi lo dejo....",
+        "Cuanto facturé haciendo Dropshipping\nen mis primeros 6 meses y porqué casi lo dejo...",
     }
 
     for _ in range(3):
@@ -106,7 +107,7 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y por qué casi lo dejo..."
+        == "Cuanto facturé haciendo Dropshipping\nen mis primeros 6 meses y por qué casi lo dejo..."
     )
     assert "Febrero - 800€" in first.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 2700€" in first.slides_by_role[SlideRole.MARCH]
@@ -120,7 +121,7 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Cuanto gané haciendo Dropshipping en estos 6 meses y por qué casi lo dejo...."
+        == "Cuanto gané haciendo Dropshipping\nen estos 6 meses y por qué casi lo dejo...."
     )
     assert "Febrero - 680€" in second.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 3100€" in second.slides_by_role[SlideRole.MARCH]
@@ -130,7 +131,7 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
     assert third.choice_key == "c"
     assert (
         third.slides_by_role[SlideRole.HOOK]
-        == "Cuanto facturé haciendo Dropshipping en mis primeros 6 meses y porqué casi lo dejo..."
+        == "Cuanto facturé haciendo Dropshipping\nen mis primeros 6 meses y porqué casi lo dejo..."
     )
     assert "Febrero - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
     assert "Marzo - 3100€" in third.slides_by_role[SlideRole.MARCH]
@@ -201,7 +202,7 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "How much I earned doing Dropshipping in my first 6 months and why I almost quit..."
+        == "How much I earned doing Dropshipping\nin my first 6 months and why I almost quit..."
     )
     assert "February - $800" in first.slides_by_role[SlideRole.FEBRUARY]
     assert "March - $2700" in first.slides_by_role[SlideRole.MARCH]
@@ -211,7 +212,7 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "How much I made doing Dropshipping in my first 6 months and why I almost quit..."
+        == "How much I made doing Dropshipping\nin my first 6 months and why I almost quit..."
     )
     assert "February - $680" in second.slides_by_role[SlideRole.FEBRUARY]
     assert "March - $3100" in second.slides_by_role[SlideRole.MARCH]
@@ -221,7 +222,7 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
     assert third.choice_key == "c"
     assert (
         third.slides_by_role[SlideRole.HOOK]
-        == "Exactly how much I made doing Dropshipping in my first 6 months and why I almost quit."
+        == "Exactly how much I made doing Dropshipping\nin my first 6 months and why I almost quit."
     )
     assert "February - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
     assert "March - 3100€" in third.slides_by_role[SlideRole.MARCH]
@@ -246,9 +247,9 @@ def test_type_2_tips_separate_title_and_body_and_hooks_are_fixed(state_dir):
     package = generator.generate(VideoType.TYPE_2, Language.ES)
 
     assert package.slides_by_role[SlideRole.HOOK] in {
-        "Habría pagado por saber estas 4 cosas cuando empecé en Dropshipping",
-        "Errores que veo en pequeños Dropshippers que están empezando",
-        "4 consejos de Dropshipping que me habrían ahorrado muchos errores",
+        "Habría pagado por saber estas 4 cosas\ncuando empecé en Dropshipping",
+        "Errores que veo en pequeños Dropshippers\nque están empezando",
+        "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores",
     }
     for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
         slide = package.slides_by_role[role]
@@ -266,7 +267,7 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "Habría pagado por saber estas 4 cosas cuando empecé en Dropshipping"
+        == "Habría pagado por saber estas 4 cosas\ncuando empecé en Dropshipping"
     )
     assert first.slides_by_role[SlideRole.TIP1].startswith(
         "1. Valida con poco presupuesto\n"
@@ -277,7 +278,7 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Errores que veo en pequeños Dropshippers que están empezando"
+        == "Errores que veo en pequeños Dropshippers\nque están empezando"
     )
     assert second.slides_by_role[SlideRole.TIP4].startswith(
         "4. Descuidar el trato con el comprador\n"
@@ -288,7 +289,7 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert third.choice_key == "c"
     assert (
         third.slides_by_role[SlideRole.HOOK]
-        == "4 consejos de Dropshipping que me habrían ahorrado muchos errores"
+        == "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores"
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
         "1. Protege tu margen\n"
@@ -306,7 +307,7 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
     assert first.choice_key == "a"
     assert (
         first.slides_by_role[SlideRole.HOOK]
-        == "I would have paid to know these 4 things when I started Dropshipping"
+        == "I would have paid to know these 4 things\nwhen I started Dropshipping"
     )
     assert first.slides_by_role[SlideRole.TIP1].startswith(
         "1. Validate with a small budget\n"
@@ -317,7 +318,7 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Mistakes I see small Dropshippers making when they are starting out"
+        == "Mistakes I see small Dropshippers\nmaking when they are starting out"
     )
     assert second.slides_by_role[SlideRole.TIP4].startswith(
         "4. Neglecting the buyer experience\n"
@@ -328,7 +329,7 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
     assert third.choice_key == "c"
     assert (
         third.slides_by_role[SlideRole.HOOK]
-        == "4 Dropshipping lessons that would have saved me a lot of mistakes"
+        == "4 Dropshipping lessons\nthat would have saved me a lot of mistakes"
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
         "1. Protect your margin\n"
@@ -348,6 +349,33 @@ def test_type_2_en_passes_punctuation_rule(state_dir):
         for token in FORBIDDEN_TYPE_2_TOKENS:
             assert token not in slide
     assert "Dropradar" in package.slides_by_role[SlideRole.TIP3]
+
+
+@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
+@pytest.mark.parametrize("language", [Language.ES, Language.EN])
+def test_type_1_and_2_male_hooks_are_exactly_two_lines(
+    state_dir,
+    video_type,
+    language,
+):
+    generator = _make_generator(state_dir)
+
+    for _ in range(3):
+        package = generator.generate(
+            video_type,
+            language,
+            gender=VideoGender.MALE,
+        )
+        hook = package.slides_by_role[SlideRole.HOOK]
+
+        assert len(hook.splitlines()) == 2
+        assert all(line.strip() for line in hook.splitlines())
+
+        generator.state.set_last_text_choice(
+            video_type,
+            language,
+            package.choice_key,
+        )
 
 
 @pytest.mark.parametrize(
@@ -383,7 +411,8 @@ def test_type_1_and_2_hooks_mention_money_and_dropshipping(
             assert any(term in hook for term in ("earned", "made", "revenue"))
             continue
         if video_type == VideoType.TYPE_2:
-            assert hook in {
+            normalized_hook = " ".join(hook.split())
+            assert normalized_hook in {
                 "habría pagado por saber estas 4 cosas cuando empecé en dropshipping",
                 "errores que veo en pequeños dropshippers que están empezando",
                 "4 consejos de dropshipping que me habrían ahorrado muchos errores",
