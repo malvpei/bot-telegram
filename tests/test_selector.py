@@ -1040,6 +1040,52 @@ def test_type_1_hook_never_uses_landscape_photo(temp_workspace):
     assert not selector._is_landscape_media(hook_slide.media)
 
 
+def test_type_1_hook_requires_detected_person_signal(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "hook_requires_person"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="hook_requires_person", idx=i)
+        for i in range(8)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.92,
+            daylight=0.86,
+            faces=0,
+            is_landscape=False,
+            outdoor=0.25,
+            casual=0.15,
+            portrait_focus=0.0,
+        )
+        candidate.metrics.aspect_ratio = 0.72
+
+    person = candidates[-1]
+    person.metrics = _metrics_stub(
+        quality=0.74,
+        daylight=0.68,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.18,
+        casual=0.18,
+        face_area=0.04,
+        face_center=0.72,
+        portrait_focus=0.55,
+    )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"hook_requires_person": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
+    assert hook_slide.media.source_id == person.source_id
+    assert selector._is_hook_person_visible_media(hook_slide.media)
+
+
 def test_type_2_hook_never_uses_landscape_photo(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "type2_hook_no_landscape"
@@ -1107,6 +1153,60 @@ def test_type_3_hook_never_scores_landscape_photo(temp_workspace):
     assert selector._score_type_3_hook(candidate) == 0.0
 
 
+def test_type_3_hook_requires_person_over_laptop_only_photo(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "type3_hook_requires_person"
+    account_dir.mkdir()
+
+    laptop_only = _make_candidate(
+        account_dir,
+        username="type3_hook_requires_person",
+        idx=1,
+        caption="old money laptop desk",
+    )
+    laptop_only.metrics = _metrics_stub(
+        quality=0.96,
+        daylight=0.9,
+        faces=0,
+        is_landscape=False,
+        outdoor=0.2,
+        luxury=0.75,
+        portrait_focus=0.0,
+        affluent=0.9,
+        laptop=1.0,
+        hands=1.0,
+    )
+    person = _make_candidate(
+        account_dir,
+        username="type3_hook_requires_person",
+        idx=2,
+        caption="old money laptop",
+    )
+    person.metrics = _metrics_stub(
+        quality=0.72,
+        daylight=0.68,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.12,
+        luxury=0.45,
+        face_area=0.04,
+        portrait_focus=0.5,
+        affluent=0.55,
+        laptop=0.2,
+    )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"type3_hook_requires_person": [laptop_only, person]},
+        VideoType.TYPE_3,
+        Language.ES,
+    )
+
+    assert selector._score_type_3_hook(laptop_only) == 0.0
+    assert plan.slides[0].media.source_id == person.source_id
+    assert selector._is_hook_person_visible_media(plan.slides[0].media)
+
+
 def test_type_1_hook_candidate_must_pass_quality_gate(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "hook_quality"
@@ -1170,6 +1270,8 @@ def test_type_1_generates_when_face_detector_misses_clear_vertical_photos(temp_w
             portrait_focus=0.0,
         )
         candidate.metrics.aspect_ratio = 0.72
+    candidates[0].metrics.body_area_ratio = 0.08
+    candidates[0].metrics.body_focus_score = 0.42
 
     selector = ImageSelector(settings, state)
     plan = selector.create_plan(
@@ -1178,7 +1280,10 @@ def test_type_1_generates_when_face_detector_misses_clear_vertical_photos(temp_w
         Language.ES,
     )
 
+    hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
     assert [slide.role for slide in plan.slides] == list(TYPE_1_ROLES)
+    assert hook_slide.media.source_id == candidates[0].source_id
+    assert selector._is_hook_person_visible_media(hook_slide.media)
 
 
 def test_type_1_can_use_multiple_images_from_same_carousel_when_needed(temp_workspace):

@@ -818,6 +818,9 @@ class ImageSelector:
     def _is_person_visible_media(self, media: MediaCandidate) -> bool:
         return self._has_person_signal(media)
 
+    def _is_hook_person_visible_media(self, media: MediaCandidate) -> bool:
+        return self._has_person_signal(media)
+
     def _is_type_1_person_visible_media(self, media: MediaCandidate) -> bool:
         if self._has_person_signal(media):
             return True
@@ -1354,7 +1357,7 @@ class ImageSelector:
         if role == SlideRole.HOOK:
             if (
                 self._is_landscape_media(media)
-                or not self._is_type_1_person_visible_media(media)
+                or not self._is_hook_person_visible_media(media)
             ):
                 return 0.0
             score += (
@@ -1397,7 +1400,10 @@ class ImageSelector:
         else:
             score -= 0.38
         if role == SlideRole.HOOK:
-            if not has_visible_user or self._is_landscape_media(media):
+            if (
+                not self._is_hook_person_visible_media(media)
+                or self._is_landscape_media(media)
+            ):
                 return 0.0
             score += (
                 0.18 * person_or_composition
@@ -1417,6 +1423,8 @@ class ImageSelector:
             return 0.0
         if self._is_landscape_media(media):
             return 0.0
+        if not self._is_hook_person_visible_media(media):
+            return 0.0
 
         person_or_hands = max(
             self._single_person_score(metrics),
@@ -1424,7 +1432,7 @@ class ImageSelector:
             metrics.body_focus_score,
             metrics.hands_score,
         )
-        if person_or_hands <= 0 and metrics.laptop_score <= 0:
+        if person_or_hands <= 0:
             return 0.0
 
         score = (
