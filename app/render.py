@@ -51,7 +51,9 @@ TIKTOK_OVERLAY_FONT_CANDIDATES = (
 )
 HOOK_TEXT_STROKE_FILL = (12, 12, 12)
 FIXED_SCREEN_TEXT_MARGIN = 78
-FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 40
+FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 30
+FEBRUARY_TITLE_MIN_BOX_WIDTH = 380
+FEBRUARY_TEXT_GROUP_GAP = 70
 HOOK_BASE_FONT_SIZE = 126
 HOOK_MIN_FONT_SIZE = 54
 HOOK_SIDE_MARGIN = 48
@@ -126,6 +128,7 @@ TEXT_CARD_TITLE_PADDING_Y = 22
 TEXT_CARD_LINE_OVERLAP = 12
 TEXT_CARD_GROUP_GAP = 20
 TEXT_CARD_FAUX_BOLD_PIXELS = 1
+TEXT_AVOID_CLEARANCE_MARGIN = 58
 TYPE_4_TITLE_LINES: dict[Language, tuple[str, str]] = {
     Language.ES: ("Empieza tu negocio online", "en 24h"),
     Language.EN: ("Start your online business", "in 24h"),
@@ -1456,7 +1459,7 @@ class VideoRenderer:
         padding_y = _scale_y(TEXT_CARD_PADDING_Y, height)
         title_padding_y = _scale_y(TEXT_CARD_TITLE_PADDING_Y, height)
         connected_line_gap = -_scale_y(TEXT_CARD_LINE_OVERLAP, height)
-        block_gap = _scale_y(TEXT_CARD_GROUP_GAP, height)
+        block_gap = self._caption_group_gap(slide, height)
         max_text_width = max(1, width - (edge_margin * 2) - (padding_x * 2))
 
         title_font, title_lines = self._fit_text(
@@ -1499,6 +1502,7 @@ class VideoRenderer:
             for lines, font, line_gap, _connected, group_padding_y in groups
         ]
         total_height = sum(group_heights) + block_gap * max(0, len(groups) - 1)
+        title_min_box_width = self._caption_title_min_box_width(slide, width)
         block_width = min(
             width - (edge_margin * 2),
             max(
@@ -1507,8 +1511,12 @@ class VideoRenderer:
                     font,
                     draw,
                     padding_x=padding_x,
+                    min_box_width=(
+                        title_min_box_width if index == 0 and not connected else 0
+                    ),
                 )
-                for lines, font, _line_gap, _connected, _group_padding_y in groups
+                for index, (lines, font, _line_gap, connected, _group_padding_y)
+                in enumerate(groups)
             ),
         )
         start_y = self._safe_text_start_y(
@@ -1547,6 +1555,7 @@ class VideoRenderer:
                     padding_x=padding_x,
                     padding_y=group_padding_y,
                     line_gap=line_gap,
+                    min_box_width=title_min_box_width if index == 0 else 0,
                 )
             if index < len(groups) - 1:
                 y += block_gap
@@ -1562,8 +1571,8 @@ class VideoRenderer:
         if (
             slide is not None and slide.fixed_asset and slide.role == SlideRole.FEBRUARY
         ):
-            return (0.34, 0.32, 0.36, 0.30, 0.38, 0.28)
-        return (0.50, 0.54, 0.46, 0.60, 0.40, 0.66, 0.34)
+            return (0.38, 0.40, 0.36, 0.42, 0.34, 0.32)
+        return (0.60, 0.66, 0.54, 0.72, 0.48, 0.40, 0.34)
 
     def _clamp_fixed_screen_caption_y(
         self,
@@ -1596,11 +1605,15 @@ class VideoRenderer:
         draw: ImageDraw.ImageDraw,
         *,
         padding_x: int,
+        min_box_width: int = 0,
     ) -> int:
         if not lines:
             return 0
         return max(
-            self._text_size(draw, line, font, stroke_width=0)[0] + padding_x * 2
+            max(
+                min_box_width,
+                self._text_size(draw, line, font, stroke_width=0)[0] + padding_x * 2,
+            )
             for line in lines
         )
 
@@ -1632,6 +1645,7 @@ class VideoRenderer:
         padding_x: int,
         padding_y: int,
         line_gap: int,
+        min_box_width: int = 0,
     ) -> int:
         y = start_y
         radius = max(6, _scale_x(12, canvas_width))
@@ -1639,12 +1653,12 @@ class VideoRenderer:
             bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=0)
             line_width = bbox[2] - bbox[0]
             line_height = bbox[3] - bbox[1]
-            box_width = line_width + padding_x * 2
+            box_width = max(min_box_width, line_width + padding_x * 2)
             box_height = line_height + padding_y * 2
             x = (canvas_width - box_width) // 2
             box = (x, y, x + box_width, y + box_height)
             draw.rounded_rectangle(box, radius=radius, fill=TEXT_CARD_FILL)
-            text_x = x + padding_x - bbox[0]
+            text_x = x + (box_width - line_width) // 2 - bbox[0]
             text_y = y + padding_y - bbox[1]
             self._draw_card_text(
                 draw,
@@ -1655,6 +1669,35 @@ class VideoRenderer:
             )
             y += box_height + line_gap
         return y - line_gap
+
+    def _caption_title_min_box_width(
+        self,
+        slide: SlidePlan | None,
+        canvas_width: int,
+    ) -> int:
+        if (
+            slide is not None
+            and slide.fixed_asset
+            and slide.role == SlideRole.FEBRUARY
+        ):
+            return min(
+                canvas_width - _scale_x(TEXT_CARD_EDGE_MARGIN * 2, canvas_width),
+                _scale_x(FEBRUARY_TITLE_MIN_BOX_WIDTH, canvas_width),
+            )
+        return 0
+
+    def _caption_group_gap(
+        self,
+        slide: SlidePlan | None,
+        canvas_height: int,
+    ) -> int:
+        if (
+            slide is not None
+            and slide.fixed_asset
+            and slide.role == SlideRole.FEBRUARY
+        ):
+            return _scale_y(FEBRUARY_TEXT_GROUP_GAP, canvas_height)
+        return _scale_y(TEXT_CARD_GROUP_GAP, canvas_height)
 
     def _draw_connected_pill_lines(
         self,
@@ -1826,7 +1869,7 @@ class VideoRenderer:
         x = max(0, (canvas_width - block_width) // 2)
         text_left = x
         text_right = min(canvas_width, x + block_width)
-        margin = _scale_y(18, canvas_height)
+        margin = _scale_y(TEXT_AVOID_CLEARANCE_MARGIN, canvas_height)
         forbidden: list[tuple[int, int]] = []
         for region, _weight in avoid_regions:
             if region[2] <= text_left or region[0] >= text_right:
@@ -1883,11 +1926,46 @@ class VideoRenderer:
         score += self._background_clutter_score(luminance, box) * 0.6
         for region, weight in avoid_regions:
             overlap = self._intersection_area(box, region)
-            if overlap <= 0:
-                continue
             region_area = max(1, self._box_area(region))
-            score += weight * max(overlap / box_area, overlap / region_area)
+            if overlap > 0:
+                score += weight * max(overlap / box_area, overlap / region_area)
+                continue
+            score += self._avoid_region_clearance_score(
+                box,
+                region,
+                region_weight=weight,
+                canvas_height=canvas_height,
+            )
         return score
+
+    def _avoid_region_clearance_score(
+        self,
+        box: tuple[int, int, int, int],
+        region: tuple[int, int, int, int],
+        *,
+        region_weight: float,
+        canvas_height: int,
+    ) -> float:
+        horizontal_overlap = min(box[2], region[2]) - max(box[0], region[0])
+        if horizontal_overlap <= 0:
+            return 0.0
+
+        if box[3] <= region[1]:
+            gap = region[1] - box[3]
+        elif region[3] <= box[1]:
+            gap = box[1] - region[3]
+        else:
+            gap = 0
+        clearance = _scale_y(TEXT_AVOID_CLEARANCE_MARGIN, canvas_height)
+        if gap >= clearance:
+            return 0.0
+
+        horizontal_ratio = horizontal_overlap / max(
+            1,
+            min(box[2] - box[0], region[2] - region[0]),
+        )
+        closeness = (clearance - gap) / max(1, clearance)
+        return (region_weight / 12.0) * horizontal_ratio * closeness
 
     def _background_clutter_score(
         self,
@@ -1931,7 +2009,7 @@ class VideoRenderer:
                 width,
                 height,
                 x_pad=int(w * 0.38),
-                y_pad=int(h * 0.38),
+                y_pad=int(h * 0.58),
             )
             regions.append((face, TEXT_FACE_AVOID_WEIGHT))
 

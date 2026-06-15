@@ -12,6 +12,7 @@ from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoType
 from app.render import (
     FEBRUARY_FIXED_SCREEN_TEXT_MARGIN,
+    FEBRUARY_TITLE_MIN_BOX_WIDTH,
     FIXED_SCREEN_TEXT_MARGIN,
     HOOK_BASE_FONT_SIZE,
     HOOK_MIN_FONT_SIZE,
@@ -19,6 +20,7 @@ from app.render import (
     HOOK_TEXT_STROKE_FILL,
     SAFE_TEXT_BOTTOM_MARGIN,
     SAFE_TEXT_TOP_MARGIN,
+    TEXT_AVOID_CLEARANCE_MARGIN,
     VideoRenderer,
 )
 
@@ -433,7 +435,9 @@ def test_caption_body_background_is_connected_and_keeps_side_margin(monkeypatch)
         lower_half = white[still.height // 2 :, :]
         row_counts = lower_half.sum(axis=1)
         rows = np.where(row_counts > 24)[0]
-        connected_rows = row_counts[rows.min() : rows.max() + 1]
+        row_runs = np.split(rows, np.where(np.diff(rows) > 1)[0] + 1)
+        body_run = max(row_runs, key=len)
+        connected_rows = row_counts[body_run.min() : body_run.max() + 1]
         assert connected_rows.min() > 0
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -544,7 +548,7 @@ def test_fixed_february_caption_sits_lower_but_above_screen():
         fixed_asset=True,
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.34
+    assert renderer._caption_preferred_centers(slide)[0] == 0.38
 
     y = renderer._clamp_fixed_screen_caption_y(
         slide,
@@ -557,6 +561,45 @@ def test_fixed_february_caption_sits_lower_but_above_screen():
 
     assert y + 92 <= screen_top - expected_margin
     assert y > 200
+
+
+def test_fixed_february_title_card_has_symmetric_minimum_width(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "dark_fixed.jpg"
+        Image.new("RGB", (360, 640), (10, 12, 14)).save(image_path)
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            width=360,
+            height=640,
+            fonts_dir=root / "fonts",
+        )
+        renderer = VideoRenderer(settings)
+        monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+        slide = SlidePlan(
+            index=5,
+            role=SlideRole.FEBRUARY,
+            text="Febrero\nx",
+            media=_candidate(image_path),
+            fixed_asset=True,
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_1)
+        pixels = np.asarray(still)
+        white = (
+            (pixels[..., 0] > 235)
+            & (pixels[..., 1] > 235)
+            & (pixels[..., 2] > 235)
+        )
+        _ys, xs = np.where(white)
+        expected_width = max(1, int(round(FEBRUARY_TITLE_MIN_BOX_WIDTH * 360 / 1080)))
+
+        assert xs.max() - xs.min() + 1 >= expected_width - 2
+        assert abs(((xs.min() + xs.max()) / 2) - (still.width / 2)) <= 1
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_fixed_asset_is_fit_without_cropping_sides():
@@ -614,6 +657,29 @@ def test_safe_text_position_avoids_face_region(monkeypatch):
     text_box = (50, y, 310, y + 90)
 
     assert renderer._intersection_area(text_box, face_region) == 0
+
+
+def test_safe_text_position_keeps_clearance_from_face_region(monkeypatch):
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGBA", (360, 640), (20, 20, 20, 255))
+    face_region = (80, 240, 280, 330)
+    monkeypatch.setattr(
+        renderer,
+        "_text_avoid_regions",
+        lambda image: [(face_region, 150.0)],
+    )
+
+    block_height = 70
+    y = renderer._safe_text_start_y(
+        image,
+        block_width=260,
+        block_height=block_height,
+        preferred_centers=(0.58,),
+    )
+    clearance = max(1, int(round(TEXT_AVOID_CLEARANCE_MARGIN * 640 / 1920)))
+
+    assert y >= face_region[3] + clearance or y + block_height <= face_region[1] - clearance
 
 
 def test_safe_text_position_centers_inside_clear_gap(monkeypatch):
