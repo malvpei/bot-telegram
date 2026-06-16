@@ -198,7 +198,7 @@ async def _fast_sleep(delay: float) -> None:
     return None
 
 
-def test_type_3_sends_embedded_text_images_without_slide_messages():
+def test_type_3_sends_hook_text_message_then_clean_images():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -208,7 +208,7 @@ def test_type_3_sends_embedded_text_images_without_slide_messages():
         hook_slide = SlidePlan(
             index=1,
             role=SlideRole.HOOK,
-            text="Como empezar en Dropshipping en 2026",
+            text="Como hacer dropshipping en 2026",
             media=MediaCandidate(
                 source_account="alpha",
                 source_id="hook",
@@ -249,9 +249,17 @@ def test_type_3_sends_embedded_text_images_without_slide_messages():
             fixed_asset=True,
         )
 
-        asyncio.run(_send_slides_text_then_image(context, 123, [hook_slide, tool_slide]))
+        asyncio.run(
+            _send_slides_text_then_image(
+                context,
+                123,
+                [hook_slide, tool_slide],
+                video_type=VideoType.TYPE_3,
+            )
+        )
 
         assert context.bot.events == [
+            ("message", "Como hacer dropshipping en 2026"),
             ("photo", "slide.jpg"),
             ("photo", "slide.jpg"),
         ]

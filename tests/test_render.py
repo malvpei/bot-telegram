@@ -788,7 +788,7 @@ def test_safe_text_position_avoids_unnecessarily_high_caption(monkeypatch):
     )
 
     assert y > SAFE_TEXT_TOP_MARGIN + 260
-    assert y + block_height <= lower_person_region[1] - SAFE_TEXT_TOP_MARGIN // 2
+    assert y + block_height <= lower_person_region[1] - TEXT_AVOID_CLEARANCE_MARGIN
 
 
 def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_body_line():

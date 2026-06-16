@@ -28,6 +28,7 @@ from app.accounts import (
 from app.config import get_settings
 from app.models import (
     Language,
+    SlideRole,
     VideoGender,
     VideoRequest,
     VideoType,
