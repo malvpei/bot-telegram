@@ -18,29 +18,42 @@ OPENAI_IMAGES_EDIT_URL = "https://api.openai.com/v1/images/edits"
 FAL_QUEUE_BASE_URL = "https://queue.fal.run"
 STORY_IMAGE_SOURCE_ACCOUNT = "ai_story"
 STORY_STYLE = (
-    "clean vertical 2D comic/caricature illustration like a simple social-media "
-    "webcomic, bold black outlines, flat soft colors, simple shading, expressive "
-    "faces, less realistic and more cartoon, polished but not photorealistic"
+    "clean vertical 2D cartoon comic illustration, not photorealistic, bold black "
+    "outlines, flat soft colors, simple cel shading, expressive face, simple "
+    "background geometry, polished social-media story style"
 )
 NO_OVERLAY_TEXT_DIRECTIVE = (
     "Do not add captions, speech bubbles, subtitles, watermarks or TikTok UI. "
     "Leave clean empty space near the top for an external text card."
 )
 SINGLE_SCENE_DIRECTIVE = (
-    "Create exactly ONE single continuous scene in the image. No split-screen, "
-    "no comic panels, no repeated character, no before/after layout, no stacked "
-    "frames, no duplicated laptop, no duplicated room."
+    "HARD RULE: the whole image is one single full-page illustration from one "
+    "camera shot. Do not create a comic strip. Do not create panels. Do not use "
+    "split-screen, stacked frames, horizontal dividers, repeated rooms, repeated "
+    "characters, before/after layout, montage, collage or multiple moments. "
+    "Only one protagonist and one laptop maximum."
 )
 BEDROOM_CONTINUITY_DIRECTIVE = (
-    "For bedroom scenes use the exact same small bedroom across the sequence: "
-    "plain light gray walls, wooden desk, realistic desk lamp, small shelf with "
-    "books, Porsche 911 GT3 poster taped on the left wall, piggy bank labeled "
-    "GT3 FUND, same desk position and same overall layout."
+    "Bedroom continuity: use the same small bedroom as a single real room across "
+    "these scenes: plain light gray walls, wooden desk, realistic desk lamp, "
+    "small shelf with books, Porsche 911 GT3 poster taped on the left wall, piggy "
+    "bank labeled GT3 FUND, notebook and pen, same desk position and same layout. "
+    "The protagonist is normal human size, seated on a chair at the desk, never "
+    "standing on the desk, never miniature, never separated from the laptop."
+)
+LAPTOP_COMPOSITION_DIRECTIVE = (
+    "Laptop composition for desk scenes: use a natural three-quarter side view "
+    "from desk height, similar to a real photo taken from the front-left of the "
+    "desk. The open laptop is in the left foreground, angled about 35 degrees "
+    "toward the protagonist, so the viewer can see the screen and also see the "
+    "protagonist's face/profile and upper body on the right. The hinge, keyboard "
+    "and screen orientation must be physically realistic."
 )
 REFERENCE_IDENTITY_DIRECTIVE = (
     "Use the person in the reference photo as the identity reference: preserve "
     "the same young male protagonist, hair color, face shape, build and overall "
-    "look across all scenes, adapted to the comic style."
+    "look across all scenes, adapted to the cartoon comic style. No sunglasses "
+    "unless explicitly requested; eyes should be visible in indoor scenes."
 )
 
 
@@ -56,70 +69,76 @@ STORY_SCENES: tuple[StoryScene, ...] = (
         prompt=(
             "Scene 1: the same protagonist is working sadly in a busy fast-food "
             "restaurant kitchen inspired by McDonald's. He must wear clear "
-            "McDonald's-style work clothes: black polo uniform, red visor or cap, "
-            "red apron, small yellow M-style badge/name tag, no sunglasses. He is "
-            "holding a burger, tired posture, industrial fryers, burgers and fries "
-            "around him, coworkers and customers only in the far background, "
-            "feeling depressed and stuck."
+            "McDonald's-style work clothes: black short-sleeve polo uniform with "
+            "small yellow M-style logo, red visor or cap, name tag, black or red "
+            "apron, no luxury shirt, no GT3 text, no sunglasses, eyes visible. "
+            "Composition like a single vertical cartoon frame inside the kitchen: "
+            "he stands in the center foreground holding a burger with both hands, "
+            "sad/tired expression, industrial fryers, grill, fries and burgers "
+            "around him, coworkers and customers only small in the far background."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_BUILDING_STORE,
         prompt=(
-            "Scene 2: same bedroom. The protagonist sits at the wooden desk, "
-            "leaning forward and looking directly at his laptop, focused and "
-            "determined while building a dropshipping store. Camera angle shows "
-            "mostly the plain back of the laptop, with no data, no charts and no "
-            "dashboard visible on the laptop exterior. Include notebooks, desk "
-            "lamp, GT3 FUND piggy bank and the Porsche poster."
+            "Scene 2: same bedroom. The protagonist sits on the chair at the "
+            "wooden desk, leaning forward, looking directly at the laptop screen, "
+            "focused and determined while building a dropshipping store. Use the "
+            "laptop composition rule so both the protagonist and the screen are "
+            "visible naturally. On the laptop screen show a clean store builder "
+            "dashboard with product cards, a small green progress chart and simple "
+            "order widgets. Include notebooks, desk lamp, GT3 FUND piggy bank and "
+            "the Porsche poster."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_FIRST_FAILURE,
         prompt=(
-            "Scene 3: same bedroom and same desk. The store is failing. Use a "
-            "single coherent camera angle where both the protagonist and the open "
-            "laptop screen are visible. The laptop must have a realistic hinge and "
-            "realistic orientation toward the protagonist; he is looking at the "
-            "screen with one hand on his face, discouraged. On the laptop screen "
-            "show a minimal clean ecommerce dashboard with one simple red downward "
-            "line chart and zero-sales mood, no readable brand names."
+            "Scene 3: same bedroom and same desk. The protagonist is normal size, "
+            "seated in the chair, sad and discouraged, looking at the laptop "
+            "screen because he has no sales. Use the laptop composition rule so "
+            "the screen and his sad face are both visible in one believable shot. "
+            "On the laptop screen show a minimal clean ecommerce dashboard with "
+            "one simple red downward line chart, a visible zero-sales feeling, "
+            "and no readable brand names."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_DEEP_FAILURE,
         prompt=(
             "Scene 4: same bedroom and same desk, several months later at night. "
-            "Single coherent scene only. The protagonist is more sad and desperate, "
-            "close to giving up, crying with both hands near his face. Blue dark "
-            "room lighting, laptop glow, slightly messy desk. The laptop screen is "
-            "visible at a realistic angle and shows a cleaner, more developed "
-            "ecommerce analytics dashboard with tidy cards, red KPI numbers, a red "
-            "downward chart and a red arrow, clearly communicating the store is "
-            "going badly, no readable brand names."
+            "The protagonist sits in the chair using the laptop, very sad and "
+            "almost crying, one hand on his face and one hand near the keyboard "
+            "or trackpad, looking at the laptop screen. Use the laptop composition "
+            "rule; do not make separate panels. Blue dark room lighting, laptop "
+            "glow, slightly messy desk. The laptop screen is visible at a realistic "
+            "angle and shows a clean ecommerce analytics dashboard with tidy cards, "
+            "red KPI numbers, a red downward chart and a red arrow, clearly "
+            "communicating the store is going badly."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_DROPRADAR,
         prompt=(
-            "Scene 5: same bedroom and same desk, turning point. Single coherent "
-            "scene only. The protagonist is concentrated and serious, studying the "
-            "laptop, not celebrating yet. The laptop orientation is realistic toward "
-            "him while still letting the viewer see the screen. The screen must have "
-            "a clean white background, clearly show the word Dropradar in green and "
-            "black, attractive product research dashboard cards, clean data rows "
-            "and a green rising sales chart. Keep the interface bright, white and "
-            "modern."
+            "Scene 5: same bedroom and same desk, turning point. The protagonist "
+            "sits in the chair using the laptop, concentrated and serious, looking "
+            "at the screen. Use the laptop composition rule; both his face/profile "
+            "and the screen must be visible in one believable shot. On the laptop "
+            "screen clearly show Dropradar on a clean white interface: the word "
+            "Dropradar large in green and black, product research dashboard cards, "
+            "clean data rows, product metrics and a green rising chart."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_SUCCESS_COMIC,
         prompt=(
             "Scene 6: transform the reference photo itself into the same clean "
-            "comic/caricature illustration style. Preserve the original composition closely: "
-            "the young man next to the black Porsche 911 GT3 on the road, mountains, "
-            "trees and dramatic cloudy sky. The protagonist is happy and proud, "
-            "as if he achieved his dream. Single scene only. No text."
+            "cartoon comic illustration style. Preserve the original photo "
+            "composition closely: one outdoor road scene only, the young man next "
+            "to the black Porsche 911 GT3, mountains, trees and dramatic cloudy sky. "
+            "Do not show a bedroom, laptop, desk, lamp or poster. Do not create "
+            "multiple panels. The protagonist is happy and proud, as if he achieved "
+            "his dream. No text inside the image."
         ),
     ),
 )
@@ -178,7 +197,7 @@ class StoryCarouselImageGenerator:
                 "Falta FAL_KEY. Configuralo para usar el carrusel IA tipo 4 con fal.ai."
             )
 
-        prompt = self._build_prompt(scene.prompt)
+        prompt = self._build_prompt(scene)
         submit_payload = {
             "prompt": prompt,
             "image_url": self._image_data_uri(reference_image_path),
@@ -234,7 +253,7 @@ class StoryCarouselImageGenerator:
                 "Falta OPENAI_API_KEY. Configuralo para usar el carrusel IA tipo 4."
             )
 
-        prompt = self._build_prompt(scene.prompt)
+        prompt = self._build_prompt(scene)
         mime_type = mimetypes.guess_type(reference_image_path.name)[0] or "image/jpeg"
         with reference_image_path.open("rb") as image_handle:
             files = [
@@ -362,21 +381,37 @@ class StoryCarouselImageGenerator:
             return str(error)
         return response.text[:400]
 
-    def _build_prompt(self, scene_prompt: str) -> str:
-        return "\n".join(
-            (
-                STORY_STYLE,
-                REFERENCE_IDENTITY_DIRECTIVE,
-                SINGLE_SCENE_DIRECTIVE,
-                BEDROOM_CONTINUITY_DIRECTIVE,
-                NO_OVERLAY_TEXT_DIRECTIVE,
-                scene_prompt,
+    def _build_prompt(self, scene: StoryScene) -> str:
+        directives = [
+            STORY_STYLE,
+            REFERENCE_IDENTITY_DIRECTIVE,
+            SINGLE_SCENE_DIRECTIVE,
+            NO_OVERLAY_TEXT_DIRECTIVE,
+        ]
+        if scene.role in {
+            SlideRole.STORY_BUILDING_STORE,
+            SlideRole.STORY_FIRST_FAILURE,
+            SlideRole.STORY_DEEP_FAILURE,
+            SlideRole.STORY_DROPRADAR,
+        }:
+            directives.extend(
                 (
-                    "Generate a vertical carousel image with strong storytelling, "
-                    "consistent character design and clean readable visual elements."
+                    BEDROOM_CONTINUITY_DIRECTIVE,
+                    LAPTOP_COMPOSITION_DIRECTIVE,
+                )
+            )
+        directives.extend(
+            (
+                scene.prompt,
+                (
+                    "Final hard constraints: one single scene, one camera angle, "
+                    "one normal-size protagonist, no sunglasses indoors, no collage, "
+                    "no panels, no horizontal separators, no duplicated room, no "
+                    "duplicated protagonist."
                 ),
             )
         )
+        return "\n".join(directives)
 
     def _candidate_for_path(
         self,

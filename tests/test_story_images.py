@@ -128,16 +128,21 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
     settings = get_settings()
     generator = StoryCarouselImageGenerator(settings)
     prompts = {
-        scene.role: generator._build_prompt(scene.prompt)
+        scene.role: generator._build_prompt(scene)
         for scene in STORY_SCENES
     }
 
     for prompt in prompts.values():
-        assert "exactly ONE single continuous scene" in prompt
-        assert "comic/caricature" in prompt
-        assert "no comic panels" in prompt
+        assert "one single full-page illustration" in prompt
+        assert "cartoon comic illustration" in prompt
+        assert "Do not create panels" in prompt
+        assert "no horizontal separators" in prompt
     assert "McDonald's-style work clothes" in prompts[STORY_SCENES[0].role]
-    assert "plain back of the laptop" in prompts[STORY_SCENES[1].role]
+    assert "no sunglasses, eyes visible" in prompts[STORY_SCENES[0].role]
+    assert "Use the laptop composition rule" in prompts[STORY_SCENES[1].role]
     assert "same bedroom and same desk" in prompts[STORY_SCENES[2].role]
-    assert "realistic hinge and realistic orientation" in prompts[STORY_SCENES[2].role]
-    assert "screen must have a clean white background" in prompts[STORY_SCENES[4].role]
+    assert "normal size, seated in the chair" in prompts[STORY_SCENES[2].role]
+    assert "word Dropradar large in green and black" in prompts[STORY_SCENES[4].role]
+    assert "Bedroom continuity" not in prompts[STORY_SCENES[0].role]
+    assert "Bedroom continuity" not in prompts[STORY_SCENES[5].role]
+    assert "Do not show a bedroom" in prompts[STORY_SCENES[5].role]

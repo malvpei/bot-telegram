@@ -644,7 +644,7 @@ class ScriptGenerator:
                 "de 0 ese mes tuve mi primera venta"
             ),
             SlideRole.STORY_SUCCESS_COMIC: (
-                "Despues de un año y medio conseguí cumplir mi sueño"
+                "después de año y medio..."
             ),
             SlideRole.STORY_ORIGINAL_REFERENCE: "",
         }

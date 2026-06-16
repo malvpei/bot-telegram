@@ -521,12 +521,12 @@ def test_type_4_story_texts_are_exactly_fixed(state_dir):
         ),
     ]
     assert package.ordered_slides[5:] == [
-        "Despues de un año y medio conseguí cumplir mi sueño",
+        "después de año y medio...",
         "",
     ]
     assert package.slides_by_role[SlideRole.STORY_MCDONALD].startswith("Así es")
     assert package.slides_by_role[SlideRole.STORY_DROPRADAR].startswith("Investigando")
-    assert package.slides_by_role[SlideRole.STORY_SUCCESS_COMIC].startswith("Despues")
+    assert package.slides_by_role[SlideRole.STORY_SUCCESS_COMIC] == "después de año y medio..."
 
 
 def test_type_3_can_use_paypal_and_instagram(state_dir, monkeypatch):
