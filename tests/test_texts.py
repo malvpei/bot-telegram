@@ -530,7 +530,7 @@ def test_type_3_can_use_paypal_and_instagram(state_dir, monkeypatch):
     generator = _make_generator(state_dir)
     package = generator.generate(VideoType.TYPE_3, Language.ES)
 
-    assert package.slides_by_role[SlideRole.HOOK] == "Como empezar en Dropshipping en 2026"
+    assert package.slides_by_role[SlideRole.HOOK] == "Como hacer dropshipping en 2026"
     assert "paypal" in package.slides_by_role[SlideRole.TOOL_PAYMENTS].lower()
     assert "capcut" in package.slides_by_role[SlideRole.TOOL_EDITING].lower()
     assert "instagram" in package.slides_by_role[SlideRole.TOOL_MARKETING].lower()
@@ -541,7 +541,7 @@ def test_type_3_can_use_stripe_and_tiktok(state_dir, monkeypatch):
     generator = _make_generator(state_dir)
     package = generator.generate(VideoType.TYPE_3, Language.EN)
 
-    assert package.slides_by_role[SlideRole.HOOK] == "Start"
+    assert package.slides_by_role[SlideRole.HOOK] == "How to start in Dropshipping in 2026"
     assert "stripe" in package.slides_by_role[SlideRole.TOOL_PAYMENTS].lower()
     assert "capcut" in package.slides_by_role[SlideRole.TOOL_EDITING].lower()
     assert "tiktok" in package.slides_by_role[SlideRole.TOOL_MARKETING].lower()

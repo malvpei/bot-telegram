@@ -464,7 +464,6 @@ class VideoRenderer:
     ) -> np.ndarray:
         canvas = self._cover_image(source_image, progress).convert("RGBA")
         if slide.role == SlideRole.HOOK:
-            self._draw_hook_text(canvas, slide.text)
             return np.asarray(canvas.convert("RGB"))
         else:
             self._draw_type_3_tool_slide(canvas, slide)
@@ -1225,6 +1224,8 @@ class VideoRenderer:
             return
 
         if slide.role == SlideRole.HOOK:
+            if video_type == VideoType.TYPE_3:
+                return
             self._draw_hook_text(image, slide.text)
             return
 
@@ -1944,6 +1945,8 @@ class VideoRenderer:
         center = (box[1] + box[3]) / 2.0 / max(canvas_height, 1)
         score = abs(center - preferred_center) * 2.2
         score += abs(center - 0.5) * 0.45
+        if preferred_center >= 0.50 and center < 0.42:
+            score += (0.42 - center) * 2.8
         score += self._background_clutter_score(luminance, box) * 0.6
         for region, weight in avoid_regions:
             overlap = self._intersection_area(box, region)

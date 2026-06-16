@@ -1015,7 +1015,12 @@ async def _execute_job(
         await _send_message(context, chat.id, header)
         for message in result.social_copy.messages:
             await _send_message(context, chat.id, message)
-        await _send_slides_text_then_image(context, chat.id, result.slides)
+        await _send_slides_text_then_image(
+            context,
+            chat.id,
+            result.slides,
+            video_type=result.video_type,
+        )
         if result.video_type == VideoType.TYPE_4:
             return
         context.user_data["repeat_request"] = {
@@ -1155,14 +1160,23 @@ async def _telegram_call_with_retries(call, **kwargs):
     raise RuntimeError("Telegram send retry loop finished without a result")
 
 
-async def _send_slides_text_then_image(context, chat_id: int, slides) -> None:
+async def _send_slides_text_then_image(
+    context,
+    chat_id: int,
+    slides,
+    *,
+    video_type: VideoType | None = None,
+) -> None:
     slides = list(slides)
 
-    # Slide copy is embedded in the generated images for every video type.
+    # Slide copy is embedded in generated images except the Type 3 hook,
+    # which is sent as Telegram text so the hook image stays clean.
     for slide in slides:
         path = slide.media.local_path
         if not path.exists():
             continue
+        if video_type == VideoType.TYPE_3 and slide.role == SlideRole.HOOK and slide.text:
+            await _send_message(context, chat_id, slide.text)
         await _send_photo(context, chat_id, path)
 
 

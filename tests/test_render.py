@@ -93,7 +93,7 @@ def test_type_3_tool_slide_uses_icon_asset_and_hook_text_style():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_3_hook_still_renders_hook_text():
+def test_type_3_hook_still_keeps_photo_clean_without_hook_text():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -115,7 +115,7 @@ def test_type_3_hook_still_renders_hook_text():
         )
 
         still = renderer.render_slide_still(slide, VideoType.TYPE_3)
-        assert np.asarray(still).max() > 200
+        assert np.asarray(still).max() == 0
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -766,6 +766,29 @@ def test_safe_text_position_respects_top_and_bottom_margins(monkeypatch):
 
     assert y >= SAFE_TEXT_TOP_MARGIN
     assert y + 300 <= 1920 - SAFE_TEXT_BOTTOM_MARGIN
+
+
+def test_safe_text_position_avoids_unnecessarily_high_caption(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGBA", (1080, 1920), (20, 20, 20, 255))
+    lower_person_region = (250, 980, 830, 1820)
+    monkeypatch.setattr(
+        renderer,
+        "_text_avoid_regions",
+        lambda image: [(lower_person_region, 90.0)],
+    )
+
+    block_height = 360
+    y = renderer._safe_text_start_y(
+        image,
+        block_width=920,
+        block_height=block_height,
+        preferred_centers=(0.60, 0.66, 0.54, 0.72, 0.48, 0.40, 0.34),
+    )
+
+    assert y > SAFE_TEXT_TOP_MARGIN + 260
+    assert y + block_height <= lower_person_region[1] - SAFE_TEXT_TOP_MARGIN // 2
 
 
 def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_body_line():

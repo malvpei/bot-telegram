@@ -9,6 +9,15 @@ from app.config import Settings
 
 R2_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 R2_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif"}
+R2_IMAGE_CONTENT_TYPE_MARKERS = {
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/webp",
+    "image/heic",
+    "image/heif",
+    "image/avif",
+}
 R2_ACCESS_KEY_ID_LENGTH = 32
 
 
@@ -145,6 +154,9 @@ class R2StorageClient:
                 if Path(key).suffix.lower() in R2_IMAGE_EXTENSIONS:
                     objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
                     continue
+                if self._key_looks_like_image_content_type(key):
+                    objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
+                    continue
                 if self._object_has_content_type(key, "image/"):
                     objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
         return objects
@@ -177,6 +189,11 @@ class R2StorageClient:
             return False
         content_type = str(response.get("ContentType") or "").lower()
         return content_type.startswith(prefix.lower())
+
+    @staticmethod
+    def _key_looks_like_image_content_type(key: str) -> bool:
+        lowered = key.lower()
+        return any(marker in lowered for marker in R2_IMAGE_CONTENT_TYPE_MARKERS)
 
     def _boto_client(self):
         if not self.is_configured:

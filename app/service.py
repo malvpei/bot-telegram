@@ -645,9 +645,16 @@ class VideoCreationService:
         prefix = self.settings.r2_image_prefix
         images = self.r2_storage.list_images(prefix)
         if not images:
+            visible_keys = self._list_r2_keys_for_error(prefix)
+            visible_line = (
+                " Objetos vistos: " + ", ".join(visible_keys[:8])
+                if visible_keys
+                else " No vi ningun objeto bajo ese prefijo."
+            )
             raise ValueError(
-                "No encontre imagenes .jpg/.jpeg/.png/.webp/.heic/.heif/.avif en R2"
+                "No encontre imagenes compatibles en R2"
                 + (f" bajo el prefijo {prefix!r}." if prefix else ".")
+                + visible_line
             )
         ordered_images = sorted(images, key=lambda item: item.key)
         selected_key, queue_restarted = self.state.get_next_story_reference_image_id(
@@ -665,6 +672,25 @@ class VideoCreationService:
             f"r2:{selected.key}",
             queue_restarted,
         )
+
+    def _list_r2_keys_for_error(self, prefix: str) -> list[str]:
+        try:
+            client = self.r2_storage._boto_client()
+            paginator = client.get_paginator("list_objects_v2")
+            keys: list[str] = []
+            for page in paginator.paginate(
+                Bucket=self.settings.r2_bucket,
+                Prefix=prefix.strip().lstrip("/"),
+            ):
+                for item in page.get("Contents", []):
+                    key = str(item.get("Key") or "")
+                    if key and not key.endswith("/"):
+                        keys.append(key)
+                    if len(keys) >= 8:
+                        return keys
+            return keys
+        except Exception as error:  # noqa: BLE001
+            return [f"no pude listar objetos para diagnostico: {error}"]
 
     def _create_extra_image_locked(self, request: VideoRequest) -> MediaCandidate:
         usernames = extract_usernames(
