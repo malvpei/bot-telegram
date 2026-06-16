@@ -28,6 +28,8 @@ class FakePaginator:
                 "Contents": [
                     {"Key": "imagenes/a.jpg", "Size": 10},
                     {"Key": "imagenes/b.png", "Size": 20},
+                    {"Key": "imagenes/snap:image/jpeg", "Size": 25},
+                    {"Key": "imagenes/not-image", "Size": 26},
                     {"Key": "imagenes/video.mp4", "Size": 30},
                     {"Key": "imagenes/folder/", "Size": 0},
                 ]
@@ -51,6 +53,13 @@ class FakeBotoClient:
         body, content_type = self.objects[kwargs["Key"]]
         return {"Body": BytesIO(body), "ContentType": content_type}
 
+    def head_object(self, **kwargs):
+        content_type_by_key = {
+            "imagenes/snap:image/jpeg": "image/jpeg",
+            "imagenes/not-image": "text/plain",
+        }
+        return {"ContentType": content_type_by_key[kwargs["Key"]]}
+
 
 def test_r2_lists_and_uploads_images():
     settings = replace(
@@ -72,7 +81,11 @@ def test_r2_lists_and_uploads_images():
     )
     data, content_type = client.download_bytes("imagenes/a.jpg")
 
-    assert [image.key for image in images] == ["imagenes/a.jpg", "imagenes/b.png"]
+    assert [image.key for image in images] == [
+        "imagenes/a.jpg",
+        "imagenes/b.png",
+        "imagenes/snap:image/jpeg",
+    ]
     assert uploaded.key == "imagenes/new.png"
     assert fake.put_calls[0]["Bucket"] == "bucket"
     assert fake.put_calls[0]["ContentType"] == "image/png"

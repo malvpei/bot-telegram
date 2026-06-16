@@ -129,9 +129,12 @@ def create_upload_app(
 
     @app.get("/images/file/<path:key>")
     def image_file(key: str):
-        if Path(key).suffix.lower() not in R2_IMAGE_EXTENSIONS:
-            return Response("Formato no permitido", 415)
         data, content_type = storage.download_bytes(key)
+        if (
+            Path(key).suffix.lower() not in R2_IMAGE_EXTENSIONS
+            and not content_type.lower().startswith("image/")
+        ):
+            return Response("Formato no permitido", 415)
         return Response(
             data,
             mimetype=content_type,

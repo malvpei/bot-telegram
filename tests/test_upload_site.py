@@ -72,3 +72,23 @@ def test_upload_site_requires_auth_when_password_is_configured():
     response = app.test_client().get("/images")
 
     assert response.status_code == 401
+
+
+def test_upload_site_serves_extensionless_r2_image_when_content_type_is_image():
+    settings = replace(
+        get_settings(),
+        upload_site_password="",
+    )
+    storage = FakeImageStorage()
+    storage.objects["videos/imagenes/snap:image/jpeg"] = (
+        _png_bytes().getvalue(),
+        "image/jpeg",
+    )
+    app = create_upload_app(settings, storage)
+
+    response = app.test_client().get(
+        "/images/file/videos/imagenes/snap:image/jpeg"
+    )
+
+    assert response.status_code == 200
+    assert response.mimetype == "image/jpeg"

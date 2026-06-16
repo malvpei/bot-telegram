@@ -51,7 +51,7 @@ class R2StorageClient:
         return self._list_objects_by_extension(prefix, R2_VIDEO_EXTENSIONS)
 
     def list_images(self, prefix: str) -> list[R2Object]:
-        return self._list_objects_by_extension(prefix, R2_IMAGE_EXTENSIONS)
+        return self._list_image_objects(prefix)
 
     def upload_bytes(
         self,
@@ -130,6 +130,25 @@ class R2StorageClient:
                 objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
         return objects
 
+    def _list_image_objects(self, prefix: str) -> list[R2Object]:
+        client = self._boto_client()
+        paginator = client.get_paginator("list_objects_v2")
+        objects: list[R2Object] = []
+        for page in paginator.paginate(
+            Bucket=self.settings.r2_bucket,
+            Prefix=prefix.strip().lstrip("/"),
+        ):
+            for item in page.get("Contents", []):
+                key = str(item.get("Key") or "")
+                if not key or key.endswith("/"):
+                    continue
+                if Path(key).suffix.lower() in R2_IMAGE_EXTENSIONS:
+                    objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
+                    continue
+                if self._object_has_content_type(key, "image/"):
+                    objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
+        return objects
+
     def download(self, key: str, destination: Path) -> Path:
         destination.parent.mkdir(parents=True, exist_ok=True)
         self._boto_client().download_file(
@@ -147,6 +166,17 @@ class R2StorageClient:
         if any(part == ".." for part in normalized.split("/")):
             raise R2StorageError("La clave R2 no puede contener '..'.")
         return normalized
+
+    def _object_has_content_type(self, key: str, prefix: str) -> bool:
+        try:
+            response = self._boto_client().head_object(
+                Bucket=self.settings.r2_bucket,
+                Key=self._normalize_key(key),
+            )
+        except Exception:  # noqa: BLE001 - a bad HEAD should not break listing.
+            return False
+        content_type = str(response.get("ContentType") or "").lower()
+        return content_type.startswith(prefix.lower())
 
     def _boto_client(self):
         if not self.is_configured:
