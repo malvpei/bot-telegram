@@ -18,9 +18,14 @@ OPENAI_IMAGES_EDIT_URL = "https://api.openai.com/v1/images/edits"
 FAL_QUEUE_BASE_URL = "https://queue.fal.run"
 STORY_IMAGE_SOURCE_ACCOUNT = "ai_story"
 STORY_STYLE = (
-    "clean vertical 2D cartoon comic illustration, not photorealistic, bold black "
-    "outlines, flat soft colors, simple cel shading, expressive face, simple "
-    "background geometry, polished social-media story style"
+    "Style target: simple flat 2D social-media cartoon panel like a clean Spanish "
+    "TikTok story illustration, not anime, not manga, not semi-realistic, not 3D, "
+    "not photorealistic. Use thick smooth black outlines, flat color fills, very "
+    "limited cel shading, low-detail simplified faces with simple eyes, simple "
+    "nose and simple mouth, rounded youthful features, minimal texture, clean "
+    "geometry and a limited muted palette. Avoid realistic facial anatomy, "
+    "painted skin, photographic lighting, glossy rendering, complex shadows, "
+    "muscular heroic body proportions and detailed cinematic backgrounds."
 )
 NO_OVERLAY_TEXT_DIRECTIVE = (
     "Do not add captions, speech bubbles, subtitles, watermarks or TikTok UI. "
@@ -42,12 +47,16 @@ BEDROOM_CONTINUITY_DIRECTIVE = (
     "standing on the desk, never miniature, never separated from the laptop."
 )
 LAPTOP_COMPOSITION_DIRECTIVE = (
-    "Laptop composition for desk scenes: use a natural three-quarter side view "
-    "from desk height, similar to a real photo taken from the front-left of the "
-    "desk. The open laptop is in the left foreground, angled about 35 degrees "
-    "toward the protagonist, so the viewer can see the screen and also see the "
-    "protagonist's face/profile and upper body on the right. The hinge, keyboard "
-    "and screen orientation must be physically realistic."
+    "Laptop composition for desk scenes: copy the believable layout of a simple "
+    "cartoon side-view desk illustration. The laptop sits on the desk in the left "
+    "foreground, opened at a normal 100 to 110 degree angle. The keyboard base is "
+    "flat on the desk. The hinge is one straight horizontal line. The screen is "
+    "one upright rectangle, slightly tilted back, with parallel vertical edges, "
+    "facing both the viewer and the protagonist. The protagonist sits to the "
+    "right of the laptop in profile or three-quarter profile, eyes aimed at the "
+    "screen, with hands aligned to the keyboard or trackpad. The laptop must not "
+    "be twisted, folded toward the wrong direction, floating, detached, vertical "
+    "on its keyboard edge, or shown from an impossible perspective."
 )
 REFERENCE_IDENTITY_DIRECTIVE = (
     "Use the person in the reference photo as the identity reference: preserve "
@@ -206,6 +215,7 @@ class StoryCarouselImageGenerator:
             "output_format": self.settings.fal_output_format,
             "guidance_scale": self.settings.fal_guidance_scale,
             "safety_tolerance": self.settings.fal_safety_tolerance,
+            "enhance_prompt": False,
         }
         submit_url = f"{FAL_QUEUE_BASE_URL}/{self.settings.fal_model.strip('/')}"
         response = requests.post(

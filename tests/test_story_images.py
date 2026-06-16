@@ -108,6 +108,7 @@ def test_story_generator_uses_fal_queue_and_downloads_result(tmp_path, monkeypat
     assert posts[0]["json"]["aspect_ratio"] == "9:16"
     assert posts[0]["json"]["output_format"] == "png"
     assert posts[0]["json"]["num_images"] == 1
+    assert posts[0]["json"]["enhance_prompt"] is False
     assert "Dropradar" not in posts[0]["json"]["prompt"]
 
 
@@ -134,12 +135,15 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
 
     for prompt in prompts.values():
         assert "one single full-page illustration" in prompt
-        assert "cartoon comic illustration" in prompt
+        assert "simple flat 2D social-media cartoon panel" in prompt
+        assert "not anime, not manga, not semi-realistic" in prompt
         assert "Do not create panels" in prompt
         assert "no horizontal separators" in prompt
     assert "McDonald's-style work clothes" in prompts[STORY_SCENES[0].role]
     assert "no sunglasses, eyes visible" in prompts[STORY_SCENES[0].role]
     assert "Use the laptop composition rule" in prompts[STORY_SCENES[1].role]
+    assert "hinge is one straight horizontal line" in prompts[STORY_SCENES[1].role]
+    assert "must not be twisted" in prompts[STORY_SCENES[1].role]
     assert "same bedroom and same desk" in prompts[STORY_SCENES[2].role]
     assert "normal size, seated in the chair" in prompts[STORY_SCENES[2].role]
     assert "word Dropradar large in green and black" in prompts[STORY_SCENES[4].role]
