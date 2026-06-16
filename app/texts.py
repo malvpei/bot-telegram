@@ -643,7 +643,9 @@ class ScriptGenerator:
                 "Investigando encontré Dropradar me dio un gran producto y empecé "
                 "de 0 ese mes tuve mi primera venta"
             ),
-            SlideRole.STORY_SUCCESS_COMIC: "",
+            SlideRole.STORY_SUCCESS_COMIC: (
+                "Despues de un año y medio conseguí cumplir mi sueño"
+            ),
             SlideRole.STORY_ORIGINAL_REFERENCE: "",
         }
         ordered = [slides_by_role[role] for role in TYPE_4_ROLES]
@@ -670,6 +672,7 @@ class ScriptGenerator:
             slides_by_role[SlideRole.STORY_FIRST_FAILURE],
             slides_by_role[SlideRole.STORY_DEEP_FAILURE],
             slides_by_role[SlideRole.STORY_DROPRADAR],
+            slides_by_role[SlideRole.STORY_SUCCESS_COMIC],
         ]
         if any(not text.strip() for text in required_texts):
             raise ValueError("Tipo 4: los 5 textos narrativos son obligatorios.")

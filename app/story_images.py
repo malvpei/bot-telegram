@@ -18,13 +18,24 @@ OPENAI_IMAGES_EDIT_URL = "https://api.openai.com/v1/images/edits"
 FAL_QUEUE_BASE_URL = "https://queue.fal.run"
 STORY_IMAGE_SOURCE_ACCOUNT = "ai_story"
 STORY_STYLE = (
-    "clean vertical 2D comic illustration, modern social-media webcomic style, "
-    "bold black outlines, flat soft colors, simple shading, expressive face, "
-    "cinematic composition, polished but not photorealistic"
+    "clean vertical 2D comic/caricature illustration like a simple social-media "
+    "webcomic, bold black outlines, flat soft colors, simple shading, expressive "
+    "faces, less realistic and more cartoon, polished but not photorealistic"
 )
 NO_OVERLAY_TEXT_DIRECTIVE = (
     "Do not add captions, speech bubbles, subtitles, watermarks or TikTok UI. "
     "Leave clean empty space near the top for an external text card."
+)
+SINGLE_SCENE_DIRECTIVE = (
+    "Create exactly ONE single continuous scene in the image. No split-screen, "
+    "no comic panels, no repeated character, no before/after layout, no stacked "
+    "frames, no duplicated laptop, no duplicated room."
+)
+BEDROOM_CONTINUITY_DIRECTIVE = (
+    "For bedroom scenes use the exact same small bedroom across the sequence: "
+    "plain light gray walls, wooden desk, realistic desk lamp, small shelf with "
+    "books, Porsche 911 GT3 poster taped on the left wall, piggy bank labeled "
+    "GT3 FUND, same desk position and same overall layout."
 )
 REFERENCE_IDENTITY_DIRECTIVE = (
     "Use the person in the reference photo as the identity reference: preserve "
@@ -44,61 +55,71 @@ STORY_SCENES: tuple[StoryScene, ...] = (
         role=SlideRole.STORY_MCDONALD,
         prompt=(
             "Scene 1: the same protagonist is working sadly in a busy fast-food "
-            "restaurant kitchen inspired by McDonald's, wearing a black uniform "
-            "and red visor, holding a burger, tired posture, industrial fryers, "
-            "burgers and fries around him, coworkers and customers in the far "
-            "background, feeling depressed and stuck."
+            "restaurant kitchen inspired by McDonald's. He must wear clear "
+            "McDonald's-style work clothes: black polo uniform, red visor or cap, "
+            "red apron, small yellow M-style badge/name tag, no sunglasses. He is "
+            "holding a burger, tired posture, industrial fryers, burgers and fries "
+            "around him, coworkers and customers only in the far background, "
+            "feeling depressed and stuck."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_BUILDING_STORE,
         prompt=(
-            "Scene 2: the same protagonist is in his small bedroom at a desk, "
-            "focused and determined, creating a dropshipping store on a laptop "
-            "to reach his dream. Show a black Porsche 911 GT3 poster taped on "
-            "the wall, a small piggy bank labeled GT3 FUND, notebooks, desk lamp, "
-            "and a clean ecommerce dashboard on the laptop."
+            "Scene 2: same bedroom. The protagonist sits at the wooden desk, "
+            "leaning forward and looking directly at his laptop, focused and "
+            "determined while building a dropshipping store. Camera angle shows "
+            "mostly the plain back of the laptop, with no data, no charts and no "
+            "dashboard visible on the laptop exterior. Include notebooks, desk "
+            "lamp, GT3 FUND piggy bank and the Porsche poster."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_FIRST_FAILURE,
         prompt=(
-            "Scene 3: the store is failing. The same protagonist sits at the desk "
-            "discouraged, one hand on his face, looking at a laptop. On the laptop "
-            "screen show a minimal ecommerce store dashboard with a simple red "
-            "downward line chart and zero sales mood, no readable brand names."
+            "Scene 3: same bedroom and same desk. The store is failing. Use a "
+            "single coherent camera angle where both the protagonist and the open "
+            "laptop screen are visible. The laptop must have a realistic hinge and "
+            "realistic orientation toward the protagonist; he is looking at the "
+            "screen with one hand on his face, discouraged. On the laptop screen "
+            "show a minimal clean ecommerce dashboard with one simple red downward "
+            "line chart and zero-sales mood, no readable brand names."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_DEEP_FAILURE,
         prompt=(
-            "Scene 4: several months later at night, the same protagonist is more "
-            "sad and desperate, close to giving up, crying with both hands near "
-            "his face. Blue dark room lighting, laptop glow, desk messy. On the "
-            "laptop screen show a minimal ecommerce dashboard with a large red "
-            "downward arrow and red chart, clearly communicating the store is "
+            "Scene 4: same bedroom and same desk, several months later at night. "
+            "Single coherent scene only. The protagonist is more sad and desperate, "
+            "close to giving up, crying with both hands near his face. Blue dark "
+            "room lighting, laptop glow, slightly messy desk. The laptop screen is "
+            "visible at a realistic angle and shows a cleaner, more developed "
+            "ecommerce analytics dashboard with tidy cards, red KPI numbers, a red "
+            "downward chart and a red arrow, clearly communicating the store is "
             "going badly, no readable brand names."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_DROPRADAR,
         prompt=(
-            "Scene 5: turning point. Warm hopeful lighting. The same protagonist "
-            "discovers Dropradar on his laptop and begins to smile. The laptop "
-            "screen must clearly show the word Dropradar in large green and black "
-            "letters, attractive visual product research dashboard cards, and a "
-            "green rising sales chart. Keep the rest of the scene in the same "
-            "bedroom desk setting."
+            "Scene 5: same bedroom and same desk, turning point. Single coherent "
+            "scene only. The protagonist is concentrated and serious, studying the "
+            "laptop, not celebrating yet. The laptop orientation is realistic toward "
+            "him while still letting the viewer see the screen. The screen must have "
+            "a clean white background, clearly show the word Dropradar in green and "
+            "black, attractive product research dashboard cards, clean data rows "
+            "and a green rising sales chart. Keep the interface bright, white and "
+            "modern."
         ),
     ),
     StoryScene(
         role=SlideRole.STORY_SUCCESS_COMIC,
         prompt=(
             "Scene 6: transform the reference photo itself into the same clean "
-            "comic illustration style. Preserve the original composition closely: "
+            "comic/caricature illustration style. Preserve the original composition closely: "
             "the young man next to the black Porsche 911 GT3 on the road, mountains, "
             "trees and dramatic cloudy sky. The protagonist is happy and proud, "
-            "as if he achieved his dream. No text."
+            "as if he achieved his dream. Single scene only. No text."
         ),
     ),
 )
@@ -346,6 +367,8 @@ class StoryCarouselImageGenerator:
             (
                 STORY_STYLE,
                 REFERENCE_IDENTITY_DIRECTIVE,
+                SINGLE_SCENE_DIRECTIVE,
+                BEDROOM_CONTINUITY_DIRECTIVE,
                 NO_OVERLAY_TEXT_DIRECTIVE,
                 scene_prompt,
                 (
