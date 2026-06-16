@@ -132,9 +132,15 @@ class FakeTemplateService:
         return TemplateVideoResult(
             video_path=self.video_path,
             social_copy=SocialCopy(
-                title="Titulo",
+                title="",
                 description="Descripcion",
-                hashtags=["#dropshipping"],
+                hashtags=[
+                    "#dropshipping",
+                    "#ecommerce",
+                    "#shopify",
+                    "#dropradar",
+                    "#capcut",
+                ],
             ),
             queue_restarted=True,
         )
@@ -471,9 +477,8 @@ def test_template_video_sends_queue_restart_warning():
         )
         assert events[1] == ("video", "template_video.mp4")
         assert events[2:] == [
-            ("message", "Titulo"),
             ("message", "Descripcion"),
-            ("message", "#dropshipping"),
+            ("message", "#dropshipping #ecommerce #shopify #dropradar #capcut"),
         ]
     finally:
         shutil.rmtree(root, ignore_errors=True)

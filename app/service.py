@@ -229,6 +229,14 @@ def _merge_preserving_order(existing: list[str], new_items: list[str]) -> list[s
     return merged
 
 
+def _prepare_template_video_social_copy(social_copy: SocialCopy) -> SocialCopy:
+    return SocialCopy(
+        title="",
+        description=social_copy.description,
+        hashtags=list(social_copy.hashtags[:5]),
+    )
+
+
 def _cover_resize(image: Image.Image, target_width: int, target_height: int) -> Image.Image:
     scale = max(target_width / image.width, target_height / image.height)
     new_width = max(1, int(round(image.width * scale)))
@@ -395,7 +403,9 @@ class VideoCreationService:
             self._cleanup_old_outputs()
             return TemplateVideoResult(
                 video_path=output_path,
-                social_copy=random.choice(TEMPLATE_VIDEO_SOCIAL_COPIES[template_language]),
+                social_copy=_prepare_template_video_social_copy(
+                    random.choice(TEMPLATE_VIDEO_SOCIAL_COPIES[template_language])
+                ),
                 queue_restarted=queue_restarted,
             )
 

@@ -216,6 +216,52 @@ def test_hook_text_manual_lines_fit_inside_side_margins(monkeypatch):
     assert max(widths) <= max_width
 
 
+def test_type_1_two_line_hook_reflows_to_larger_balanced_text(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGB", (1080, 1920), (0, 0, 0))
+    text = (
+        "Cuanto facturé haciendo Dropshipping\n"
+        "en mis primeros 6 meses y por qué casi lo dejo..."
+    )
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 100)
+
+    def capture_lines(draw, lines, font, **kwargs):
+        captured["draw"] = draw
+        captured["lines"] = list(lines)
+        captured["font"] = font
+        captured["stroke_width"] = kwargs["stroke_width"]
+
+    monkeypatch.setattr(renderer, "_draw_lines", capture_lines)
+
+    renderer._draw_hook_text(image, text, video_type=VideoType.TYPE_1)
+
+    draw = captured["draw"]
+    stroke_width = captured["stroke_width"]
+    manual_font = renderer._fit_prebroken_lines(
+        text.splitlines(),
+        draw,
+        max_width=1080 - (HOOK_SIDE_MARGIN * 2),
+        max_height=int(1920 * 0.40),
+        base_size=HOOK_BASE_FONT_SIZE,
+        min_size=HOOK_MIN_FONT_SIZE,
+        bold=True,
+        stroke_width=stroke_width,
+        font_loader=renderer._load_overlay_font,
+    )
+    widths = [
+        renderer._text_size(draw, line, captured["font"], stroke_width=stroke_width)[0]
+        for line in captured["lines"]
+    ]
+
+    assert len(captured["lines"]) == 2
+    assert captured["lines"] != text.splitlines()
+    assert captured["font"].size > manual_font.size
+    assert max(widths) <= 1080 - (HOOK_SIDE_MARGIN * 2)
+
+
 def test_hook_text_renders_in_middle_third_without_avoid_regions(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)

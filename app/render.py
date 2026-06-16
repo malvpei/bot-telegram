@@ -1226,7 +1226,7 @@ class VideoRenderer:
         if slide.role == SlideRole.HOOK:
             if video_type == VideoType.TYPE_3:
                 return
-            self._draw_hook_text(image, slide.text)
+            self._draw_hook_text(image, slide.text, video_type=video_type)
             return
 
         if self._uses_hook_paragraph_style(slide, video_type):
@@ -1250,7 +1250,13 @@ class VideoRenderer:
             and bool(re.match(r"^\d+\.\s+\S+", text))
         )
 
-    def _draw_hook_text(self, image: Image.Image, text: str) -> None:
+    def _draw_hook_text(
+        self,
+        image: Image.Image,
+        text: str,
+        *,
+        video_type: VideoType | None = None,
+    ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
 
@@ -1261,7 +1267,9 @@ class VideoRenderer:
         base_size = self._scaled_text_size(HOOK_BASE_FONT_SIZE, minimum=38)
         min_size = self._scaled_text_size(HOOK_MIN_FONT_SIZE, minimum=20)
         manual_lines = [line.strip() for line in text.splitlines() if line.strip()]
-        if len(manual_lines) > 1:
+        if len(manual_lines) > 2 or (
+            len(manual_lines) > 1 and video_type != VideoType.TYPE_1
+        ):
             lines = manual_lines
             font = self._fit_prebroken_lines(
                 lines,
@@ -1275,8 +1283,9 @@ class VideoRenderer:
                 font_loader=self._load_overlay_font,
             )
         else:
+            fitted_text = " ".join(manual_lines) if manual_lines else text
             font, lines = self._fit_hook_two_lines(
-                text,
+                fitted_text,
                 draw,
                 max_width=max_width,
                 max_height=max_height,
@@ -1442,6 +1451,36 @@ class VideoRenderer:
                 return font, best_lines
 
         emergency_min_size = max(18, int(min_size * 0.65))
+        for size in range(min_size - 2, emergency_min_size - 1, -2):
+            font = load_font(size, True)
+            best_lines = None
+            best_score = None
+            for split_at in range(1, len(words)):
+                lines = [
+                    " ".join(words[:split_at]),
+                    " ".join(words[split_at:]),
+                ]
+                widths = [
+                    self._text_size(
+                        draw,
+                        line,
+                        font,
+                        stroke_width=stroke_width,
+                    )[0]
+                    for line in lines
+                ]
+                if max(widths) > max_width:
+                    continue
+                height = self._block_height(lines, font, draw, stroke_width=stroke_width)
+                if height > max_height:
+                    continue
+                score = abs(widths[0] - widths[1]) + max(widths) * 0.05
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_lines = lines
+            if best_lines is not None:
+                return font, best_lines
+
         for size in range(min_size, emergency_min_size - 1, -2):
             font = load_font(size, True)
             lines = self._wrap_text(

@@ -166,7 +166,11 @@ class SocialCopy:
 
     @property
     def messages(self) -> list[str]:
-        return [self.title, self.description, self.hashtag_line]
+        return [
+            message
+            for message in [self.title, self.description, self.hashtag_line]
+            if message.strip()
+        ]
 
 
 @dataclass
