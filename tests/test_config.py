@@ -123,7 +123,7 @@ def test_fal_image_provider_defaults_are_loaded(monkeypatch):
         "FAL_POLL_INTERVAL_SECONDS",
         "FAL_REQUEST_TIMEOUT_SECONDS",
     ):
-        monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv(key, "")
     get_settings.cache_clear()
     try:
         settings = get_settings()

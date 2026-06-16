@@ -7,6 +7,7 @@ from uuid import uuid4
 
 from PIL import Image
 from telegram.error import NetworkError
+from telegram.ext import ConversationHandler
 
 from app.bot import (
     GENDER_STATE,
@@ -29,6 +30,7 @@ from app.bot import (
     _send_slides_text_then_image,
     create_command,
     story_carousel_command,
+    wizard_type,
 )
 from app.config import get_settings
 from app.models import (
@@ -38,7 +40,10 @@ from app.models import (
     SlideRole,
     SocialCopy,
     TemplateVideoResult,
+    Language,
     VideoGender,
+    VideoRequest,
+    VideoType,
 )
 
 
@@ -399,8 +404,30 @@ def test_create_command_offers_template_video_without_accounts():
     assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
     assert buttons[0][1].text == "Video tools R2 EN"
     assert buttons[0][1].callback_data == TEMPLATE_VIDEO_CREATE_EN
-    assert buttons[1][0].text == "Carrusel IA desde foto"
+    assert buttons[1][0].text == "Carrusel IA R2"
     assert buttons[1][0].callback_data == "wizard:type:4"
+
+
+def test_type_4_button_uses_r2_without_waiting_for_photo():
+    captured: dict[str, VideoRequest] = {}
+
+    async def capture_execute_job(update, context, request):
+        captured["request"] = request
+
+    context = FakeContext()
+    query = FakeRegenerateQuery("wizard:type:4")
+    update = FakeRegenerateUpdate(query)
+
+    with patch("app.bot._execute_job", capture_execute_job):
+        state = asyncio.run(wizard_type(update, context))
+
+    assert state == ConversationHandler.END
+    assert "siguiente imagen de R2" in query.edited_text
+    assert captured["request"].video_type == VideoType.TYPE_4
+    assert captured["request"].language == Language.ES
+    assert captured["request"].reference_image_path is None
+    assert captured["request"].account_inputs == []
+    assert context.user_data == {}
 
 
 def test_story_carousel_command_waits_for_photo():

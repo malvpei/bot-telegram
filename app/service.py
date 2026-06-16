@@ -548,16 +548,21 @@ class VideoCreationService:
         )
 
     def _create_story_carousel_locked(self, request: VideoRequest) -> GenerationResult:
+        job_id = self._build_job_id()
+        job_dir = self.settings.outputs_dir / job_id
         reference_image_path = request.reference_image_path
+        reference_source = "foto de referencia"
         if reference_image_path is None:
-            raise ValueError("El tipo 4 necesita una foto de referencia.")
+            reference_image_path, reference_source, queue_restarted = (
+                self._download_story_reference_from_r2(job_dir)
+            )
+            if queue_restarted:
+                LOGGER.info("R2 story reference image queue restarted for type 4")
         if not reference_image_path.exists():
             raise FileNotFoundError(
                 f"No encuentro la foto de referencia: {reference_image_path}"
             )
 
-        job_id = self._build_job_id()
-        job_dir = self.settings.outputs_dir / job_id
         script_package = self.script_generator.generate(
             VideoType.TYPE_4,
             Language.ES,
@@ -591,7 +596,7 @@ class VideoCreationService:
             for index, role in enumerate(TYPE_4_ROLES, start=1)
         ]
         plan = VideoPlan(
-            chosen_account="story_reference",
+            chosen_account=reference_source,
             video_type=VideoType.TYPE_4,
             language=Language.ES,
             slides=slides,
@@ -604,7 +609,7 @@ class VideoCreationService:
             self.state.build_job_record(
                 job_id=job_id,
                 chosen_account=plan.chosen_account,
-                requested_accounts=[],
+                requested_accounts=[reference_source],
                 fallback_accounts=[],
                 video_type=VideoType.TYPE_4,
                 language=Language.ES,
@@ -626,6 +631,39 @@ class VideoCreationService:
             slides=list(plan.slides),
             pool_remaining=0,
             pool_low_stock=False,
+        )
+
+    def _download_story_reference_from_r2(
+        self,
+        job_dir: Path,
+    ) -> tuple[Path, str, bool]:
+        if getattr(self, "r2_storage", None) is None or not self.r2_storage.is_configured:
+            raise ValueError(
+                "El tipo 4 necesita una imagen en R2. Configura R2 y sube imagenes "
+                f"al prefijo {self.settings.r2_image_prefix!r}."
+            )
+        prefix = self.settings.r2_image_prefix
+        images = self.r2_storage.list_images(prefix)
+        if not images:
+            raise ValueError(
+                "No encontre imagenes .jpg/.jpeg/.png/.webp/.heic/.heif/.avif en R2"
+                + (f" bajo el prefijo {prefix!r}." if prefix else ".")
+            )
+        ordered_images = sorted(images, key=lambda item: item.key)
+        selected_key, queue_restarted = self.state.get_next_story_reference_image_id(
+            f"r2:{prefix}",
+            [image.key for image in ordered_images],
+        )
+        selected = next(
+            (image for image in ordered_images if image.key == selected_key),
+            ordered_images[0],
+        )
+        suffix = Path(selected.key).suffix.lower() or ".jpg"
+        local_input = job_dir / "story_reference_input" / f"source{suffix}"
+        return (
+            self.r2_storage.download(selected.key, local_input),
+            f"r2:{selected.key}",
+            queue_restarted,
         )
 
     def _create_extra_image_locked(self, request: VideoRequest) -> MediaCandidate:

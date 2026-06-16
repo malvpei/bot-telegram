@@ -154,7 +154,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
         "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
-        "/story_carousel - crear carrusel IA comic desde una foto\n"
+        "/story_carousel - crear carrusel IA comic desde una foto enviada por Telegram\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
@@ -182,7 +182,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "1 = historia de 7 imágenes (slide 6 = tip3_dropradar.jpg, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = tip3_dropradar.jpg, tip3)\n"
         "3 = hook + herramientas para empezar dropshipping en 2026\n"
-        "4 = carrusel IA estilo comic desde una foto de referencia "
+        "4 = carrusel IA estilo comic desde una imagen subida a R2 "
         "(6 escenas generadas + foto original)\n\n"
         "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
         "accounts_women.txt (una por línea). Para cambiarlas edita el archivo "
@@ -572,7 +572,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 ],
                 [
                     InlineKeyboardButton(
-                        "Carrusel IA desde foto",
+                        "Carrusel IA R2",
                         callback_data="wizard:type:4",
                     ),
                 ],
@@ -582,7 +582,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             (
                 "Que quieres crear?\n\n"
                 "No encontre cuentas cargadas, asi que por ahora estan "
-                "disponibles el video de herramientas R2 y el carrusel IA desde foto."
+                "disponibles el video de herramientas R2 y el carrusel IA desde R2."
             ),
             reply_markup=keyboard,
         )
@@ -612,7 +612,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             ],
             [
                 InlineKeyboardButton(
-                    "Carrusel IA desde foto",
+                    "Carrusel IA R2",
                     callback_data="wizard:type:4",
                 ),
             ],
@@ -689,11 +689,26 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     context.user_data["video_type"] = raw_type
 
     if raw_type == VideoType.TYPE_4.value:
-        _prepare_story_carousel_state(context)
+        raw_gender = context.user_data.get("video_gender", VideoGender.MALE.value)
+        try:
+            gender = VideoGender(raw_gender)
+        except ValueError:
+            gender = VideoGender.MALE
         await query.edit_message_text(
-            "Perfecto. Mandame la foto de referencia y creo el carrusel IA estilo comic."
+            "Perfecto. Cojo la siguiente imagen de R2 y creo el carrusel IA estilo comic."
         )
-        return STORY_PHOTO_STATE
+        request = VideoRequest(
+            chat_id=update.effective_chat.id,
+            user_id=update.effective_user.id,
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            account_inputs=[],
+            gender=gender,
+            lowercase_text=False,
+        )
+        await _execute_job(update, context, request)
+        _clear_wizard_state(context)
+        return ConversationHandler.END
 
     keyboard = InlineKeyboardMarkup(
         [
@@ -977,10 +992,15 @@ async def _execute_job(
         return
 
     if result.video_type == VideoType.TYPE_4:
+        source_label = (
+            result.chosen_account
+            if str(result.chosen_account).startswith("r2:")
+            else "foto de referencia"
+        )
         header = (
             "Carrusel IA listo\n"
             "Tipo: 4\n"
-            "Fuente: foto de referencia\n"
+            f"Fuente: {source_label}\n"
             "Entrega: 6 escenas generadas + foto original"
         )
     else:

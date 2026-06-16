@@ -41,6 +41,7 @@ class StateStore:
         self._account_cooldowns_path = self.state_dir / "account_cooldowns.json"
         self._type_3_background_queue_path = self.state_dir / "type3_background_queue.json"
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
+        self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
         self._persistence_marker_path = self.state_dir / "persistence_marker.json"
         self._lock_path = self.state_dir / ".state.lock"
@@ -334,6 +335,47 @@ class StateStore:
                 "cursor": cursor + 1,
             }
             self._write_json(self._template_video_queue_path, {"scopes": scopes})
+        return selected, restarted
+
+    def get_next_story_reference_image_id(
+        self,
+        scope: str,
+        image_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        if not image_ids:
+            return None, False
+        scope_key = str(scope or "default").strip() or "default"
+        with self._exclusive():
+            payload = self._read_json(self._story_reference_queue_path, {})
+            if not isinstance(payload, dict):
+                payload = {}
+            scopes = payload.get("scopes")
+            if not isinstance(scopes, dict):
+                scopes = {}
+            queue = scopes.get(scope_key)
+            if not isinstance(queue, dict):
+                queue = {}
+
+            order = self._normalize_template_video_order(queue, image_ids)
+            cursor = queue.get("cursor", 0)
+            try:
+                cursor = int(cursor)
+            except (TypeError, ValueError):
+                cursor = 0
+            if cursor < 0:
+                cursor = 0
+
+            restarted = False
+            if cursor >= len(order):
+                cursor = 0
+                restarted = True
+
+            selected = order[cursor] if order else None
+            scopes[scope_key] = {
+                "order": order,
+                "cursor": cursor + 1,
+            }
+            self._write_json(self._story_reference_queue_path, {"scopes": scopes})
         return selected, restarted
 
     def read_media_pool(self) -> dict[str, Any]:
