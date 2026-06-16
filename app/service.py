@@ -644,13 +644,27 @@ class VideoCreationService:
             )
         prefix = self.settings.r2_image_prefix
         images = self.r2_storage.list_images(prefix)
+        effective_prefix = prefix
+        if not images and prefix:
+            LOGGER.warning(
+                "R2 story reference prefix %r has no compatible images; trying whole bucket",
+                prefix,
+            )
+            images = self.r2_storage.list_images("")
+            effective_prefix = ""
         if not images:
             visible_keys = self._list_r2_keys_for_error(prefix)
-            visible_line = (
-                " Objetos vistos: " + ", ".join(visible_keys[:8])
-                if visible_keys
-                else " No vi ningun objeto bajo ese prefijo."
-            )
+            if not visible_keys and prefix:
+                visible_keys = self._list_r2_keys_for_error("")
+            if visible_keys:
+                visible_line = " Objetos vistos: " + ", ".join(visible_keys[:8])
+            elif prefix:
+                visible_line = (
+                    " No vi ningun objeto bajo ese prefijo ni imagenes compatibles "
+                    "en el bucket."
+                )
+            else:
+                visible_line = " No vi ningun objeto en el bucket."
             raise ValueError(
                 "No encontre imagenes compatibles en R2"
                 + (f" bajo el prefijo {prefix!r}." if prefix else ".")
@@ -658,7 +672,7 @@ class VideoCreationService:
             )
         ordered_images = sorted(images, key=lambda item: item.key)
         selected_key, queue_restarted = self.state.get_next_story_reference_image_id(
-            f"r2:{prefix}",
+            f"r2:{effective_prefix}" if effective_prefix else "r2:*",
             [image.key for image in ordered_images],
         )
         selected = next(

@@ -150,6 +150,20 @@ class FakeR2Storage:
         return destination
 
 
+class PrefixFallbackR2Storage(FakeR2Storage):
+    def __init__(self) -> None:
+        super().__init__()
+        self.listed_image_prefixes: list[str] = []
+
+    def list_images(self, prefix: str):
+        self.listed_image_prefixes.append(prefix)
+        if prefix == "videos/imagenes":
+            return []
+        if prefix == "":
+            return [R2Object(key="otra/carpeta/reference.jpg", size=123)]
+        return []
+
+
 class FakeStoryImageGenerator:
     def __init__(self) -> None:
         self.reference_image_path: Path | None = None
@@ -481,6 +495,48 @@ def test_type_4_downloads_reference_from_r2_when_no_photo_is_passed():
         assert story_generator.reference_image_path.exists()
         assert result.chosen_account == "r2:videos/imagenes/reference.jpg"
         assert result.slides[-1].media.local_path.name == "slide_07_original.jpg"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_4_falls_back_to_any_r2_image_when_configured_prefix_is_empty():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            r2_image_prefix="videos/imagenes",
+            width=72,
+            height=128,
+        )
+        renderer = FakeRenderer()
+        story_generator = FakeStoryImageGenerator()
+        r2_storage = PrefixFallbackR2Storage()
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.script_generator = ScriptGenerator(service.state)
+        service.renderer = renderer
+        service.story_image_generator = story_generator
+        service.r2_storage = r2_storage
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        result = service._create_story_carousel_locked(request)
+
+        assert result.video_type == VideoType.TYPE_4
+        assert r2_storage.listed_image_prefixes == ["videos/imagenes", ""]
+        assert r2_storage.downloaded_key == "otra/carpeta/reference.jpg"
+        assert result.chosen_account == "r2:otra/carpeta/reference.jpg"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
