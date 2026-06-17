@@ -66,12 +66,26 @@ class MediaPoolService:
             0,
             int(getattr(self.settings, "pool_refill_max_fresh_accounts", 0)),
         )
+        account_limit = max(
+            0,
+            int(getattr(self.settings, "pool_refill_max_accounts", 0)),
+        )
         fresh_limit_reached = False
+        account_limit_reached = False
         fresh_attempts = 0
+        accounts_checked = 0
 
         for username in usernames:
             if self._pool_ready(pool, usernames, target, used_media=used_media):
                 break
+            if account_limit and accounts_checked >= account_limit:
+                LOGGER.info(
+                    "Pool refill account limit reached (%d); stopping this run",
+                    account_limit,
+                )
+                account_limit_reached = True
+                break
+            accounts_checked += 1
             cooldown_until = self._cooldown_until(cooldowns, username)
 
             cached_candidates = self._cached_candidates(username)
@@ -188,6 +202,9 @@ class MediaPoolService:
             "fresh_limit": fresh_limit,
             "fresh_limit_reached": fresh_limit_reached,
             "fresh_attempts": fresh_attempts,
+            "account_limit": account_limit,
+            "account_limit_reached": account_limit_reached,
+            "accounts_checked": accounts_checked,
             "scraped": scraped,
             "skipped_cooldown": skipped_cooldown,
             "refreshed_during_cooldown": refreshed_during_cooldown,

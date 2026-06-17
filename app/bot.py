@@ -335,8 +335,10 @@ async def _download_pool_command_for_gender(
         f"Rellenando pool de {_gender_label_plural(gender)} hasta "
         f"{settings.pool_target_images} fotos aptas por tipo. "
         "Primero uso cache/local y luego reviso "
+        f"hasta {settings.pool_refill_max_accounts or 'todas las'} "
+        "cuentas por tanda, con "
         f"hasta {settings.pool_refill_max_fresh_accounts or 'todas las'} "
-        "cuentas frescas por tanda."
+        "cuentas frescas nuevas."
     )
     service: VideoCreationService = context.application.bot_data["service"]
     try:
@@ -1360,6 +1362,15 @@ def _format_pool_refill_summary(summary: dict) -> str:
         f"Retiradas por usadas/no aptas: {summary.get('pruned', 0)}",
         f"Nuevas guardadas: {summary.get('added', 0)}",
         (
+            "Cuentas revisadas en esta tanda: "
+            f"{summary.get('accounts_checked', 0)}"
+            + (
+                f"/{summary.get('account_limit')}"
+                if summary.get("account_limit")
+                else ""
+            )
+        ),
+        (
             "Cuentas frescas revisadas: "
             f"{summary.get('fresh_attempts', len(summary.get('scraped', [])))}"
             + (
@@ -1422,7 +1433,13 @@ def _format_pool_refill_summary(summary: dict) -> str:
         )
         if len(refreshed) > 10:
             lines.append(f"... y {len(refreshed) - 10} cuentas mas")
-    if summary.get("fresh_limit_reached"):
+    if summary.get("account_limit_reached"):
+        lines.append("")
+        lines.append(
+            "Pare aqui porque se alcanzo el limite de cuentas por tanda. "
+            "Puedes lanzar /download_pool otra vez para precalentar otra tanda."
+        )
+    elif summary.get("fresh_limit_reached"):
         lines.append("")
         lines.append(
             "Paré aqui para que /download_pool no se alargue demasiado. "

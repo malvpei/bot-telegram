@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 
 
 DEFAULT_ACCOUNT_PICK_ATTEMPTS = 24
+DEFAULT_POOL_REFILL_MAX_ACCOUNTS = 12
 DEFAULT_POOL_REFILL_MAX_FRESH_ACCOUNTS = 8
 DEFAULT_R2_IMAGE_PREFIX = "videos/imagenes"
 DEFAULT_UPLOAD_SITE_ENABLED = True
@@ -117,6 +118,7 @@ class Settings:
     account_pick_attempts: int
     pool_target_images: int
     pool_low_stock_threshold: int
+    pool_refill_max_accounts: int
     pool_refill_max_fresh_accounts: int
     account_cooldown_days: int
     ig_sessionid: str
@@ -223,6 +225,10 @@ def get_settings() -> Settings:
         account_pick_attempts=_env_int("ACCOUNT_PICK_ATTEMPTS", DEFAULT_ACCOUNT_PICK_ATTEMPTS),
         pool_target_images=_env_int("POOL_TARGET_IMAGES", 100),
         pool_low_stock_threshold=_env_int("POOL_LOW_STOCK_THRESHOLD", 12),
+        pool_refill_max_accounts=_env_int(
+            "POOL_REFILL_MAX_ACCOUNTS",
+            DEFAULT_POOL_REFILL_MAX_ACCOUNTS,
+        ),
         pool_refill_max_fresh_accounts=_env_int(
             "POOL_REFILL_MAX_FRESH_ACCOUNTS",
             DEFAULT_POOL_REFILL_MAX_FRESH_ACCOUNTS,

@@ -204,3 +204,14 @@ def test_pool_refill_fresh_account_limit_env(monkeypatch):
         assert settings.pool_refill_max_fresh_accounts == 3
     finally:
         get_settings.cache_clear()
+
+
+def test_pool_refill_account_limit_env(monkeypatch):
+    monkeypatch.setenv("POOL_REFILL_MAX_ACCOUNTS", "5")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.pool_refill_max_accounts == 5
+    finally:
+        get_settings.cache_clear()

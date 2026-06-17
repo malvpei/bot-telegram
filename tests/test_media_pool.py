@@ -425,6 +425,68 @@ def test_pool_refill_stops_after_fresh_account_limit():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_refill_stops_after_total_account_limit_even_for_cached_cooldown():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+
+    class CachedMappingCollector:
+        def __init__(self) -> None:
+            self.loaded: list[str] = []
+            self.collect_called = False
+
+        def _load_cached_account(self, username: str):
+            self.loaded.append(username)
+            return [
+                _candidate(
+                    root,
+                    f"{username}:CACHED:0",
+                    f"dhash:{format(len(self.loaded), 'x') * 16}",
+                )
+            ]
+
+        def collect_one(self, username: str, *, use_cache: bool = True):
+            self.collect_called = True
+            raise AssertionError("cooldown accounts should not hit the network")
+
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+            pool_target_images=10,
+            pool_refill_max_accounts=2,
+            pool_refill_max_fresh_accounts=8,
+        )
+        state = StateStore(settings.state_dir)
+        for account in ["alpha", "beta", "gamma"]:
+            state.set_account_cooldown(
+                account,
+                cooldown_until="2999-01-01T00:00:00+00:00",
+                scraped_at="2026-01-01T00:00:00+00:00",
+                added_count=0,
+                valid_count=0,
+                total_count=0,
+            )
+        collector = CachedMappingCollector()
+        service = MediaPoolService(
+            settings,
+            state,
+            collector,
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+
+        summary = service.refill(["alpha", "beta", "gamma"])
+
+        assert collector.loaded == ["alpha", "beta"]
+        assert collector.collect_called is False
+        assert summary["accounts_checked"] == 2
+        assert summary["account_limit"] == 2
+        assert summary["account_limit_reached"] is True
+        assert summary["skipped_cooldown"] == ["alpha", "beta"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_pool_select_plan_can_skip_current_account():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
