@@ -376,11 +376,7 @@ class ScriptGenerator:
         choice_key = self._next_type_1_choice(language, variants)
         slides_by_role = dict(variants[choice_key])
         ordered = [slides_by_role[role] for role in TYPE_1_ROLES]
-        social_key, social_copy = self._choose_social_copy_for_text_choice(
-            VideoType.TYPE_1,
-            language,
-            choice_key,
-        )
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_1, language)
         signature = _hash_signature([choice_key, *ordered, social_key])
 
         self._assert_type_1_rules(language, slides_by_role)
@@ -499,11 +495,7 @@ class ScriptGenerator:
     ) -> ScriptPackage:
         choice_key = self._next_type_2_choice(language, variants)
         slides_by_role = dict(variants[choice_key])
-        social_key, social_copy = self._choose_social_copy_for_text_choice(
-            VideoType.TYPE_2,
-            language,
-            choice_key,
-        )
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_2, language)
         ordered = [slides_by_role[role] for role in TYPE_2_ROLES]
         self._assert_type_2_rules(slides_by_role)
         return ScriptPackage(
@@ -771,9 +763,7 @@ class ScriptGenerator:
             variants = self._social_copy_variants_en(video_type)
         else:
             variants = self._social_copy_variants_es(video_type)
-        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
-            variants = dict(list(variants.items())[:3])
-        else:
+        if video_type not in {VideoType.TYPE_1, VideoType.TYPE_2}:
             variants.update(self._extra_social_copy_variants(video_type, language))
         return self._prepare_social_copy_variants(video_type, language, variants)
 
@@ -1012,6 +1002,21 @@ class ScriptGenerator:
                     "Si estás empezando con dropshipping y sientes que todo va demasiado lento, lee esto antes de pensar que el problema eres tú. Yo pasé meses enteros creyendo que no valía para esto, me levantaba temprano, cerraba tarde, abría y cerraba la tienda una y otra vez, probaba productos que veía en TikTok y seguía esperando ese momento mágico en el que los pedidos empezaran a entrar solos. Nunca llegó, porque lo estaba haciendo sin ningún criterio real. El bloqueo no era trabajar poco, era trabajar sin método, probar productos sin pensarlos, copiar tiendas sin entenderlas y no saber qué datos mirar hacía que cada mes se pareciera demasiado al anterior. Cuando por fin tuve un sistema claro para elegir mejor, cada prueba me devolvía información útil en vez de solo restarme dinero. El cambio no fue espectacular, fue progresivo, y eso es precisamente lo que lo hizo sostenible. Este carrusel es lo que me habría gustado ver cuando pensaba en rendirme, porque muchas veces el problema no es la constancia, es la falta de criterio para saber qué toca probar esta semana.",
                     ["#dropshipping", "#negociosonline", "#ecommercetips", "#shopify", "#dropradar"],
                 ),
+                "es4": (
+                    "El mes que deje de elegir productos a ciegas",
+                    "Durante los primeros meses pensaba que avanzar era probar más productos, cambiar más cosas de la tienda y tocar más veces los anuncios. Mirándolo ahora, estaba confundiendo movimiento con progreso. Cada semana encontraba un producto que parecía buena idea, le montaba una página rápida, miraba un par de competidores por encima y esperaba que esta vez sí pasara algo distinto. Cuando no vendía, no sabía si el problema era el precio, el anuncio, la oferta, la web o simplemente que nadie quería comprar eso. Ese fue el punto más desgastante, porque trabajar sin saber qué está fallando te deja sin energía bastante rápido. El cambio empezó cuando dejé de tratar cada producto como una apuesta y empecé a pedirle pruebas antes de perder dinero con él. Mirar datos, demanda, competencia y señales de venta no hizo que todo fuera fácil, pero sí hizo que cada prueba tuviera sentido. Este carrusel va de eso, de pasar de improvisar cada mes a construir un proceso que por fin podía entender.",
+                    ["#dropshipping", "#productresearch", "#ecommerce", "#shopify", "#dropradar"],
+                ),
+                "es5": (
+                    "Lo que no se ve cuando empiezas desde cero",
+                    "Desde fuera parece que montar una tienda es elegir un producto, subir unas fotos y esperar pedidos. Ojalá hubiese sido así de simple para mí. Lo que no se suele enseñar es la parte de mirar el panel en cero día tras día, de rehacer la web porque no sabes si transmite confianza, de sentir que todo el mundo avanza menos tú y de plantearte si estás perdiendo el tiempo con algo que quizá no era para ti. A mí me pasó, y no una semana, varios meses. Lo que me ayudó no fue motivarme más, porque motivación ya tenía al principio, fue ordenar el proceso. Entender qué producto tenía sentido probar, por qué había gente comprando cosas parecidas y qué margen real me quedaba antes de lanzar anuncios. Cuando empecé a mirar el negocio así, con menos ego y más datos, el avance dejó de depender de tener un golpe de suerte. Este video resume esa parte menos bonita, pero probablemente la más útil para alguien que está empezando ahora.",
+                    ["#dropshipping", "#emprender", "#tiendaonline", "#ecommerce", "#dropradar"],
+                ),
+                "es6": (
+                    "La diferencia entre insistir y repetir errores",
+                    "Durante mucho tiempo me repetía que solo tenía que ser constante, pero la constancia mal dirigida también cansa. Yo estaba insistiendo, sí, pero insistiendo en revisar detalles pequeños de la tienda, en copiar productos que ya estaban quemados y en lanzar pruebas sin tener claro qué esperaba aprender de ellas. Por eso cada mes se sentía igual al anterior. No era falta de ganas, era falta de dirección. El día que empecé a analizar los productos antes de enamorarme de ellos, todo cambió de ritmo. Ya no miraba solo si el producto era bonito o si el anuncio de otra persona tenía visitas, miraba si había demanda, si el margen aguantaba, si la competencia era razonable y si la oferta podía explicarse rápido. Ahí empecé a perder menos tiempo y a entender mejor mis resultados. Este carrusel no va de hacerse rico rápido, va de aprender a no repetir el mismo fallo seis meses seguidos pensando que eso es perseverancia.",
+                    ["#dropshippingtips", "#negociosonline", "#ecommerce", "#shopify", "#dropradar"],
+                ),
             }
         if video_type == VideoType.TYPE_2:
             return {
@@ -1029,6 +1034,21 @@ class ScriptGenerator:
                     "Antes de lanzar anuncios revisa esto",
                     "Muchos fallos no vienen del producto en sí, vienen de lanzar sin tener los números claros, sin estructura y sin un criterio real para decidir qué probar. Antes de gastar un euro en anuncios conviene revisar cosas básicas con calma. ¿Tu margen real aguanta comisiones, devoluciones y coste de adquisición? ¿Tu tienda transmite confianza en los primeros segundos, tanto en móvil como en ordenador? ¿Tu producto se eligió mirando datos o solo porque era bonito en la foto del proveedor? ¿Tienes una respuesta preparada cuando el primer cliente escriba con dudas sobre envío o devolución? Un buen producto ayuda, pero una estructura floja puede matar la venta antes incluso de que empiece. Todo esto parece básico cuando lo lees, pero en la práctica la mayoría lanza con una o dos de estas piezas a medio hacer. Esta checklist no es teoría bonita, es el tipo de revisión práctica que conviene hacer antes de meter más presupuesto o asumir que el problema es solo el creativo del anuncio en ese momento concreto de la semana.",
                     ["#dropshipping", "#marketingdigital", "#shopifytips", "#negociosonline", "#dropradar"],
+                ),
+                "es4": (
+                    "4 errores que salen caros al empezar",
+                    "Cuando empecé, pensaba que el error grande era escoger mal el producto, pero con el tiempo me di cuenta de que casi siempre era una mezcla de varias cosas pequeñas que parecían inofensivas. Vender con un margen demasiado justo, confiar en una página que no daba seguridad, elegir productos porque me gustaban a mí y no porque hubiera datos detrás, o responder tarde a clientes que ya venían con dudas. Ninguna de esas cosas parece grave cuando la tienda todavía no vende mucho, pero en cuanto entra tráfico se convierten en fugas de dinero. Lo peor es que muchas veces ni siquiera sabes cuál de ellas te está frenando, así que sigues cambiando anuncios mientras el problema real está en la base. Estos 4 consejos están pensados para revisar la tienda con cabeza fría antes de seguir gastando. No son trucos raros, son cosas simples que yo habría querido tomarme más en serio desde el primer día.",
+                    ["#dropshipping", "#ecommercetips", "#tiendaonline", "#shopify", "#dropradar"],
+                ),
+                "es5": (
+                    "Lo que revisaria antes de escalar una tienda",
+                    "Escalar no debería significar simplemente subir presupuesto porque un anuncio tuvo un buen día. Antes de meter más dinero, yo revisaría si la oferta se entiende rápido, si el margen permite absorber errores, si el producto tiene una razón clara para comprarse ahora y si la experiencia después del pago está preparada para no generar reclamaciones. Al principio nadie quiere pensar en soporte, devoluciones o tiempos de envío, porque suena menos emocionante que encontrar un producto ganador, pero esas partes son las que separan una venta puntual de una tienda que puede durar. Estos puntos vienen justo de fallos que se repiten mucho: gente vendiendo barato para conseguir pedidos, webs que parecen improvisadas, productos elegidos por impulso y clientes olvidados después de pagar. Si vas a escalar, merece la pena parar diez minutos y revisar esto. A veces el crecimiento no se desbloquea haciendo más, sino corrigiendo lo que ya estaba flojo.",
+                    ["#dropshippingtips", "#ecommerce", "#marketingdigital", "#ventas", "#dropradar"],
+                ),
+                "es6": (
+                    "Consejos que parecen basicos hasta que pierdes dinero",
+                    "Hay consejos que suenan demasiado simples hasta que te toca pagar por ignorarlos. Calcular bien el margen parece obvio, pero muchos se dan cuenta tarde de que una devolución o unos euros extra en publicidad les rompen la rentabilidad. Cuidar la confianza de la tienda parece obvio, pero el cliente decide en segundos si compra o cierra la pestaña. Validar el producto con datos parece obvio, pero cuando algo se ve bonito o está de moda es fácil convencerte de que funcionará. Y cuidar al cliente después del pago parece obvio, hasta que llegan mensajes, retrasos o reclamaciones que podrías haber evitado. Este carrusel junta esas cosas que no son espectaculares, pero sostienen el negocio. Si estás empezando, no lo mires como una lista más de consejos, míralo como una forma de revisar si tu tienda tiene agujeros antes de que el tráfico los haga visibles.",
+                    ["#ecommerce", "#dropshipping", "#shopifytips", "#negocioonline", "#dropradar"],
                 ),
             }
         return {

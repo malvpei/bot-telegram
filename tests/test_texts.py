@@ -465,6 +465,27 @@ def test_type_1_and_2_have_exactly_three_script_variants(state_dir, video_type):
     assert len(signatures) == 3
 
 
+@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
+def test_spanish_type_1_and_2_social_copy_rotates_beyond_first_three(
+    state_dir,
+    video_type,
+):
+    generator = _make_generator(state_dir)
+    social_choices: set[str] = set()
+
+    for _ in range(6):
+        package = generator.generate(video_type, Language.ES)
+        social_choices.add(package.social_choice_key)
+        generator.state.set_last_text_choice(video_type, Language.ES, package.choice_key)
+        generator.state.set_last_social_choice(
+            video_type,
+            Language.ES,
+            package.social_choice_key,
+        )
+
+    assert {"es4", "es5", "es6"} <= social_choices
+
+
 def test_type_3_has_tool_stack_without_hosting(state_dir):
     generator = _make_generator(state_dir)
     package = generator.generate(VideoType.TYPE_3, Language.ES)
@@ -646,7 +667,7 @@ def test_social_hashtags_shuffle_order(monkeypatch):
 
 @pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
 @pytest.mark.parametrize("language", [Language.ES, Language.EN])
-def test_type_1_and_2_social_copy_has_exactly_three_defined_variants(
+def test_type_1_and_2_social_copy_has_expected_defined_variants(
     state_dir,
     video_type,
     language,
@@ -655,7 +676,8 @@ def test_type_1_and_2_social_copy_has_exactly_three_defined_variants(
     variants = generator._social_copy_variants(video_type, language)
 
     lengths = [len(description) for _, description, _ in variants.values()]
-    assert len(variants) == 3
+    expected_count = 6 if language == Language.ES else 3
+    assert len(variants) == expected_count
     assert all(500 <= length <= 3500 for length in lengths)
     assert generator._social_title_variants(video_type, language) == {}
 
