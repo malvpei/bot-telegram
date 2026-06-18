@@ -450,7 +450,7 @@ class ScriptGenerator:
                 SlideRole.TIP4: "4. Proyecta confianza y transparencia\nMuestra tu producto real en uso, sé honesto con los tiempos de envío y destaca políticas de garantía claras, esta autenticidad elimina las dudas del espectador disparando tus conversiones.",
             },
             "b": {
-                SlideRole.HOOK: "Errores que veo en pequeños Dropshippers\nque están empezando",
+                SlideRole.HOOK: "Errores frecuentes que veo en pequeños Dropshippers\nque están empezando",
                 SlideRole.TIP1: '1. Tener una tienda con aspecto "barato"\nSi tu web parece una plantilla de hace diez años, nadie confiará en ti. Añade reseñas, ofrece ofertas, sé sincero con los tiempos de envío e intenta reducirlos para conseguir ventas reales.',
                 SlideRole.TIP2: "2. Quemar el dinero en anuncios\nNo lances dinero a Facebook o TikTok esperando un milagro. Empieza con poco, prueba diferentes enfoques y usa el contenido orgánico para ver qué funciona antes de invertir fuerte.",
                 SlideRole.TIP3: "3. Vender lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
@@ -458,10 +458,10 @@ class ScriptGenerator:
             },
             "c": {
                 SlideRole.HOOK: "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores",
-                SlideRole.TIP1: "1. Protege tu margen\nNo compitas tirando los precios por los suelos para conseguir tu primera venta rápida. Si tu beneficio es minúsculo, cualquier gasto imprevisto en anuncios o devoluciones te dejará en números rojos.",
-                SlideRole.TIP2: "2. Confirma el stock antes\nContacta siempre con tus proveedores antes de escalar una campaña. De nada sirve que un anuncio funcione si la fábrica no tiene stock o tarda semanas en procesar pedidos.",
-                SlideRole.TIP3: "3. Deja de adivinar\nNo elijas productos solo por intuición o porque se ven atractivos. Usa Dropradar para basarte en datos reales y encontrar productos que el mercado ya está pidiendo.",
-                SlideRole.TIP4: "4. Enseña el problema\nTus anuncios deben centrarse en el problema que resuelves, no en características aburridas. Usa los tres primeros segundos para mostrar por qué tu producto facilita la vida.",
+                SlideRole.TIP1: "1. Deja de probar suerte con productos y usa Dropradar para validar demanda, competencia y margen antes de gastar dinero en anuncios.",
+                SlideRole.TIP2: "2. No escales una campaña sin confirmar stock, tiempos de envío y capacidad del proveedor para procesar pedidos rápido.",
+                SlideRole.TIP3: "3. No elijas productos solo porque se ven virales, usa Dropradar para buscar nichos con problemas claros y datos reales.",
+                SlideRole.TIP4: "4. Haz que tus anuncios enseñen el problema desde los primeros segundos, no una lista aburrida de características técnicas.",
             },
         }
         return self._compose_type_2_fixed(Language.ES, variants)
@@ -545,14 +545,16 @@ class ScriptGenerator:
                 raise ValueError(
                     f"Tipo 2 ({role.value}): el consejo debe empezar por '{expected_prefix}'."
                 )
-            if "\n" not in slide:
+            if "\n" in slide:
+                title, body = slide.split("\n", 1)
+                if not title.strip() or not body.strip():
+                    raise ValueError(
+                        f"Tipo 2 ({role.value}): el consejo debe tener título y texto."
+                    )
+                continue
+            if len(slide.split()) < 8:
                 raise ValueError(
-                    f"Tipo 2 ({role.value}): el consejo debe separar título y texto."
-                )
-            title, body = slide.split("\n", 1)
-            if not title.strip() or not body.strip():
-                raise ValueError(
-                    f"Tipo 2 ({role.value}): el consejo debe tener título y texto."
+                    f"Tipo 2 ({role.value}): el consejo directo es demasiado corto."
                 )
         if "Dropradar" not in slides_by_role.get(SlideRole.TIP3, ""):
             raise ValueError("Tipo 2: el consejo 3 debe mencionar Dropradar.")

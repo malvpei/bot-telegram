@@ -57,8 +57,8 @@ FEBRUARY_TEXT_GROUP_GAP = 38
 HOOK_BASE_FONT_SIZE = 126
 HOOK_MIN_FONT_SIZE = 54
 HOOK_SIDE_MARGIN = 48
-SAFE_TEXT_TOP_MARGIN = 132
-SAFE_TEXT_BOTTOM_MARGIN = 150
+SAFE_TEXT_TOP_MARGIN = 160
+SAFE_TEXT_BOTTOM_MARGIN = 230
 TYPE_3_TOOL_BADGES: dict[str, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
     "shopify": ("Shopify", (255, 255, 255), (92, 156, 55)),
     "dropradar": ("Dropradar", (163, 245, 48), (20, 20, 20)),
@@ -117,9 +117,9 @@ TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
-TEXT_FACE_AVOID_WEIGHT = 150.0
-TEXT_EYE_AVOID_WEIGHT = 120.0
-TEXT_HEAD_AVOID_WEIGHT = 55.0
+TEXT_FACE_AVOID_WEIGHT = 260.0
+TEXT_EYE_AVOID_WEIGHT = 220.0
+TEXT_HEAD_AVOID_WEIGHT = 120.0
 TEXT_BODY_AVOID_WEIGHT = 2.5
 TEXT_CARD_EDGE_MARGIN = 84
 TEXT_CARD_PADDING_X = 46
@@ -1633,7 +1633,7 @@ class VideoRenderer:
             slide is not None and slide.fixed_asset and slide.role == SlideRole.FEBRUARY
         ):
             return (0.38, 0.40, 0.36, 0.42, 0.34, 0.32)
-        return (0.60, 0.66, 0.54, 0.72, 0.48, 0.40, 0.34)
+        return (0.58, 0.62, 0.52, 0.66, 0.46, 0.40, 0.34)
 
     def _clamp_fixed_screen_caption_y(
         self,
@@ -1991,7 +1991,10 @@ class VideoRenderer:
             overlap = self._intersection_area(box, region)
             region_area = max(1, self._box_area(region))
             if overlap > 0:
-                score += weight * max(overlap / box_area, overlap / region_area)
+                overlap_ratio = max(overlap / box_area, overlap / region_area)
+                score += weight * overlap_ratio
+                if weight >= TEXT_HEAD_AVOID_WEIGHT:
+                    score += weight * 2.0 * overlap_ratio
                 continue
             score += self._avoid_region_clearance_score(
                 box,
@@ -2071,8 +2074,8 @@ class VideoRenderer:
                 (int(x), int(y), int(x + w), int(y + h)),
                 width,
                 height,
-                x_pad=int(w * 0.38),
-                y_pad=int(h * 0.58),
+                x_pad=int(w * 0.48),
+                y_pad=int(h * 0.72),
             )
             regions.append((face, TEXT_FACE_AVOID_WEIGHT))
 
@@ -2086,8 +2089,8 @@ class VideoRenderer:
                 ),
                 width,
                 height,
-                x_pad=int(w * 0.45),
-                y_pad=int(h * 0.45),
+                x_pad=int(w * 0.62),
+                y_pad=int(h * 0.62),
             )
             regions.append((eye_face, TEXT_EYE_AVOID_WEIGHT))
 
@@ -2108,8 +2111,8 @@ class VideoRenderer:
                 ),
                 width,
                 height,
-                x_pad=int(w * 0.14),
-                y_pad=int(h * 0.08),
+                x_pad=int(w * 0.22),
+                y_pad=int(h * 0.16),
             )
             regions.append((body, TEXT_BODY_AVOID_WEIGHT))
             regions.append((head, TEXT_HEAD_AVOID_WEIGHT))

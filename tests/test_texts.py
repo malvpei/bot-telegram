@@ -182,7 +182,7 @@ def test_type_1_es_female_gender_adapts_self_references(state_dir):
     assert "millonario" not in march
 
 
-def test_type_2_es_female_gender_uses_image_hook_in_three_lines(state_dir):
+def test_type_2_es_female_gender_uses_specific_hook(state_dir):
     generator = _make_generator(state_dir)
 
     package = generator.generate(
@@ -255,16 +255,18 @@ def test_type_2_tips_separate_title_and_body_and_hooks_are_fixed(state_dir):
 
     assert package.slides_by_role[SlideRole.HOOK] in {
         "Habría pagado por saber estas 4 cosas\ncuando empecé en Dropshipping",
-        "Errores que veo en pequeños Dropshippers\nque están empezando",
+        "Errores frecuentes que veo en pequeños Dropshippers\nque están empezando",
         "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores",
     }
     for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
         slide = package.slides_by_role[role]
         assert slide.startswith(f"{role.value[-1]}.")
-        assert "\n" in slide
-        title, body = slide.split("\n", 1)
-        assert title
-        assert body
+        if "\n" in slide:
+            title, body = slide.split("\n", 1)
+            assert title
+            assert body
+        else:
+            assert len(slide.split()) >= 8
 
 
 def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
@@ -285,7 +287,7 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Errores que veo en pequeños Dropshippers\nque están empezando"
+        == "Errores frecuentes que veo en pequeños Dropshippers\nque están empezando"
     )
     assert second.slides_by_role[SlideRole.TIP4].startswith(
         "4. Descuidar el trato con el comprador\n"
@@ -299,7 +301,12 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
         == "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores"
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
-        "1. Protege tu margen\n"
+        "1. Deja de probar suerte con productos"
+    )
+    assert "\n" not in third.slides_by_role[SlideRole.TIP1]
+    assert all(
+        "\n" not in third.slides_by_role[role]
+        for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4)
     )
     assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
 
@@ -421,7 +428,7 @@ def test_type_1_and_2_hooks_mention_money_and_dropshipping(
             normalized_hook = " ".join(hook.split())
             assert normalized_hook in {
                 "habría pagado por saber estas 4 cosas cuando empecé en dropshipping",
-                "errores que veo en pequeños dropshippers que están empezando",
+                "errores frecuentes que veo en pequeños dropshippers que están empezando",
                 "4 consejos de dropshipping que me habrían ahorrado muchos errores",
                 "i would have paid to know these 4 things when i started dropshipping",
                 "mistakes i see small dropshippers making when they are starting out",

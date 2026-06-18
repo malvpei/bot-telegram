@@ -233,9 +233,18 @@ class MediaPoolService:
             pool=pool,
             video_type=video_type,
         )
+        account_limit = max(
+            0,
+            int(getattr(self.settings, "pool_plan_max_accounts", 0)),
+        )
+        accounts_to_try = (
+            ordered_accounts[:account_limit]
+            if account_limit
+            else ordered_accounts
+        )
         tried: list[str] = []
         last_error: str | None = None
-        for account in ordered_accounts:
+        for account in accounts_to_try:
             tried.append(account)
             try:
                 plan = self.selector.create_plan(
@@ -250,10 +259,22 @@ class MediaPoolService:
             return plan, tried
 
         detail = f"\nUltimo motivo: {last_error}" if last_error else ""
+        limited = bool(account_limit and len(ordered_accounts) > account_limit)
+        tried_detail = (
+            f"Probe {len(tried)} de {len(ordered_accounts)} cuentas locales disponibles. "
+            if limited
+            else f"Probe todas las cuentas locales disponibles ({len(tried)}/{len(ordered_accounts)}). "
+        )
+        limit_detail = (
+            f"Limite de cuentas del pool por intento: {account_limit}. "
+            if limited
+            else ""
+        )
         raise ValueError(
             "No hay una cuenta del pool que pueda generar este tipo de video. "
-            f"Probe todas las cuentas locales disponibles ({len(tried)}/{len(ordered_accounts)}). "
-            "Se puede usar busqueda dinamica fuera del pool para encontrar mas fotos."
+            + tried_detail
+            + limit_detail
+            + "Se puede usar busqueda dinamica fuera del pool para encontrar mas fotos."
             + detail
         )
 

@@ -163,9 +163,9 @@ def test_hook_text_respects_manual_three_line_breaks(monkeypatch):
     renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
     image = Image.new("RGB", (1080, 1920), (0, 0, 0))
     text = (
-        "Me dijeron que no iba a ganar\n"
-        "nada con el Dropshipping por\n"
-        "ser mujer y esto pasó..."
+        "Errores frecuentes que veo\n"
+        "en dropshippers novatos\n"
+        "cuando empiezan"
     )
     captured: dict[str, list[str]] = {}
 
@@ -297,6 +297,40 @@ def test_hook_text_renders_in_middle_third_without_avoid_regions(monkeypatch):
         assert still.height / 3 <= center_y <= still.height * 2 / 3
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_safe_text_bounds_keep_larger_vertical_margins():
+    min_y, max_y = VideoRenderer._safe_text_vertical_bounds(1920, 300)
+
+    assert min_y == SAFE_TEXT_TOP_MARGIN
+    assert max_y == 1920 - 300 - SAFE_TEXT_BOTTOM_MARGIN
+
+
+def test_safe_text_start_avoids_detected_face_region(monkeypatch):
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+    image = Image.new("RGB", (1080, 1920), (25, 25, 25))
+    face_region = (240, 700, 840, 1120)
+    block_width = 820
+    block_height = 260
+
+    monkeypatch.setattr(
+        renderer,
+        "_text_avoid_regions",
+        lambda _image: [(face_region, 260.0)],
+    )
+
+    y = renderer._safe_text_start_y(
+        image,
+        block_width=block_width,
+        block_height=block_height,
+        preferred_centers=(0.58, 0.62, 0.52, 0.66, 0.46),
+    )
+    x = (image.width - block_width) // 2
+    text_box = (x, y, x + block_width, y + block_height)
+
+    assert renderer._intersection_area(text_box, face_region) == 0
+    assert y >= SAFE_TEXT_TOP_MARGIN
+    assert y + block_height <= image.height - SAFE_TEXT_BOTTOM_MARGIN
 
 
 def test_type_1_still_embeds_caption_cards(monkeypatch):
@@ -473,6 +507,21 @@ def test_type_2_long_titleless_tip_uses_hook_paragraph_style(monkeypatch):
         assert ys.max() - ys.min() < int(still.height * 0.48)
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_2_direct_variant_tip_uses_hook_paragraph_style():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    slide = SlidePlan(
+        index=2,
+        role=SlideRole.TIP1,
+        text=(
+            "1. Deja de probar suerte con productos y usa Dropradar para validar "
+            "demanda, competencia y margen antes de gastar dinero en anuncios."
+        ),
+        media=_candidate(Path("source.jpg")),
+    )
+
+    assert renderer._uses_hook_paragraph_style(slide, VideoType.TYPE_2) is True
 
 
 def test_caption_body_background_is_connected_and_keeps_side_margin(monkeypatch):
