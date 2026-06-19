@@ -10,7 +10,9 @@ from telegram.error import NetworkError
 from telegram.ext import ConversationHandler
 
 from app.bot import (
+    DELIVERY_STATE,
     GENDER_STATE,
+    LANGUAGE_STATE,
     REGENERATE_ACCEPT,
     REGENERATE_CANCEL,
     REGENERATE_SKIP_ACCOUNT,
@@ -30,6 +32,7 @@ from app.bot import (
     _send_slides_text_then_image,
     create_command,
     story_carousel_command,
+    wizard_delivery,
     wizard_type,
 )
 from app.config import get_settings
@@ -151,12 +154,14 @@ class FakeRegenerateQuery:
         self.data = data
         self.answered = False
         self.edited_text = ""
+        self.reply_markup = None
 
     async def answer(self) -> None:
         self.answered = True
 
-    async def edit_message_text(self, text: str) -> None:
+    async def edit_message_text(self, text: str, reply_markup=None) -> None:
         self.edited_text = text
+        self.reply_markup = reply_markup
 
 
 class FakeUser:
@@ -314,6 +319,46 @@ def test_type_1_sends_embedded_text_image_without_slide_messages():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_1_can_send_slide_text_separately_from_image():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "slide.jpg"
+        Image.new("RGB", (10, 10), (0, 0, 0)).save(image_path)
+        context = FakeContext()
+        slide = SlidePlan(
+            index=1,
+            role=SlideRole.HOOK,
+            text="Hook text",
+            media=MediaCandidate(
+                source_account="tipo1",
+                source_id="img",
+                local_path=image_path,
+                permalink="",
+                caption="",
+                width=10,
+                height=10,
+                created_at="",
+            ),
+        )
+
+        asyncio.run(
+            _send_slides_text_then_image(
+                context,
+                123,
+                [slide],
+                separate_slide_text=True,
+            )
+        )
+
+        assert context.bot.events == [
+            ("message", "Hook text"),
+            ("photo", "slide.jpg"),
+        ]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_repeat_prompt_has_accept_and_cancel_buttons():
     context = FakeContext()
 
@@ -413,13 +458,45 @@ def test_create_command_offers_template_video_without_accounts():
 
     assert state == GENDER_STATE
     buttons = update.effective_message.reply_markup.inline_keyboard
-    assert len(buttons) == 2
+    assert len(buttons) == 1
     assert buttons[0][0].text == "Video herramientas R2 ES"
     assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
     assert buttons[0][1].text == "Video tools R2 EN"
     assert buttons[0][1].callback_data == TEMPLATE_VIDEO_CREATE_EN
-    assert buttons[1][0].text == "Carrusel IA R2"
-    assert buttons[1][0].callback_data == "wizard:type:4"
+
+
+def test_wizard_type_asks_how_to_deliver_slide_text():
+    context = FakeContext()
+    query = FakeRegenerateQuery("wizard:type:1")
+    update = FakeRegenerateUpdate(query)
+
+    state = asyncio.run(wizard_type(update, context))
+
+    assert state == DELIVERY_STATE
+    assert context.user_data["video_type"] == "1"
+    assert "texto dentro de cada imagen o separado" in query.edited_text
+    buttons = query.reply_markup.inline_keyboard[0]
+    assert [button.text for button in buttons] == ["Texto en imagen", "Texto separado"]
+    assert [button.callback_data for button in buttons] == [
+        "wizard:delivery:embedded",
+        "wizard:delivery:separate",
+    ]
+
+
+def test_wizard_delivery_stores_separate_text_choice_and_asks_language():
+    context = FakeContext()
+    query = FakeRegenerateQuery("wizard:delivery:separate")
+    update = FakeRegenerateUpdate(query)
+
+    state = asyncio.run(wizard_delivery(update, context))
+
+    assert state == LANGUAGE_STATE
+    assert context.user_data["separate_slide_text"] is True
+    buttons = query.reply_markup.inline_keyboard[0]
+    assert [button.callback_data for button in buttons] == [
+        "wizard:lang:es",
+        "wizard:lang:en",
+    ]
 
 
 def test_type_4_button_uses_r2_without_waiting_for_photo():

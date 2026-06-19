@@ -37,7 +37,14 @@ from app.service import VideoCreationService
 from app.state import StateStore
 
 
-GENDER_STATE, TYPE_STATE, LANGUAGE_STATE, LOWERCASE_STATE, STORY_PHOTO_STATE = range(5)
+(
+    GENDER_STATE,
+    TYPE_STATE,
+    DELIVERY_STATE,
+    LANGUAGE_STATE,
+    LOWERCASE_STATE,
+    STORY_PHOTO_STATE,
+) = range(6)
 REGENERATE_ACCEPT = "regen:accept"
 REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
@@ -97,6 +104,10 @@ def run_bot() -> None:
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:"),
             ],
+            DELIVERY_STATE: [
+                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
+                CallbackQueryHandler(wizard_delivery, pattern=r"^wizard:delivery:"),
+            ],
             LANGUAGE_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:"),
@@ -155,7 +166,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
         "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
-        "/story_carousel - crear carrusel IA comic desde una foto enviada por Telegram\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
@@ -175,16 +185,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Flujo:\n"
         "1. /create\n"
         "2. elige Hombres o Mujeres\n"
-        "3. elige Tipo 1, Tipo 2, Tipo 3 o Tipo 4\n"
-        "4. elige Español o English\n"
-        "5. elige si quieres textos normales o todo en minúscula\n"
-        "6. el bot usa el pool si hay stock o busca dinamicamente si falta\n\n"
+        "3. elige Tipo 1, Tipo 2 o Tipo 3\n"
+        "4. elige si quieres texto incrustado en la imagen o separado\n"
+        "5. elige Español o English\n"
+        "6. elige si quieres textos normales o todo en minúscula\n"
+        "7. el bot usa el pool si hay stock o busca dinamicamente si falta\n\n"
         "Tipos:\n"
         "1 = historia de 7 imágenes (slide 6 = tip3_dropradar.jpg, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = tip3_dropradar.jpg, tip3)\n"
-        "3 = hook + herramientas para empezar dropshipping en 2026\n"
-        "4 = carrusel IA estilo comic desde una imagen subida a R2 "
-        "(6 escenas generadas + foto original)\n\n"
+        "3 = hook + herramientas para empezar dropshipping en 2026\n\n"
         "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
         "accounts_women.txt (una por línea). Para cambiarlas edita el archivo "
         "y guarda; se releen en cada /create.\n\n"
@@ -573,19 +582,13 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         callback_data=TEMPLATE_VIDEO_CREATE_EN,
                     ),
                 ],
-                [
-                    InlineKeyboardButton(
-                        "Carrusel IA R2",
-                        callback_data="wizard:type:4",
-                    ),
-                ],
             ]
         )
         await update.effective_message.reply_text(
             (
                 "Que quieres crear?\n\n"
                 "No encontre cuentas cargadas, asi que por ahora estan "
-                "disponibles el video de herramientas R2 y el carrusel IA desde R2."
+                "disponible el video de herramientas R2."
             ),
             reply_markup=keyboard,
         )
@@ -611,12 +614,6 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 InlineKeyboardButton(
                     f"Mujeres ({len(accounts_by_gender[VideoGender.FEMALE])})",
                     callback_data="wizard:gender:female",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "Carrusel IA R2",
-                    callback_data="wizard:type:4",
                 ),
             ],
         ]
@@ -664,12 +661,6 @@ async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 InlineKeyboardButton("Tipo 2", callback_data="wizard:type:2"),
                 InlineKeyboardButton("Tipo 3", callback_data="wizard:type:3"),
             ],
-            [
-                InlineKeyboardButton(
-                    "Tipo 4 - Carrusel IA",
-                    callback_data="wizard:type:4",
-                ),
-            ]
         ]
     )
     await query.edit_message_text(
@@ -716,13 +707,44 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     keyboard = InlineKeyboardMarkup(
         [
             [
+                InlineKeyboardButton(
+                    "Texto en imagen",
+                    callback_data="wizard:delivery:embedded",
+                ),
+                InlineKeyboardButton(
+                    "Texto separado",
+                    callback_data="wizard:delivery:separate",
+                ),
+            ]
+        ]
+    )
+    await query.edit_message_text(
+        "Perfecto. ¿Quieres el texto dentro de cada imagen o separado como mensaje?",
+        reply_markup=keyboard,
+    )
+    return DELIVERY_STATE
+
+
+async def wizard_delivery(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    raw_delivery = query.data.rsplit(":", maxsplit=1)[-1]
+    if raw_delivery not in {"embedded", "separate"}:
+        await query.edit_message_text("Opción no reconocida. Lanza /create otra vez.")
+        return ConversationHandler.END
+
+    context.user_data["separate_slide_text"] = raw_delivery == "separate"
+
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
                 InlineKeyboardButton("Español", callback_data="wizard:lang:es"),
                 InlineKeyboardButton("English", callback_data="wizard:lang:en"),
             ]
         ]
     )
     await query.edit_message_text(
-        "Perfecto. Ahora elige el idioma del texto.",
+        "Ahora elige el idioma del texto.",
         reply_markup=keyboard,
     )
     return LANGUAGE_STATE
@@ -778,6 +800,7 @@ async def wizard_lowercase(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
     raw_type = context.user_data.get("video_type")
     raw_gender = context.user_data.get("video_gender", VideoGender.MALE.value)
+    separate_slide_text = bool(context.user_data.get("separate_slide_text", False))
     accounts = context.user_data.get("accounts_snapshot")
     if not raw_type or not accounts:
         await query.edit_message_text(
@@ -808,13 +831,19 @@ async def wizard_lowercase(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         account_inputs=list(accounts),
         gender=gender,
         lowercase_text=lowercase_text,
+        separate_slide_text=separate_slide_text,
     )
 
     lowercase_line = "todo en minúscula" if lowercase_text else "formato normal"
+    delivery_line = (
+        "texto separado"
+        if separate_slide_text
+        else "texto dentro de la imagen"
+    )
     await query.edit_message_text(
         f"Preparando video de {_gender_label_plural(gender)} tipo "
         f"{video_type.value} en {language.value} "
-        f"con {len(accounts)} cuentas ({lowercase_line})."
+        f"con {len(accounts)} cuentas ({lowercase_line}, {delivery_line})."
     )
     await _execute_job(update, context, request)
     _clear_wizard_state(context)
@@ -918,6 +947,9 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 else []
             ),
             lowercase_text=bool(repeat_request.get("lowercase_text", False)),
+            separate_slide_text=bool(
+                repeat_request.get("separate_slide_text", False)
+            ),
         )
     except (AccountsFileError, KeyError, ValueError):
         context.user_data.pop("repeat_request", None)
@@ -962,6 +994,7 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
             account_inputs=[repeat_request["chosen_account"]],
             gender=request.gender,
             lowercase_text=request.lowercase_text,
+            separate_slide_text=request.separate_slide_text,
         )
         await _execute_extra_image(update, context, extra_request)
 
@@ -1013,7 +1046,12 @@ async def _execute_job(
             f"Tipo: {result.video_type.value}\n"
             f"Idioma: {result.language.value}"
         )
-    await status_message.edit_text("Enviando imágenes con su texto.")
+    send_status = (
+        "Enviando imágenes y textos por separado."
+        if result.separate_slide_text
+        else "Enviando imágenes con su texto."
+    )
+    await status_message.edit_text(send_status)
     try:
         await _send_message(context, chat.id, header)
         for message in result.social_copy.messages:
@@ -1023,6 +1061,7 @@ async def _execute_job(
             chat.id,
             result.slides,
             video_type=result.video_type,
+            separate_slide_text=result.separate_slide_text,
         )
         if result.video_type == VideoType.TYPE_4:
             return
@@ -1033,6 +1072,7 @@ async def _execute_job(
             "language": result.language.value,
             "video_gender": request.gender.value,
             "lowercase_text": request.lowercase_text,
+            "separate_slide_text": request.separate_slide_text,
         }
         await _ask_for_another_same_account(context, chat.id, result.chosen_account)
         if result.pool_low_stock:
@@ -1084,6 +1124,7 @@ async def _execute_extra_image(
             "language": request.language.value,
             "video_gender": request.gender.value,
             "lowercase_text": request.lowercase_text,
+            "separate_slide_text": request.separate_slide_text,
         }
         await _ask_for_another_same_account(context, chat.id, media.source_account)
     except TelegramError as error:
@@ -1169,6 +1210,7 @@ async def _send_slides_text_then_image(
     slides,
     *,
     video_type: VideoType | None = None,
+    separate_slide_text: bool = False,
 ) -> None:
     slides = list(slides)
 
@@ -1178,7 +1220,9 @@ async def _send_slides_text_then_image(
         path = slide.media.local_path
         if not path.exists():
             continue
-        if video_type == VideoType.TYPE_3 and slide.role == SlideRole.HOOK and slide.text:
+        if separate_slide_text and slide.text:
+            await _send_message(context, chat_id, slide.text)
+        elif video_type == VideoType.TYPE_3 and slide.role == SlideRole.HOOK and slide.text:
             await _send_message(context, chat_id, slide.text)
         await _send_photo(context, chat_id, path)
 
@@ -1281,6 +1325,7 @@ def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop("video_gender", None)
     context.user_data.pop("video_type", None)
     context.user_data.pop("language", None)
+    context.user_data.pop("separate_slide_text", None)
     context.user_data.pop("reference_image_path", None)
 
 

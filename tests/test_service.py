@@ -24,6 +24,7 @@ class FakeRenderer:
         self.template_language = None
         self.render_slide_still_calls: list[VideoType] = []
         self.render_slide_still_sources: list[Path] = []
+        self.render_slide_still_texts: list[str] = []
         self.written_plan: VideoPlan | None = None
 
     def render(self, plan: VideoPlan, job_dir: Path):
@@ -41,6 +42,7 @@ class FakeRenderer:
     def render_slide_still(self, slide: SlidePlan, video_type: VideoType) -> Image.Image:
         self.render_slide_still_calls.append(video_type)
         self.render_slide_still_sources.append(slide.media.local_path)
+        self.render_slide_still_texts.append(slide.text)
         return Image.new("RGB", (72, 128), (40, 80, 120))
 
     def render_template_video(self, input_video: Path, job_dir: Path, language=None) -> Path:
@@ -351,6 +353,53 @@ def test_slide_normalization_does_not_mutate_shared_media_candidate():
         assert first_plan.slides[0].media.local_path.parent.name == "slides"
         assert second_plan.slides[0].media.local_path.parent.name == "slides"
         assert first_plan.slides[0].media.local_path != second_plan.slides[0].media.local_path
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_render_outputs_can_keep_slide_text_out_of_images():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        source_path = root / "source.jpg"
+        Image.new("RGB", (72, 128), (10, 20, 30)).save(source_path)
+        renderer = FakeRenderer()
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(get_settings(), width=72, height=128)
+        service.renderer = renderer
+        plan = VideoPlan(
+            chosen_account="alpha",
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            slides=[
+                SlidePlan(
+                    index=1,
+                    role=SlideRole.HOOK,
+                    text="Hook text",
+                    media=MediaCandidate(
+                        source_account="alpha",
+                        source_id="one",
+                        local_path=source_path,
+                        permalink="",
+                        caption="",
+                        width=72,
+                        height=128,
+                        created_at="",
+                    ),
+                ),
+            ],
+        )
+
+        service._render_outputs(
+            plan,
+            root / "outputs" / "job",
+            embed_slide_text=False,
+        )
+
+        assert renderer.written_plan is plan
+        assert renderer.render_slide_still_texts == [""]
+        assert plan.slides[0].text == "Hook text"
+        assert plan.slides[0].media.local_path.name == "slide_01.jpg"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

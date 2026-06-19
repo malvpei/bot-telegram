@@ -103,6 +103,7 @@ class VideoRequest:
     gender: VideoGender = VideoGender.MALE
     skip_accounts: list[str] = field(default_factory=list)
     lowercase_text: bool = False
+    separate_slide_text: bool = False
     reference_image_path: Path | None = None
 
 
@@ -216,3 +217,4 @@ class GenerationResult:
     slides: list[SlidePlan] = field(default_factory=list)
     pool_remaining: int = 0
     pool_low_stock: bool = False
+    separate_slide_text: bool = False

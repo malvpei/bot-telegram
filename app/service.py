@@ -482,7 +482,11 @@ class VideoCreationService:
                 slide.text = script_package.slides_by_role[slide.role]
 
             job_dir = self.settings.outputs_dir / job_id
-            video_path, script_path = self._render_outputs(plan, job_dir)
+            video_path, script_path = self._render_outputs(
+                plan,
+                job_dir,
+                embed_slide_text=not request.separate_slide_text,
+            )
 
             self.state.set_last_signature(
                 request.video_type, request.language, script_package.signature
@@ -555,6 +559,7 @@ class VideoCreationService:
                 if hasattr(self, "pool")
                 else False
             ),
+            separate_slide_text=request.separate_slide_text,
         )
 
     def _create_story_carousel_locked(self, request: VideoRequest) -> GenerationResult:
@@ -641,6 +646,7 @@ class VideoCreationService:
             slides=list(plan.slides),
             pool_remaining=0,
             pool_low_stock=False,
+            separate_slide_text=False,
         )
 
     def _download_story_reference_from_r2(
@@ -798,14 +804,24 @@ class VideoCreationService:
             allow_plan_compatible_fallback=True,
         )
 
-    def _render_outputs(self, plan: VideoPlan, job_dir: Path) -> tuple[Path | None, Path]:
+    def _render_outputs(
+        self,
+        plan: VideoPlan,
+        job_dir: Path,
+        *,
+        embed_slide_text: bool = True,
+    ) -> tuple[Path | None, Path]:
         LOGGER.info(
             "Preparing slide images for type %s job %s",
             plan.video_type.value,
             job_dir.name,
         )
         script_path = self.renderer.write_script(plan, job_dir)
-        self._normalize_slide_images(plan, job_dir)
+        self._normalize_slide_images(
+            plan,
+            job_dir,
+            embed_slide_text=embed_slide_text,
+        )
         return None, script_path
 
     def _assert_single_source_account(self, plan: VideoPlan) -> None:
@@ -1099,7 +1115,13 @@ class VideoCreationService:
             selected_path = ordered_candidates[0]
         return selected_path, queue_restarted
 
-    def _normalize_slide_images(self, plan: VideoPlan, job_dir: Path) -> None:
+    def _normalize_slide_images(
+        self,
+        plan: VideoPlan,
+        job_dir: Path,
+        *,
+        embed_slide_text: bool = True,
+    ) -> None:
         # Telegram-bound images must share the vertical TikTok carousel format
         # (1080x1920 by default). We center-crop each slide to cover the canvas
         # so the aspect ratio is identical for every image we send.
@@ -1127,8 +1149,13 @@ class VideoCreationService:
                 continue
             out_path = slides_dir / f"slide_{slide.index:02d}.jpg"
             try:
+                render_slide = (
+                    slide
+                    if embed_slide_text
+                    else replace(slide, text="")
+                )
                 normalized = self.renderer.render_slide_still(
-                    slide, plan.video_type
+                    render_slide, plan.video_type
                 ).convert("RGB")
                 normalized.save(out_path, format="JPEG", quality=95, subsampling=0)
             except OSError as error:
