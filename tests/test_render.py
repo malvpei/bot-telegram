@@ -217,6 +217,38 @@ def test_hook_text_manual_lines_fit_inside_side_margins(monkeypatch):
     assert max(widths) <= max_width
 
 
+def test_type_2_balanced_spanish_hook_stays_large(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGB", (1080, 1920), (0, 0, 0))
+    text = "Errores que cuestan dinero\nal empezar en Dropshipping"
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 100)
+
+    def capture_lines(draw, lines, font, **kwargs):
+        captured["draw"] = draw
+        captured["lines"] = list(lines)
+        captured["font"] = font
+        captured["stroke_width"] = kwargs["stroke_width"]
+
+    monkeypatch.setattr(renderer, "_draw_lines", capture_lines)
+
+    renderer._draw_hook_text(image, text, video_type=VideoType.TYPE_2)
+
+    draw = captured["draw"]
+    font = captured["font"]
+    stroke_width = captured["stroke_width"]
+    widths = [
+        renderer._text_size(draw, line, font, stroke_width=stroke_width)[0]
+        for line in captured["lines"]
+    ]
+
+    assert captured["lines"] == text.splitlines()
+    assert getattr(font, "size", 0) >= 68
+    assert abs(widths[0] - widths[1]) <= 40
+
+
 def test_type_1_two_line_hook_reflows_to_larger_balanced_text(monkeypatch):
     settings = replace(get_settings(), width=1080, height=1920)
     renderer = VideoRenderer(settings)

@@ -255,7 +255,7 @@ def test_type_2_tips_separate_title_and_body_and_hooks_are_fixed(state_dir):
 
     assert package.slides_by_role[SlideRole.HOOK] in {
         "Habría pagado por saber estas 4 cosas\ncuando empecé en Dropshipping",
-        "Errores frecuentes que veo en pequeños Dropshippers\nque están empezando",
+        "Errores que cuestan dinero\nal empezar en Dropshipping",
         "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores",
     }
     for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
@@ -287,7 +287,7 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Errores frecuentes que veo en pequeños Dropshippers\nque están empezando"
+        == "Errores que cuestan dinero\nal empezar en Dropshipping"
     )
     assert second.slides_by_role[SlideRole.TIP4].startswith(
         "4. Descuidar el trato con el comprador\n"
@@ -428,7 +428,7 @@ def test_type_1_and_2_hooks_mention_money_and_dropshipping(
             normalized_hook = " ".join(hook.split())
             assert normalized_hook in {
                 "habría pagado por saber estas 4 cosas cuando empecé en dropshipping",
-                "errores frecuentes que veo en pequeños dropshippers que están empezando",
+                "errores que cuestan dinero al empezar en dropshipping",
                 "4 consejos de dropshipping que me habrían ahorrado muchos errores",
                 "i would have paid to know these 4 things when i started dropshipping",
                 "mistakes i see small dropshippers making when they are starting out",

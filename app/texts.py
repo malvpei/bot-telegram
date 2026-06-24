@@ -446,7 +446,7 @@ class ScriptGenerator:
                 SlideRole.TIP4: "4. Proyecta confianza y transparencia\nMuestra tu producto real en uso, sé honesto con los tiempos de envío y destaca políticas de garantía claras, esta autenticidad elimina las dudas del espectador disparando tus conversiones.",
             },
             "b": {
-                SlideRole.HOOK: "Errores frecuentes que veo en pequeños Dropshippers\nque están empezando",
+                SlideRole.HOOK: "Errores que cuestan dinero\nal empezar en Dropshipping",
                 SlideRole.TIP1: '1. Tener una tienda con aspecto "barato"\nSi tu web parece una plantilla de hace diez años, nadie confiará en ti. Añade reseñas, ofrece ofertas, sé sincero con los tiempos de envío e intenta reducirlos para conseguir ventas reales.',
                 SlideRole.TIP2: "2. Quemar el dinero en anuncios\nNo lances dinero a Facebook o TikTok esperando un milagro. Empieza con poco, prueba diferentes enfoques y usa el contenido orgánico para ver qué funciona antes de invertir fuerte.",
                 SlideRole.TIP3: "3. Vender lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
