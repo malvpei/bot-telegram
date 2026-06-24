@@ -648,7 +648,7 @@ class VideoRenderer:
             title,
             draw,
             max_width=max_text_width,
-            base_size=72,
+            base_size=66,
             min_size=46,
             bold=True,
             stroke_width=stroke_width,
