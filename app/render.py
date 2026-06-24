@@ -109,6 +109,7 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
     "tiktok": 0.429,
 }
 TYPE_3_TEXT_STROKE_WIDTH = 4
+TYPE_3_TITLE_FONT_SIZE = 66
 TYPE_3_BODY_FONT_SIZE = 58
 TYPE_4_TARGET_SECONDS = 7.5
 TYPE_4_TITLE_STROKE_WIDTH = 4
@@ -643,13 +644,14 @@ class VideoRenderer:
         max_text_width = width - edge_margin * 2
         stroke_width = max(2, _scale_x(TYPE_3_TEXT_STROKE_WIDTH, width))
         body_line_gap = _scale_y(8, height)
+        title_font_size = _scale_x(TYPE_3_TITLE_FONT_SIZE, width)
 
         title_font = self._fit_single_line_text(
             title,
             draw,
             max_width=max_text_width,
-            base_size=66,
-            min_size=46,
+            base_size=title_font_size,
+            min_size=title_font_size,
             bold=True,
             stroke_width=stroke_width,
         )

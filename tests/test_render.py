@@ -21,6 +21,7 @@ from app.render import (
     SAFE_TEXT_BOTTOM_MARGIN,
     SAFE_TEXT_TOP_MARGIN,
     TEXT_AVOID_CLEARANCE_MARGIN,
+    TYPE_3_TITLE_FONT_SIZE,
     VideoRenderer,
 )
 
@@ -895,8 +896,8 @@ def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_bod
         "2. Busqueda de productos",
         draw,
         max_width=1000,
-        base_size=72,
-        min_size=46,
+        base_size=TYPE_3_TITLE_FONT_SIZE,
+        min_size=TYPE_3_TITLE_FONT_SIZE,
         bold=False,
         stroke_width=4,
     )
@@ -908,6 +909,7 @@ def test_type_3_spanish_tool_text_keeps_title_single_line_and_tool_on_second_bod
     )
 
     assert title_width <= 1000
+    assert getattr(title_font, "size", TYPE_3_TITLE_FONT_SIZE) == TYPE_3_TITLE_FONT_SIZE
     body_font = renderer._load_font(size=58, bold=False)
     assert renderer._type_3_body_lines(
         "Encuentra productos ganadores - Usa Dropradar",
