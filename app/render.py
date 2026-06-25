@@ -176,8 +176,8 @@ TYPE_4_TEMPLATE_ROWS: tuple[
     ),
     ("scripts", "chatgpt", "ChatGPT", 96, 818, 211, 82, 354, 789, 142, 539, 846, 47),
     ("payments", "stripe", "Stripe", 98, 981, 176, 82, 359, 961, 130, 549, 1008, 48),
-    ("organic", "tiktok", "TikTok", 94, 1144, 232, 88, 372, 1138, 118, 554, 1179, 47),
-    ("ads", "meta_ads", "Meta Ads", 120, 1329, 127, 82, 306, 1300, 170, 507, 1363, 45),
+    ("organic", "tiktok", "TikTok", 94, 1144, 232, 88, 360, 1128, 150, 554, 1179, 47),
+    ("ads", "meta_ads", "Meta Ads", 120, 1329, 127, 82, 286, 1288, 150, 482, 1345, 45),
     ("editing", "capcut", "CapCut", 92, 1504, 216, 82, 368, 1476, 130, 542, 1530, 47),
 )
 TYPE_4_STORY_CAPTION_ROLES = {
@@ -946,7 +946,7 @@ class VideoRenderer:
         height: int,
         language: Language,
     ) -> None:
-        font = self._load_font(size=_scale_y(66, height), bold=True)
+        font = self._load_font(size=_scale_y(60, height), bold=True)
         line_gap = _scale_y(4, height)
         first_line, second_line = TYPE_4_TITLE_LINES[self._type_4_language(language)]
         first_width, first_height = self._text_size(
