@@ -111,6 +111,7 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
 TYPE_3_TEXT_STROKE_WIDTH = 4
 TYPE_3_TITLE_FONT_SIZE = 66
 TYPE_3_BODY_FONT_SIZE = 58
+TYPE_3_TOOL_VERTICAL_NUDGE_RATIO = 0.015
 TYPE_4_TARGET_SECONDS = 7.5
 TYPE_4_TITLE_STROKE_WIDTH = 4
 TYPE_4_TEXT_STROKE_WIDTH = 3
@@ -671,7 +672,8 @@ class VideoRenderer:
             stroke_width=stroke_width,
             line_gap=0,
         )
-        title_y = int(height * 0.270) - title_height // 2
+        vertical_nudge = int(height * TYPE_3_TOOL_VERTICAL_NUDGE_RATIO)
+        title_y = int(height * 0.270) - title_height // 2 + vertical_nudge
         self._draw_lines(
             draw,
             title_lines,
@@ -688,7 +690,7 @@ class VideoRenderer:
                 draw,
                 body_lines,
                 body_font,
-                start_y=int(height * 0.32),
+                start_y=int(height * 0.32) + vertical_nudge,
                 width=width,
                 fill=(255, 255, 255),
                 stroke_width=stroke_width,
@@ -698,7 +700,7 @@ class VideoRenderer:
 
         tool_key = self._type_3_tool_key(slide.role, slide.text)
         icon_box_size = int(width * 0.44)
-        icon_top = int(height * TYPE_3_ICON_TOP_RATIO.get(tool_key, 0.434))
+        icon_top = int(height * TYPE_3_ICON_TOP_RATIO.get(tool_key, 0.434)) + vertical_nudge
         self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
 
     def _fit_single_line_text(
@@ -811,6 +813,7 @@ class VideoRenderer:
         text: str,
         width: int,
         height: int,
+        y0: int | None = None,
     ) -> None:
         tool_key = self._type_3_tool_key(role, text)
         label, fill, text_fill = TYPE_3_TOOL_BADGES.get(
@@ -819,7 +822,8 @@ class VideoRenderer:
         )
         badge_size = int(width * 0.38)
         x0 = (width - badge_size) // 2
-        y0 = int(height * 0.48)
+        if y0 is None:
+            y0 = int(height * 0.48)
         x1 = x0 + badge_size
         y1 = y0 + badge_size
         draw.rounded_rectangle(
@@ -865,7 +869,7 @@ class VideoRenderer:
         icon_path = self._type_3_icon_path(role, text)
         if icon_path is None:
             draw = ImageDraw.Draw(image)
-            self._draw_type_3_badge(draw, role, text, width, image.height)
+            self._draw_type_3_badge(draw, role, text, width, image.height, y0=y0)
             return
         with Image.open(icon_path) as raw_icon:
             icon = raw_icon.convert("RGBA")
