@@ -301,14 +301,26 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
         == "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores"
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
-        "1. Deja de probar suerte con productos"
+        "1. Revisa el margen real\n"
     )
-    assert "\n" not in third.slides_by_role[SlideRole.TIP1]
+    assert third.slides_by_role[SlideRole.TIP2].startswith(
+        "2. Comprueba proveedor y tiempos\n"
+    )
+    assert third.slides_by_role[SlideRole.TIP3].startswith(
+        "3. Elige productos con datos\n"
+    )
+    assert third.slides_by_role[SlideRole.TIP4].startswith(
+        "4. Enseña el problema rápido\n"
+    )
     assert all(
-        "\n" not in third.slides_by_role[role]
+        "\n" in third.slides_by_role[role]
         for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4)
     )
     assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
+    assert all(
+        "Dropradar" not in third.slides_by_role[role]
+        for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP4)
+    )
 
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.ES, third.choice_key)
     assert generator.generate(VideoType.TYPE_2, Language.ES).choice_key == "a"
@@ -603,8 +615,7 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
     assert package.social_copy.hashtag_line == " ".join(package.social_copy.hashtags)
     assert package.social_copy.messages == [
         package.social_copy.title,
-        package.social_copy.description,
-        package.social_copy.hashtag_line,
+        f"{package.social_copy.description}\n\n{package.social_copy.hashtag_line}",
     ]
     assert all("Titulo:" not in message for message in package.social_copy.messages)
     assert all("Descripcion:" not in message for message in package.social_copy.messages)
@@ -630,7 +641,7 @@ def test_lowercase_option_formats_slides_and_social_copy(state_dir):
     assert all(tag == tag.lower() for tag in package.social_copy.hashtags)
 
 
-def test_lowercase_option_formats_new_type_2_titleless_variant(state_dir):
+def test_lowercase_option_formats_type_2_title_body_variant(state_dir):
     generator = _make_generator(state_dir)
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, "b")
 

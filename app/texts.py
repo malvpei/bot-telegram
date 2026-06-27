@@ -454,10 +454,10 @@ class ScriptGenerator:
             },
             "c": {
                 SlideRole.HOOK: "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores",
-                SlideRole.TIP1: "1. Deja de probar suerte con productos y usa Dropradar para validar demanda, competencia y margen antes de gastar dinero en anuncios.",
-                SlideRole.TIP2: "2. No escales una campaña sin confirmar stock, tiempos de envío y capacidad del proveedor para procesar pedidos rápido.",
-                SlideRole.TIP3: "3. No elijas productos solo porque se ven virales, usa Dropradar para buscar nichos con problemas claros y datos reales.",
-                SlideRole.TIP4: "4. Haz que tus anuncios enseñen el problema desde los primeros segundos, no una lista aburrida de características técnicas.",
+                SlideRole.TIP1: "1. Revisa el margen real\nAntes de lanzar, calcula coste del producto, envío, comisiones, devoluciones y publicidad. Si el margen no aguanta un mal día de anuncios, el producto no está listo para escalar.",
+                SlideRole.TIP2: "2. Comprueba proveedor y tiempos\nHabla con el proveedor antes de vender, confirma stock, tiempos de procesado y opciones de envío. Una promesa bonita en la web no sirve si luego el pedido tarda demasiado.",
+                SlideRole.TIP3: "3. Elige productos con datos\nNo te quedes con lo primero que parece viral. Usa Dropradar para comparar demanda, competencia y margen antes de gastar presupuesto en una campaña.",
+                SlideRole.TIP4: "4. Enseña el problema rápido\nEl anuncio debe mostrar en segundos qué incomodidad resuelve el producto. Si el espectador entiende el beneficio sin esfuerzo, la tienda recibe tráfico más preparado.",
             },
         }
         return self._compose_type_2_fixed(Language.ES, variants)
@@ -475,7 +475,7 @@ class ScriptGenerator:
                 SlideRole.HOOK: "Mistakes I see small Dropshippers\nmaking when they are starting out",
                 SlideRole.TIP1: "1. Having a cheap looking store\nIf your website looks like a template from ten years ago, nobody will trust you. Add reviews, offer deals, be honest about shipping times and try to reduce them to get real sales.",
                 SlideRole.TIP2: "2. Treating ads like a slot machine\nDo not throw money at Facebook or TikTok hoping for a miracle. Start small, test different angles and use organic content to see what works before investing heavily.",
-                SlideRole.TIP3: "3. Selling the same thing as everyone else\nViral products have too much competition and no margin. Look for niches that solve real problems and lean on tools like Dropradar to find profitable products.",
+                SlideRole.TIP3: "3. Sell the same as everyone else\nViral products have too much competition and no margin. Look for niches that solve real problems and lean on tools like Dropradar to find profitable products.",
                 SlideRole.TIP4: "4. Neglecting the buyer experience\nGetting the payment is only half the job. If you do not help the customer after purchase, your reputation and your bank account will pay for it. Fast communication prevents refunds and protects your business.",
             },
             "c": {
@@ -550,6 +550,16 @@ class ScriptGenerator:
                 )
         if "Dropradar" not in slides_by_role.get(SlideRole.TIP3, ""):
             raise ValueError("Tipo 2: el consejo 3 debe mencionar Dropradar.")
+        repeated_dropradar_roles = [
+            role.value
+            for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP4)
+            if "Dropradar" in slides_by_role.get(role, "")
+        ]
+        if repeated_dropradar_roles:
+            raise ValueError(
+                "Tipo 2: Dropradar solo debe aparecer en el consejo 3, no en "
+                + ", ".join(repeated_dropradar_roles)
+            )
         hook = slides_by_role.get(SlideRole.HOOK, "")
         if "Dropshipping" not in hook and "Dropshippers" not in hook:
             raise ValueError("Tipo 2: el hook debe mencionar Dropshipping o Dropshippers.")

@@ -700,6 +700,28 @@ def test_fixed_laptop_hook_paragraph_keeps_extra_screen_gap():
     assert y + 80 <= screen_top - expected_margin
 
 
+def test_type_2_english_tip3_title_stays_on_one_line():
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
+    text = "3. Sell the same as everyone else"
+
+    font, lines = renderer._fit_caption_title_text(
+        text,
+        draw,
+        max_width=820,
+        max_height=int(1920 * 0.18),
+        base_size=39,
+        min_size=30,
+        bold=False,
+        stroke_width=0,
+    )
+    width, _height = renderer._text_size(draw, lines[0], font, stroke_width=0)
+
+    assert lines == [text]
+    assert width <= 820
+
+
 def test_fixed_february_caption_sits_lower_but_above_screen():
     settings = replace(get_settings(), width=360, height=640)
     renderer = VideoRenderer(settings)

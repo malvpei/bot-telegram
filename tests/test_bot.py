@@ -359,6 +359,93 @@ def test_type_1_can_send_slide_text_separately_from_image():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_1_separate_slide_text_splits_month_from_body():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "slide.jpg"
+        Image.new("RGB", (10, 10), (0, 0, 0)).save(image_path)
+        context = FakeContext()
+        slide = SlidePlan(
+            index=2,
+            role=SlideRole.OCTOBER,
+            text="Octubre - 0€\nEmpecé con muchas ganas, pero no conseguí ventas.",
+            media=MediaCandidate(
+                source_account="tipo1",
+                source_id="img",
+                local_path=image_path,
+                permalink="",
+                caption="",
+                width=10,
+                height=10,
+                created_at="",
+            ),
+        )
+
+        asyncio.run(
+            _send_slides_text_then_image(
+                context,
+                123,
+                [slide],
+                video_type=VideoType.TYPE_1,
+                separate_slide_text=True,
+            )
+        )
+
+        assert context.bot.events == [
+            ("message", "Octubre - 0€"),
+            ("message", "Empecé con muchas ganas, pero no conseguí ventas."),
+            ("photo", "slide.jpg"),
+        ]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_2_separate_slide_text_splits_tip_title_from_body():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "slide.jpg"
+        Image.new("RGB", (10, 10), (0, 0, 0)).save(image_path)
+        context = FakeContext()
+        slide = SlidePlan(
+            index=2,
+            role=SlideRole.TIP1,
+            text=(
+                "1. Revisa el margen real\n"
+                "Calcula costes, comisiones y margen antes de lanzar."
+            ),
+            media=MediaCandidate(
+                source_account="tipo2",
+                source_id="img",
+                local_path=image_path,
+                permalink="",
+                caption="",
+                width=10,
+                height=10,
+                created_at="",
+            ),
+        )
+
+        asyncio.run(
+            _send_slides_text_then_image(
+                context,
+                123,
+                [slide],
+                video_type=VideoType.TYPE_2,
+                separate_slide_text=True,
+            )
+        )
+
+        assert context.bot.events == [
+            ("message", "1. Revisa el margen real"),
+            ("message", "Calcula costes, comisiones y margen antes de lanzar."),
+            ("photo", "slide.jpg"),
+        ]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_repeat_prompt_has_accept_and_cancel_buttons():
     context = FakeContext()
 
@@ -554,8 +641,10 @@ def test_template_video_sends_queue_restart_warning():
         )
         assert events[1] == ("video", "template_video.mp4")
         assert events[2:] == [
-            ("message", "Descripcion"),
-            ("message", "#dropshipping #ecommerce #shopify #dropradar #capcut"),
+            (
+                "message",
+                "Descripcion\n\n#dropshipping #ecommerce #shopify #dropradar #capcut",
+            ),
         ]
     finally:
         shutil.rmtree(root, ignore_errors=True)

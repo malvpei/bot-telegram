@@ -1527,7 +1527,7 @@ class VideoRenderer:
         block_gap = self._caption_group_gap(slide, height)
         max_text_width = max(1, width - (edge_margin * 2) - (padding_x * 2))
 
-        title_font, title_lines = self._fit_text(
+        title_font, title_lines = self._fit_caption_title_text(
             first_line,
             draw,
             max_width=max_text_width,
@@ -1546,6 +1546,7 @@ class VideoRenderer:
             min_size=self._scaled_text_size(28, minimum=13),
             bold=False,
             stroke_width=0,
+            balanced=True,
         )
 
         groups: list[tuple[list[str], ImageFont.ImageFont, int, bool, int]] = []
@@ -1778,22 +1779,31 @@ class VideoRenderer:
         padding_y: int,
         line_gap: int,
     ) -> int:
-        boxes: list[tuple[tuple[int, int, int, int], tuple[int, int], str]] = []
-        y = start_y
+        line_metrics: list[tuple[tuple[int, int, int, int], int, int, str]] = []
+        max_line_width = 0
         for line in lines:
             bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=0)
             line_width = bbox[2] - bbox[0]
             line_height = bbox[3] - bbox[1]
-            box_width = line_width + padding_x * 2
+            line_metrics.append((bbox, line_width, line_height, line))
+            max_line_width = max(max_line_width, line_width)
+
+        if not line_metrics:
+            return start_y
+
+        boxes: list[tuple[tuple[int, int, int, int], tuple[int, int], str]] = []
+        y = start_y
+        box_width = max_line_width + padding_x * 2
+        for bbox, line_width, line_height, line in line_metrics:
             box_height = line_height + padding_y * 2
             x = (canvas_width - box_width) // 2
             box = (x, y, x + box_width, y + box_height)
-            text_pos = (x + padding_x - bbox[0], y + padding_y - bbox[1])
+            text_pos = (
+                x + (box_width - line_width) // 2 - bbox[0],
+                y + padding_y - bbox[1],
+            )
             boxes.append((box, text_pos, line))
             y += box_height + line_gap
-
-        if not boxes:
-            return start_y
 
         self._draw_connected_card_background(draw, boxes, canvas_width)
         for _box, text_pos, line in boxes:
@@ -2233,6 +2243,7 @@ class VideoRenderer:
         bold: bool,
         stroke_width: int,
         line_gap: int = 16,
+        balanced: bool = False,
         font_loader: Callable[[int, bool], ImageFont.ImageFont] | None = None,
     ) -> tuple[ImageFont.ImageFont, list[str]]:
         load_font = font_loader or (
@@ -2241,7 +2252,23 @@ class VideoRenderer:
         size = base_size
         while size >= min_size:
             font = load_font(size, bold)
-            lines = self._wrap_text(text, font, max_width, draw, stroke_width=stroke_width)
+            lines = (
+                self._wrap_text_balanced(
+                    text,
+                    font,
+                    max_width,
+                    draw,
+                    stroke_width=stroke_width,
+                )
+                if balanced
+                else self._wrap_text(
+                    text,
+                    font,
+                    max_width,
+                    draw,
+                    stroke_width=stroke_width,
+                )
+            )
             height = self._block_height(
                 lines,
                 font,
@@ -2253,8 +2280,68 @@ class VideoRenderer:
                 return font, lines
             size -= 4
         font = load_font(min_size, bold)
-        lines = self._wrap_text(text, font, max_width, draw, stroke_width=stroke_width)
+        lines = (
+            self._wrap_text_balanced(
+                text,
+                font,
+                max_width,
+                draw,
+                stroke_width=stroke_width,
+            )
+            if balanced
+            else self._wrap_text(
+                text,
+                font,
+                max_width,
+                draw,
+                stroke_width=stroke_width,
+            )
+        )
         return font, lines
+
+    def _fit_caption_title_text(
+        self,
+        text: str,
+        draw: ImageDraw.ImageDraw,
+        *,
+        max_width: int,
+        max_height: int,
+        base_size: int,
+        min_size: int,
+        bold: bool,
+        stroke_width: int,
+    ) -> tuple[ImageFont.ImageFont, list[str]]:
+        if not text.strip():
+            return self._fit_text(
+                text,
+                draw,
+                max_width=max_width,
+                max_height=max_height,
+                base_size=base_size,
+                min_size=min_size,
+                bold=bold,
+                stroke_width=stroke_width,
+            )
+        for size in range(base_size, min_size - 1, -2):
+            font = self._load_font(size=size, bold=bold)
+            line_width, line_height = self._text_size(
+                draw,
+                text,
+                font,
+                stroke_width=stroke_width,
+            )
+            if line_width <= max_width and line_height <= max_height:
+                return font, [text]
+        return self._fit_text(
+            text,
+            draw,
+            max_width=max_width,
+            max_height=max_height,
+            base_size=base_size,
+            min_size=min_size,
+            bold=bold,
+            stroke_width=stroke_width,
+        )
 
     def _split_slide_text(self, text: str) -> tuple[str, str]:
         parts = text.split("\n", 1)
@@ -2310,17 +2397,143 @@ class VideoRenderer:
             if not words:
                 wrapped_lines.append("")
                 continue
-            line = words[0]
-            for word in words[1:]:
-                trial = f"{line} {word}"
-                bbox = draw.textbbox((0, 0), trial, font=font, stroke_width=stroke_width)
-                if bbox[2] - bbox[0] <= max_width:
-                    line = trial
-                else:
-                    wrapped_lines.append(line)
-                    line = word
-            wrapped_lines.append(line)
+            wrapped_lines.extend(
+                self._wrap_words_greedy(
+                    words,
+                    font,
+                    max_width,
+                    draw,
+                    stroke_width=stroke_width,
+                )
+            )
         return wrapped_lines
+
+    def _wrap_text_balanced(
+        self,
+        text: str,
+        font: ImageFont.ImageFont,
+        max_width: int,
+        draw: ImageDraw.ImageDraw,
+        *,
+        stroke_width: int,
+    ) -> list[str]:
+        wrapped_lines: list[str] = []
+        for paragraph in text.split("\n"):
+            words = paragraph.split()
+            if not words:
+                wrapped_lines.append("")
+                continue
+            wrapped_lines.extend(
+                self._wrap_words_balanced(
+                    words,
+                    font,
+                    max_width,
+                    draw,
+                    stroke_width=stroke_width,
+                )
+            )
+        return wrapped_lines
+
+    def _wrap_words_greedy(
+        self,
+        words: list[str],
+        font: ImageFont.ImageFont,
+        max_width: int,
+        draw: ImageDraw.ImageDraw,
+        *,
+        stroke_width: int,
+    ) -> list[str]:
+        line = words[0]
+        wrapped_lines: list[str] = []
+        for word in words[1:]:
+            trial = f"{line} {word}"
+            if self._text_size(draw, trial, font, stroke_width=stroke_width)[0] <= max_width:
+                line = trial
+            else:
+                wrapped_lines.append(line)
+                line = word
+        wrapped_lines.append(line)
+        return wrapped_lines
+
+    def _wrap_words_balanced(
+        self,
+        words: list[str],
+        font: ImageFont.ImageFont,
+        max_width: int,
+        draw: ImageDraw.ImageDraw,
+        *,
+        stroke_width: int,
+    ) -> list[str]:
+        greedy = self._wrap_words_greedy(
+            words,
+            font,
+            max_width,
+            draw,
+            stroke_width=stroke_width,
+        )
+        target_lines = len(greedy)
+        if target_lines <= 1:
+            return greedy
+
+        n_words = len(words)
+        full_width = self._text_size(
+            draw,
+            " ".join(words),
+            font,
+            stroke_width=stroke_width,
+        )[0]
+        target_width = min(
+            max_width * 0.94,
+            max(max_width * 0.58, full_width / target_lines),
+        )
+
+        phrase_widths: dict[tuple[int, int], int] = {}
+        for start in range(n_words):
+            phrase_words: list[str] = []
+            for end in range(start + 1, n_words + 1):
+                phrase_words.append(words[end - 1])
+                phrase = " ".join(phrase_words)
+                width = self._text_size(
+                    draw,
+                    phrase,
+                    font,
+                    stroke_width=stroke_width,
+                )[0]
+                if width > max_width and end > start + 1:
+                    break
+                phrase_widths[(start, end)] = width
+                if width > max_width:
+                    break
+
+        states: dict[int, tuple[float, list[tuple[int, int]]]] = {0: (0.0, [])}
+        for line_index in range(target_lines):
+            next_states: dict[int, tuple[float, list[tuple[int, int]]]] = {}
+            remaining_lines = target_lines - line_index - 1
+            for start, (score, spans) in states.items():
+                min_end = start + 1
+                max_end = n_words - remaining_lines
+                for end in range(min_end, max_end + 1):
+                    width = phrase_widths.get((start, end))
+                    if width is None:
+                        continue
+                    if remaining_lines == 0 and end != n_words:
+                        continue
+                    short_line_penalty = 1.0
+                    if width < target_width * 0.58:
+                        short_line_penalty = 1.65
+                    line_score = ((width - target_width) ** 2) * short_line_penalty
+                    candidate = (score + line_score, [*spans, (start, end)])
+                    previous = next_states.get(end)
+                    if previous is None or candidate[0] < previous[0]:
+                        next_states[end] = candidate
+            states = next_states
+            if not states:
+                return greedy
+
+        best = states.get(n_words)
+        if best is None:
+            return greedy
+        return [" ".join(words[start:end]) for start, end in best[1]]
 
     def _block_height(
         self,

@@ -1221,10 +1221,32 @@ async def _send_slides_text_then_image(
         if not path.exists():
             continue
         if separate_slide_text and slide.text:
-            await _send_message(context, chat_id, slide.text)
+            for message in _separate_slide_text_messages(slide, video_type):
+                await _send_message(context, chat_id, message)
         elif video_type == VideoType.TYPE_3 and slide.role == SlideRole.HOOK and slide.text:
             await _send_message(context, chat_id, slide.text)
         await _send_photo(context, chat_id, path)
+
+
+def _separate_slide_text_messages(
+    slide: SlidePlan,
+    video_type: VideoType | None,
+) -> list[str]:
+    text = slide.text.strip()
+    if not text:
+        return []
+    if (
+        video_type in {VideoType.TYPE_1, VideoType.TYPE_2}
+        and slide.role != SlideRole.HOOK
+        and "\n" in text
+    ):
+        title, body = text.split("\n", 1)
+        title = title.strip()
+        body = body.strip()
+        if title.endswith(".") and title[:-1].isdigit() and body:
+            return [f"{title} {body}".strip()]
+        return [part for part in (title, body) if part]
+    return [text]
 
 
 async def _ask_for_another_same_account(context, chat_id: int, account: str) -> None:
