@@ -167,10 +167,12 @@ class SocialCopy:
 
     @property
     def messages(self) -> list[str]:
-        description_block = "\n\n".join(
-            message
-            for message in [self.description, self.hashtag_line]
-            if message.strip()
+        description = self.description.strip()
+        hashtags = self.hashtag_line.strip()
+        description_block = (
+            f"{description} {hashtags}".strip()
+            if hashtags
+            else description
         )
         return [
             message

@@ -454,10 +454,10 @@ class ScriptGenerator:
             },
             "c": {
                 SlideRole.HOOK: "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores",
-                SlideRole.TIP1: "1. Revisa el margen real\nAntes de lanzar, calcula coste del producto, envío, comisiones, devoluciones y publicidad. Si el margen no aguanta un mal día de anuncios, el producto no está listo para escalar.",
-                SlideRole.TIP2: "2. Comprueba proveedor y tiempos\nHabla con el proveedor antes de vender, confirma stock, tiempos de procesado y opciones de envío. Una promesa bonita en la web no sirve si luego el pedido tarda demasiado.",
-                SlideRole.TIP3: "3. Elige productos con datos\nNo te quedes con lo primero que parece viral. Usa Dropradar para comparar demanda, competencia y margen antes de gastar presupuesto en una campaña.",
-                SlideRole.TIP4: "4. Enseña el problema rápido\nEl anuncio debe mostrar en segundos qué incomodidad resuelve el producto. Si el espectador entiende el beneficio sin esfuerzo, la tienda recibe tráfico más preparado.",
+                SlideRole.TIP1: "1. No compitas tirando los precios por los suelos para conseguir tu primera venta rápida. Si tu margen de beneficio es minúsculo, cualquier pequeño gasto imprevisto en publicidad o en posibles devoluciones te dejará en números rojos. Mejor esfuérzate en construir una oferta irresistible alrededor de tu producto.",
+                SlideRole.TIP2: "2. Contacta siempre con tus proveedores para confirmar su capacidad antes de escalar una campaña publicitaria. De nada sirve que un anuncio funcione genial si la fábrica no tiene stock o tarda semanas en procesar pedidos, ya que acabarás lidiando con decenas de clientes exigiendo su dinero.",
+                SlideRole.TIP3: "3. Deja de intentar adivinar qué se va a vender basándote únicamente en tu intuición o en lo que te parece visualmente atractivo. El éxito llega cuando ofreces lo que el mercado ya está pidiendo a gritos, así que apóyate en herramientas como Dropradar para basarte en datos reales y encontrar productos ganadores.",
+                SlideRole.TIP4: "4. Tus anuncios de vídeo deben centrarse en el problema que resuelves y no en enumerar características técnicas aburridas. Aprovecha los tres primeros segundos para captar la atención del espectador mostrándole de forma visual y muy directa cómo tu artículo le va a hacer la vida más fácil.",
             },
         }
         return self._compose_type_2_fixed(Language.ES, variants)
@@ -480,10 +480,10 @@ class ScriptGenerator:
             },
             "c": {
                 SlideRole.HOOK: "4 Dropshipping lessons\nthat would have saved me a lot of mistakes",
-                SlideRole.TIP1: "1. Protect your margin\nDo not slash prices just to get your first quick sale. If your profit is tiny, one unexpected ad cost or return can put you in the red.",
-                SlideRole.TIP2: "2. Confirm supplier capacity\nAlways contact suppliers before scaling a campaign. A strong ad is useless if the factory has no stock or needs weeks to process orders.",
-                SlideRole.TIP3: "3. Stop guessing products\nDo not choose products only by intuition or because they look visually appealing. Use Dropradar to base decisions on real data and find products people already want.",
-                SlideRole.TIP4: "4. Show the problem\nYour video ads should focus on the problem you solve, not boring technical features. Use the first three seconds to show why your product makes life easier.",
+                SlideRole.TIP1: "1. Don't compete by slashing prices to the ground just to get your first quick sale. If your profit margin is tiny, any small unexpected expense in advertising or potential returns will put you in the red. Instead, focus your efforts on building an irresistible offer around your product.",
+                SlideRole.TIP2: "2. Always contact your suppliers to confirm their capacity before scaling an advertising campaign. It is useless for an ad to perform great if the factory has no stock or takes weeks to process orders, as you will end up dealing with dozens of angry customers demanding their money back.",
+                SlideRole.TIP3: "3. Stop trying to guess what will sell based solely on your intuition or what you find visually appealing. Success comes when you offer what the market is already crying out for, so lean on tools like Dropradar to base your decisions on real data and find winning products.",
+                SlideRole.TIP4: "4. Your video ads should focus on the problem you solve rather than listing boring technical features. Use the first three seconds to grab the viewer's attention by showing them visually and very directly how your item is going to make their life easier.",
             },
         }
         return self._compose_type_2_fixed(Language.EN, variants)

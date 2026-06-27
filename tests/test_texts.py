@@ -301,19 +301,19 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
         == "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores"
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
-        "1. Revisa el margen real\n"
+        "1. No compitas tirando los precios por los suelos"
     )
     assert third.slides_by_role[SlideRole.TIP2].startswith(
-        "2. Comprueba proveedor y tiempos\n"
+        "2. Contacta siempre con tus proveedores"
     )
     assert third.slides_by_role[SlideRole.TIP3].startswith(
-        "3. Elige productos con datos\n"
+        "3. Deja de intentar adivinar qué se va a vender"
     )
     assert third.slides_by_role[SlideRole.TIP4].startswith(
-        "4. Enseña el problema rápido\n"
+        "4. Tus anuncios de vídeo deben centrarse"
     )
     assert all(
-        "\n" in third.slides_by_role[role]
+        "\n" not in third.slides_by_role[role]
         for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4)
     )
     assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
@@ -358,8 +358,9 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
         == "4 Dropshipping lessons\nthat would have saved me a lot of mistakes"
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
-        "1. Protect your margin\n"
+        "1. Don't compete by slashing prices"
     )
+    assert "\n" not in third.slides_by_role[SlideRole.TIP1]
     assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
 
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, third.choice_key)
@@ -615,7 +616,7 @@ def test_every_video_type_has_social_copy(state_dir, video_type, language):
     assert package.social_copy.hashtag_line == " ".join(package.social_copy.hashtags)
     assert package.social_copy.messages == [
         package.social_copy.title,
-        f"{package.social_copy.description}\n\n{package.social_copy.hashtag_line}",
+        f"{package.social_copy.description} {package.social_copy.hashtag_line}",
     ]
     assert all("Titulo:" not in message for message in package.social_copy.messages)
     assert all("Descripcion:" not in message for message in package.social_copy.messages)
@@ -641,7 +642,7 @@ def test_lowercase_option_formats_slides_and_social_copy(state_dir):
     assert all(tag == tag.lower() for tag in package.social_copy.hashtags)
 
 
-def test_lowercase_option_formats_type_2_title_body_variant(state_dir):
+def test_lowercase_option_formats_type_2_titleless_long_variant(state_dir):
     generator = _make_generator(state_dir)
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, "b")
 
@@ -653,8 +654,8 @@ def test_lowercase_option_formats_type_2_title_body_variant(state_dir):
 
     assert package.choice_key == "c"
     assert all(slide == slide.lower() for slide in package.ordered_slides)
-    assert "\n" in package.slides_by_role[SlideRole.TIP1]
-    assert package.slides_by_role[SlideRole.TIP1].startswith("1. protect your margin")
+    assert "\n" not in package.slides_by_role[SlideRole.TIP1]
+    assert package.slides_by_role[SlideRole.TIP1].startswith("1. don't compete")
 
 
 def test_social_hashtags_force_literal_dropshipping():

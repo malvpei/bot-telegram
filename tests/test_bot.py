@@ -643,7 +643,7 @@ def test_template_video_sends_queue_restart_warning():
         assert events[2:] == [
             (
                 "message",
-                "Descripcion\n\n#dropshipping #ecommerce #shopify #dropradar #capcut",
+                "Descripcion #dropshipping #ecommerce #shopify #dropradar #capcut",
             ),
         ]
     finally:

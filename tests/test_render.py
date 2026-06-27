@@ -606,6 +606,33 @@ def test_caption_body_background_is_connected_and_keeps_side_margin(monkeypatch)
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_connected_caption_background_keeps_stepped_line_widths(monkeypatch):
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    image = Image.new("RGBA", (360, 640), (20, 20, 20, 255))
+    draw = ImageDraw.Draw(image)
+    font = renderer._load_font(size=28, bold=False)
+    captured: dict[str, list[tuple[tuple[int, int, int, int], tuple[int, int], str]]] = {}
+
+    def capture_background(draw_arg, boxes, canvas_width):
+        captured["boxes"] = list(boxes)
+
+    monkeypatch.setattr(renderer, "_draw_connected_card_background", capture_background)
+
+    renderer._draw_connected_pill_lines(
+        draw,
+        ["A much longer caption line", "short"],
+        font,
+        start_y=100,
+        canvas_width=360,
+        padding_x=18,
+        padding_y=8,
+        line_gap=-4,
+    )
+
+    widths = [box[0][2] - box[0][0] for box in captured["boxes"]]
+    assert len(set(widths)) == 2
+
+
 def test_type_1_title_is_only_slightly_larger_than_body():
     settings = replace(get_settings(), width=1080, height=1920)
     renderer = VideoRenderer(settings)

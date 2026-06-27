@@ -1779,31 +1779,22 @@ class VideoRenderer:
         padding_y: int,
         line_gap: int,
     ) -> int:
-        line_metrics: list[tuple[tuple[int, int, int, int], int, int, str]] = []
-        max_line_width = 0
+        boxes: list[tuple[tuple[int, int, int, int], tuple[int, int], str]] = []
+        y = start_y
         for line in lines:
             bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=0)
             line_width = bbox[2] - bbox[0]
             line_height = bbox[3] - bbox[1]
-            line_metrics.append((bbox, line_width, line_height, line))
-            max_line_width = max(max_line_width, line_width)
-
-        if not line_metrics:
-            return start_y
-
-        boxes: list[tuple[tuple[int, int, int, int], tuple[int, int], str]] = []
-        y = start_y
-        box_width = max_line_width + padding_x * 2
-        for bbox, line_width, line_height, line in line_metrics:
+            box_width = line_width + padding_x * 2
             box_height = line_height + padding_y * 2
             x = (canvas_width - box_width) // 2
             box = (x, y, x + box_width, y + box_height)
-            text_pos = (
-                x + (box_width - line_width) // 2 - bbox[0],
-                y + padding_y - bbox[1],
-            )
+            text_pos = (x + padding_x - bbox[0], y + padding_y - bbox[1])
             boxes.append((box, text_pos, line))
             y += box_height + line_gap
+
+        if not boxes:
+            return start_y
 
         self._draw_connected_card_background(draw, boxes, canvas_width)
         for _box, text_pos, line in boxes:
