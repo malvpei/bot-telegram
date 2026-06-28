@@ -48,6 +48,37 @@ def test_numbered_titleless_tip_merges_line_broken_number_with_body():
     assert body.startswith("1. Don't compete by slashing prices")
 
 
+def test_render_keeps_source_green_without_global_darkening():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "green.jpg"
+        source_green = (20, 150, 55)
+        Image.new("RGB", (360, 640), source_green).save(image_path)
+        renderer = VideoRenderer(
+            replace(
+                get_settings(),
+                root_dir=root,
+                width=360,
+                height=640,
+                fonts_dir=root / "fonts",
+            )
+        )
+        slide = SlidePlan(
+            index=1,
+            role=SlideRole.OCTOBER,
+            text="",
+            media=_candidate(image_path),
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_1)
+        bottom_pixel = np.asarray(still)[620, 180]
+
+        assert np.allclose(bottom_pixel, source_green, atol=3)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_type_3_tool_slide_uses_icon_asset_and_hook_text_style():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)

@@ -417,8 +417,6 @@ class VideoRenderer:
             else self._cover_image(source_image, image_progress)
         )
         composed = canvas.convert("RGBA")
-        if not slide.fixed_asset:
-            composed = Image.alpha_composite(composed, self._gradient_overlay)
         self._draw_text(composed, slide, video_type)
         return np.asarray(composed.convert("RGB"))
 

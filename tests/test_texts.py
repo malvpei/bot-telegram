@@ -367,6 +367,39 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
     assert generator.generate(VideoType.TYPE_2, Language.EN).choice_key == "a"
 
 
+@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
+@pytest.mark.parametrize(
+    ("first_language", "second_language"),
+    [(Language.ES, Language.EN), (Language.EN, Language.ES)],
+)
+def test_type_1_and_2_text_queue_is_shared_between_languages(
+    state_dir,
+    video_type,
+    first_language,
+    second_language,
+):
+    generator = _make_generator(state_dir)
+
+    first = generator.generate(video_type, first_language)
+    assert first.choice_key == "a"
+
+    generator.state.set_last_text_choice(
+        video_type,
+        first_language,
+        first.choice_key,
+    )
+    second = generator.generate(video_type, second_language)
+    assert second.choice_key == "b"
+
+    generator.state.set_last_text_choice(
+        video_type,
+        second_language,
+        second.choice_key,
+    )
+    third = generator.generate(video_type, first_language)
+    assert third.choice_key == "c"
+
+
 def test_type_2_en_passes_punctuation_rule(state_dir):
     generator = _make_generator(state_dir)
     package = generator.generate(VideoType.TYPE_2, Language.EN)

@@ -426,7 +426,10 @@ class ScriptGenerator:
         ordered_keys = list(variants)
         if not ordered_keys:
             raise RuntimeError("Tipo 1: no hay variantes configuradas.")
-        last_choice = self.state.get_last_text_choice(VideoType.TYPE_1, language)
+        last_choice = (
+            self.state.get_last_shared_text_choice(VideoType.TYPE_1)
+            or self.state.get_last_text_choice(VideoType.TYPE_1, language)
+        )
         if last_choice not in ordered_keys:
             return ordered_keys[0]
         next_index = (ordered_keys.index(last_choice) + 1) % len(ordered_keys)
@@ -516,7 +519,10 @@ class ScriptGenerator:
         ordered_keys = list(variants)
         if not ordered_keys:
             raise RuntimeError("Tipo 2: no hay variantes configuradas.")
-        last_choice = self.state.get_last_text_choice(VideoType.TYPE_2, language)
+        last_choice = (
+            self.state.get_last_shared_text_choice(VideoType.TYPE_2)
+            or self.state.get_last_text_choice(VideoType.TYPE_2, language)
+        )
         if last_choice not in ordered_keys:
             return ordered_keys[0]
         next_index = (ordered_keys.index(last_choice) + 1) % len(ordered_keys)
