@@ -339,6 +339,7 @@ class ScriptGenerator:
 
         ordered = [slides_by_role[role] for role in TYPE_1_ROLES]
         social_key, social_copy = self._choose_social_copy(VideoType.TYPE_1, language)
+        social_copy_key = self._copy_choice_from_social_key(social_key)
         signature = _hash_signature(
             [
                 hook_key,
@@ -352,7 +353,7 @@ class ScriptGenerator:
                 str(february_amount),
                 str(march_amount),
                 currency,
-                social_key,
+                social_copy_key,
             ]
         )
 
@@ -364,7 +365,7 @@ class ScriptGenerator:
             signature=signature,
             plain_text="\n\n".join(ordered),
             social_copy=social_copy,
-            social_choice_key=self._copy_choice_from_social_key(social_key),
+            social_choice_key=social_copy_key,
         )
 
     def _compose_type_1_fixed(
@@ -377,7 +378,8 @@ class ScriptGenerator:
         slides_by_role = dict(variants[choice_key])
         ordered = [slides_by_role[role] for role in TYPE_1_ROLES]
         social_key, social_copy = self._choose_social_copy(VideoType.TYPE_1, language)
-        signature = _hash_signature([choice_key, *ordered, social_key])
+        social_copy_key = self._copy_choice_from_social_key(social_key)
+        signature = _hash_signature([choice_key, *ordered, social_copy_key])
 
         self._assert_type_1_rules(language, slides_by_role)
 
@@ -388,7 +390,7 @@ class ScriptGenerator:
             plain_text="\n\n".join(ordered),
             social_copy=social_copy,
             choice_key=choice_key,
-            social_choice_key=self._copy_choice_from_social_key(social_key),
+            social_choice_key=social_copy_key,
         )
 
     @staticmethod
@@ -456,7 +458,7 @@ class ScriptGenerator:
                 SlideRole.TIP4: "4. Descuidar el trato con el comprador\nConseguir el pago es solo la mitad del trabajo. Si no ayudas al cliente tras la compra, tu reputación y tu cuenta bancaria lo pagarán. Una comunicación rápida evita devoluciones y protege tu negocio.",
             },
             "c": {
-                SlideRole.HOOK: "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores",
+                SlideRole.HOOK: "4 consejos para Dropshipping\nque me habrían ahorrado mucho dinero...",
                 SlideRole.TIP1: "1. No compitas tirando los precios por los suelos para conseguir tu primera venta rápida. Si tu margen de beneficio es minúsculo, cualquier pequeño gasto imprevisto en publicidad o en posibles devoluciones te dejará en números rojos. Mejor esfuérzate en construir una oferta irresistible alrededor de tu producto.",
                 SlideRole.TIP2: "2. Contacta siempre con tus proveedores para confirmar su capacidad antes de escalar una campaña publicitaria. De nada sirve que un anuncio funcione genial si la fábrica no tiene stock o tarda semanas en procesar pedidos, ya que acabarás lidiando con decenas de clientes exigiendo su dinero.",
                 SlideRole.TIP3: "3. Deja de intentar adivinar qué se va a vender basándote únicamente en tu intuición o en lo que te parece visualmente atractivo. El éxito llega cuando ofreces lo que el mercado ya está pidiendo a gritos, así que apóyate en herramientas como Dropradar para basarte en datos reales y encontrar productos ganadores.",
@@ -482,7 +484,7 @@ class ScriptGenerator:
                 SlideRole.TIP4: "4. Neglecting the buyer experience\nGetting the payment is only half the job. If you do not help the customer after purchase, your reputation and your bank account will pay for it. Fast communication prevents refunds and protects your business.",
             },
             "c": {
-                SlideRole.HOOK: "4 Dropshipping lessons\nthat would have saved me a lot of mistakes",
+                SlideRole.HOOK: "4 Dropshipping tips\nthat would have saved me a lot of money...",
                 SlideRole.TIP1: "1. Don't compete by slashing prices to the ground just to get your first quick sale. If your profit margin is tiny, any small unexpected expense in advertising or potential returns will put you in the red. Instead, focus your efforts on building an irresistible offer around your product.",
                 SlideRole.TIP2: "2. Always contact your suppliers to confirm their capacity before scaling an advertising campaign. It is useless for an ad to perform great if the factory has no stock or takes weeks to process orders, as you will end up dealing with dozens of angry customers demanding their money back.",
                 SlideRole.TIP3: "3. Stop trying to guess what will sell based solely on your intuition or what you find visually appealing. Success comes when you offer what the market is already crying out for, so lean on tools like Dropradar to base your decisions on real data and find winning products.",
@@ -499,16 +501,17 @@ class ScriptGenerator:
         choice_key = self._next_type_2_choice(language, variants)
         slides_by_role = dict(variants[choice_key])
         social_key, social_copy = self._choose_social_copy(VideoType.TYPE_2, language)
+        social_copy_key = self._copy_choice_from_social_key(social_key)
         ordered = [slides_by_role[role] for role in TYPE_2_ROLES]
         self._assert_type_2_rules(slides_by_role)
         return ScriptPackage(
             slides_by_role=slides_by_role,
             ordered_slides=ordered,
-            signature=_hash_signature([choice_key, *ordered, social_key]),
+            signature=_hash_signature([choice_key, *ordered, social_copy_key]),
             plain_text="\n\n".join(ordered),
             social_copy=social_copy,
             choice_key=choice_key,
-            social_choice_key=self._copy_choice_from_social_key(social_key),
+            social_choice_key=social_copy_key,
         )
 
     def _next_type_2_choice(
@@ -788,8 +791,6 @@ class ScriptGenerator:
         video_type: VideoType,
         language: Language,
     ) -> dict[str, str]:
-        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
-            return {}
         if language == Language.EN:
             titles = self._social_title_variants_en(video_type)
         else:
@@ -800,6 +801,36 @@ class ScriptGenerator:
     def _social_title_variants_es(self, video_type: VideoType) -> dict[str, str]:
         if video_type == VideoType.TYPE_4:
             return {}
+        if video_type == VideoType.TYPE_1:
+            return {
+                "t1": "Mis primeros 6 meses intentando vender online",
+                "t2": "De cero ventas a entender que medir",
+                "t3": "Lo que cambio cuando deje de adivinar",
+                "t4": "La parte real de empezar dropshipping",
+                "t5": "Seis meses de prueba, datos y paciencia",
+                "t6": "Cuando por fin deje de elegir a ciegas",
+                "t7": "Mi tienda cambio cuando mire los datos",
+                "t8": "El proceso que me saco del bloqueo",
+                "t9": "Lo que aprendi antes de vender constante",
+                "t10": "De meses en cero a decisiones con criterio",
+                "t11": "Antes de rendirme cambie el metodo",
+                "t12": "El cambio que hizo que vender tuviera sentido",
+            }
+        if video_type == VideoType.TYPE_2:
+            return {
+                "t1": "4 revisiones antes de gastar en anuncios",
+                "t2": "Consejos que me habrian ahorrado dinero",
+                "t3": "La checklist que faltaba antes de vender",
+                "t4": "Lo basico que sostiene una tienda",
+                "t5": "Antes de escalar revisa estos puntos",
+                "t6": "Errores pequenos que salen caros",
+                "t7": "4 consejos para vender con mas cabeza",
+                "t8": "Lo que miraria antes de lanzar una tienda",
+                "t9": "Tu tienda necesita esta revision",
+                "t10": "Margen, confianza, producto y soporte",
+                "t11": "Antes de perder presupuesto revisa esto",
+                "t12": "La base que no conviene saltarse",
+            }
         if video_type != VideoType.TYPE_3:
             return {}
         return {
@@ -820,6 +851,36 @@ class ScriptGenerator:
     def _social_title_variants_en(self, video_type: VideoType) -> dict[str, str]:
         if video_type == VideoType.TYPE_4:
             return {}
+        if video_type == VideoType.TYPE_1:
+            return {
+                "t1": "My first 6 months trying to sell online",
+                "t2": "From zero sales to clearer decisions",
+                "t3": "What changed when I stopped guessing",
+                "t4": "The real part of starting dropshipping",
+                "t5": "Six months of tests, data and patience",
+                "t6": "When I finally stopped picking blindly",
+                "t7": "My store changed once I looked at data",
+                "t8": "The process that got me unstuck",
+                "t9": "What I learned before steady sales",
+                "t10": "From months at zero to better decisions",
+                "t11": "Before quitting I changed the method",
+                "t12": "The shift that made selling make sense",
+            }
+        if video_type == VideoType.TYPE_2:
+            return {
+                "t1": "4 checks before spending on ads",
+                "t2": "Tips that would have saved me money",
+                "t3": "The checklist I needed before selling",
+                "t4": "The basics that keep a store alive",
+                "t5": "Review this before scaling a store",
+                "t6": "Small mistakes that get expensive",
+                "t7": "4 tips for selling with better logic",
+                "t8": "What I would check before launching",
+                "t9": "Your store needs this quick review",
+                "t10": "Margins, trust, product and support",
+                "t11": "Check this before losing more budget",
+                "t12": "The base you should not skip",
+            }
         if video_type != VideoType.TYPE_3:
             return {}
         return {

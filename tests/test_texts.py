@@ -256,7 +256,7 @@ def test_type_2_tips_separate_title_and_body_and_hooks_are_fixed(state_dir):
     assert package.slides_by_role[SlideRole.HOOK] in {
         "Habría pagado por saber estas 4 cosas\ncuando empecé en Dropshipping",
         "Errores que cuestan dinero\nal empezar en Dropshipping",
-        "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores",
+        "4 consejos para Dropshipping\nque me habrían ahorrado mucho dinero...",
     }
     for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
         slide = package.slides_by_role[role]
@@ -298,7 +298,7 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert third.choice_key == "c"
     assert (
         third.slides_by_role[SlideRole.HOOK]
-        == "4 consejos de Dropshipping\nque me habrían ahorrado muchos errores"
+        == "4 consejos para Dropshipping\nque me habrían ahorrado mucho dinero..."
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
         "1. No compitas tirando los precios por los suelos"
@@ -355,7 +355,7 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
     assert third.choice_key == "c"
     assert (
         third.slides_by_role[SlideRole.HOOK]
-        == "4 Dropshipping lessons\nthat would have saved me a lot of mistakes"
+        == "4 Dropshipping tips\nthat would have saved me a lot of money..."
     )
     assert third.slides_by_role[SlideRole.TIP1].startswith(
         "1. Don't compete by slashing prices"
@@ -475,10 +475,10 @@ def test_type_1_and_2_hooks_mention_money_and_dropshipping(
             assert normalized_hook in {
                 "habría pagado por saber estas 4 cosas cuando empecé en dropshipping",
                 "errores que cuestan dinero al empezar en dropshipping",
-                "4 consejos de dropshipping que me habrían ahorrado muchos errores",
+                "4 consejos para dropshipping que me habrían ahorrado mucho dinero...",
                 "i would have paid to know these 4 things when i started dropshipping",
                 "mistakes i see small dropshippers making when they are starting out",
-                "4 dropshipping lessons that would have saved me a lot of mistakes",
+                "4 dropshipping tips that would have saved me a lot of money...",
             }
             continue
         assert any(term in hook for term in money_terms)
@@ -724,7 +724,9 @@ def test_type_1_and_2_social_copy_has_expected_defined_variants(
     expected_count = 6 if language == Language.ES else 3
     assert len(variants) == expected_count
     assert all(500 <= length <= 3500 for length in lengths)
-    assert generator._social_title_variants(video_type, language) == {}
+    titles = generator._social_title_variants(video_type, language)
+    assert len(titles) >= 12
+    assert len(set(titles.values())) == len(titles)
 
     first_key, first_copy = generator._choose_social_copy_for_text_choice(
         video_type,
