@@ -15,6 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from app.config import Settings
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
+from app.opencv_compat import build_cascade, build_people_detector
 
 
 LOGGER = logging.getLogger(__name__)
@@ -210,14 +211,9 @@ class VideoRenderer:
         self._font_dir = settings.fonts_dir
         self._type_3_icons_dir = settings.root_dir / "tipo3" / "iconos"
         self._type_4_icons_dir = settings.root_dir / "tipo4" / "iconos"
-        self._face_detector = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-        self._eye_detector = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_eye.xml"
-        )
-        self._people_detector = cv2.HOGDescriptor()
-        self._people_detector.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+        self._face_detector = build_cascade("haarcascade_frontalface_default.xml")
+        self._eye_detector = build_cascade("haarcascade_eye.xml")
+        self._people_detector = build_people_detector()
 
     def render(self, plan: VideoPlan, job_dir: Path) -> tuple[Path, Path]:
         job_dir.mkdir(parents=True, exist_ok=True)

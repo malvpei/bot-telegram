@@ -33,6 +33,7 @@ from app.models import (
     VideoPlan,
     VideoType,
 )
+from app.opencv_compat import build_cascade, build_people_detector
 from app.state import StateStore
 
 
@@ -129,11 +130,8 @@ class ImageSelector:
     def __init__(self, settings: Settings, state: StateStore) -> None:
         self.settings = settings
         self.state = state
-        self._face_detector = cv2.CascadeClassifier(
-            cv2.data.haarcascades + "haarcascade_frontalface_default.xml"
-        )
-        self._people_detector = cv2.HOGDescriptor()
-        self._people_detector.setSVMDetector(cv2.HOGDescriptor_getDefaultPeopleDetector())
+        self._face_detector = build_cascade("haarcascade_frontalface_default.xml")
+        self._people_detector = build_people_detector()
         self._fixed_media_cache: MediaCandidate | None = None
         self._type_2_tip3_fixed_media_cache: MediaCandidate | None = None
         self._type_3_backgrounds_cache: tuple[MediaCandidate, ...] | None = None
