@@ -162,6 +162,64 @@ def test_collector_cache_limits_posts_not_images() -> None:
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_collector_fast_cache_read_does_not_truncate_full_cache() -> None:
+    root = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "_test_tmp"
+        / f"instagram-{uuid4().hex}"
+    )
+    root.mkdir(parents=True)
+    try:
+        downloads_dir = root / "downloads"
+        account_dir = downloads_dir / "alpha"
+        account_dir.mkdir(parents=True)
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            downloads_dir=downloads_dir,
+            max_posts_per_account=3,
+            account_cache_ttl_hours=0,
+        )
+        items = []
+        for post in ("POST1", "POST2", "POST3"):
+            for index in range(3):
+                image_path = account_dir / f"{post}_{index}.jpg"
+                Image.new("RGB", (64, 64), (100, 120, 140)).save(image_path)
+                items.append(
+                    {
+                        "source_id": f"alpha:{post}:{index}",
+                        "local_path": str(image_path),
+                        "permalink": f"https://www.instagram.com/p/{post}/",
+                        "caption": post,
+                        "width": 64,
+                        "height": 64,
+                        "created_at": "local",
+                    }
+                )
+        cache_path = account_dir / "meta.json"
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "cache_version": 3,
+                    "max_posts_per_account": 3,
+                    "items": items,
+                }
+            ),
+            encoding="utf-8",
+        )
+        collector = InstagramCollector(settings)
+
+        media = collector.collect_one("alpha", max_posts=2)
+        payload = json.loads(cache_path.read_text(encoding="utf-8"))
+
+        assert len(media) == 6
+        assert len(payload["items"]) == 9
+        assert payload["max_posts_per_account"] == 3
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_collector_repairs_truncated_cache_from_local_folder() -> None:
     root = (
         Path(__file__).resolve().parents[1]

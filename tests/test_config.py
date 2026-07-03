@@ -215,3 +215,14 @@ def test_pool_refill_account_limit_env(monkeypatch):
         assert settings.pool_refill_max_accounts == 5
     finally:
         get_settings.cache_clear()
+
+
+def test_dynamic_pick_max_posts_env(monkeypatch):
+    monkeypatch.setenv("DYNAMIC_PICK_MAX_POSTS_PER_ACCOUNT", "12")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.dynamic_pick_max_posts_per_account == 12
+    finally:
+        get_settings.cache_clear()

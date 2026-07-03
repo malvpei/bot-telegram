@@ -224,21 +224,36 @@ class InstagramCollector:
             )
         return catalog
 
-    def collect_one(self, username: str, *, use_cache: bool = True) -> list[MediaCandidate]:
+    def collect_one(
+        self,
+        username: str,
+        *,
+        use_cache: bool = True,
+        max_posts: int | None = None,
+    ) -> list[MediaCandidate]:
         """Fetch a single account. Used by the random-account picker."""
+        post_limit = self._resolve_max_posts(max_posts)
         if use_cache:
-            cached = self._load_cached_account(username)
+            cached = self._load_cached_account(username, max_posts=post_limit)
             if cached is not None:
                 LOGGER.info("Using cached images for @%s (%d items)", username, len(cached))
                 return cached
 
         if not self.settings.instagram_username:
-            items = self._collect_account_anonymous(username)
-            self._save_account_cache(username, items)
+            items = self._collect_account_anonymous(username, max_posts=post_limit)
+            self._save_account_cache(username, items, max_posts=post_limit)
             return items
 
         self._ensure_login()
-        return self._collect_account(username)
+        return self._collect_account(username, max_posts=post_limit)
+
+    def _resolve_max_posts(self, max_posts: int | None = None) -> int:
+        configured = self.settings.max_posts_per_account
+        if max_posts is None or max_posts <= 0:
+            return configured
+        if configured <= 0:
+            return max(1, max_posts)
+        return max(1, min(configured, max_posts))
 
     def _load_browser_cookies(self) -> None:
         # Reads Instagram cookies from installed browsers (Chrome, Edge,
@@ -283,7 +298,12 @@ class InstagramCollector:
             "relanza el bot."
         )
 
-    def _collect_account_anonymous(self, username: str) -> list[MediaCandidate]:
+    def _collect_account_anonymous(
+        self,
+        username: str,
+        *,
+        max_posts: int | None = None,
+    ) -> list[MediaCandidate]:
         # No cookie bootstrap: the collaborator's working flow is fully
         # anonymous (build_session -> prepare_instagram_session -> feed).
         user = self._fetch_user_json(username)
@@ -298,8 +318,10 @@ class InstagramCollector:
         account_dir = self.settings.downloads_dir / username
         account_dir.mkdir(parents=True, exist_ok=True)
 
+        post_limit = self._resolve_max_posts(max_posts)
+        limited_timeline = timeline[:post_limit] if post_limit > 0 else timeline
         items: list[MediaCandidate] = []
-        for edge in timeline[: self.settings.max_posts_per_account]:
+        for edge in limited_timeline:
             node = edge.get("node") or {}
             shortcode = node.get("shortcode") or ""
             caption_edges = (node.get("edge_media_to_caption") or {}).get("edges") or []
@@ -525,8 +547,14 @@ class InstagramCollector:
         LOGGER.info("Loaded Instagram cookies from .env")
         return True
 
-    def _collect_account(self, username: str) -> list[MediaCandidate]:
-        cached = self._load_cached_account(username)
+    def _collect_account(
+        self,
+        username: str,
+        *,
+        max_posts: int | None = None,
+    ) -> list[MediaCandidate]:
+        post_limit = self._resolve_max_posts(max_posts)
+        cached = self._load_cached_account(username, max_posts=post_limit)
         if cached is not None:
             LOGGER.info("Using cached images for @%s (%d items)", username, len(cached))
             return cached
@@ -551,7 +579,7 @@ class InstagramCollector:
         try:
             image_post_count = 0
             for post in profile.get_posts():
-                if image_post_count >= self.settings.max_posts_per_account:
+                if post_limit > 0 and image_post_count >= post_limit:
                     break
                 try:
                     post_media = self._collect_post_media(username, post, account_dir)
@@ -573,17 +601,28 @@ class InstagramCollector:
             raise InstagramCollectorError(
                 f"La cuenta @{username} no tiene imágenes utilizables."
             )
-        self._save_account_cache(username, media_items)
+        self._save_account_cache(username, media_items, max_posts=post_limit)
         return media_items
 
     def _cache_path(self, username: str) -> Path:
         return self.settings.downloads_dir / username / "meta.json"
 
-    def _load_cached_account(self, username: str) -> list[MediaCandidate] | None:
+    def _load_cached_account(
+        self,
+        username: str,
+        *,
+        max_posts: int | None = None,
+    ) -> list[MediaCandidate] | None:
+        post_limit = self._resolve_max_posts(max_posts)
         cache_path = self._cache_path(username)
         account_dir = self.settings.downloads_dir / username
         if not cache_path.exists():
-            return self._load_account_from_folder(username, account_dir)
+            return self._load_account_from_folder(
+                username,
+                account_dir,
+                max_posts=post_limit,
+                save_cache=post_limit == self.settings.max_posts_per_account,
+            )
         ttl_hours = self.settings.account_cache_ttl_hours
         if ttl_hours > 0:
             age = time.time() - cache_path.stat().st_mtime
@@ -596,6 +635,12 @@ class InstagramCollector:
         # Ignore caches saved by the old HTML-embed path; they contain
         # IG logos / suggested-profile avatars mixed with real posts.
         if payload.get("cache_version") != CACHE_VERSION:
+            return None
+        cached_limit = _coerce_positive_int(
+            payload.get("max_posts_per_account"),
+            self.settings.max_posts_per_account,
+        )
+        if post_limit > 0 and cached_limit > 0 and cached_limit < post_limit:
             return None
         items: list[MediaCandidate] = []
         for raw in payload.get("items", []):
@@ -619,16 +664,30 @@ class InstagramCollector:
                 username, account_dir, items
             )
             limited_items = _limit_candidates_by_post(
-                items, self.settings.max_posts_per_account
+                items, post_limit
             )
-            if len(limited_items) != len(payload.get("items", [])):
-                self._save_account_cache(username, limited_items)
+            if (
+                post_limit == self.settings.max_posts_per_account
+                and len(limited_items) != len(payload.get("items", []))
+            ):
+                self._save_account_cache(username, limited_items, max_posts=post_limit)
             return limited_items
-        return self._load_account_from_folder(username, account_dir)
+        return self._load_account_from_folder(
+            username,
+            account_dir,
+            max_posts=post_limit,
+            save_cache=post_limit == self.settings.max_posts_per_account,
+        )
 
     def _load_account_from_folder(
-        self, username: str, account_dir: Path
+        self,
+        username: str,
+        account_dir: Path,
+        *,
+        max_posts: int | None = None,
+        save_cache: bool = True,
     ) -> list[MediaCandidate] | None:
+        post_limit = self._resolve_max_posts(max_posts)
         items = self._read_account_folder(username, account_dir)
         if not items:
             return None
@@ -638,9 +697,10 @@ class InstagramCollector:
             len(items),
         )
         limited_items = _limit_candidates_by_post(
-            items, self.settings.max_posts_per_account
+            items, post_limit
         )
-        self._save_account_cache(username, limited_items)
+        if save_cache:
+            self._save_account_cache(username, limited_items, max_posts=post_limit)
         return limited_items
 
     def _merge_cached_items_with_local_folder(
@@ -710,12 +770,18 @@ class InstagramCollector:
             return []
         return items
 
-    def _save_account_cache(self, username: str, items: list[MediaCandidate]) -> None:
+    def _save_account_cache(
+        self,
+        username: str,
+        items: list[MediaCandidate],
+        *,
+        max_posts: int | None = None,
+    ) -> None:
         cache_path = self._cache_path(username)
         payload = {
             "cached_at": time.time(),
             "cache_version": CACHE_VERSION,
-            "max_posts_per_account": self.settings.max_posts_per_account,
+            "max_posts_per_account": self._resolve_max_posts(max_posts),
             "items": [
                 {
                     "source_id": item.source_id,
@@ -1085,6 +1151,14 @@ def _limit_candidates_by_post(
         seen_posts.add(post_key)
         limited.append(item)
     return limited
+
+
+def _coerce_positive_int(value: object, default: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return parsed if parsed > 0 else default
 
 
 def _post_key_from_source_id(source_id: str) -> str:

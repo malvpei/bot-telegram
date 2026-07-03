@@ -57,9 +57,11 @@ class FakeRenderer:
 class FakeCollector:
     def __init__(self) -> None:
         self.seen: list[str] = []
+        self.max_posts_seen: list[int | None] = []
 
-    def collect_one(self, username: str) -> list[str]:
+    def collect_one(self, username: str, *, max_posts: int | None = None) -> list[str]:
         self.seen.append(username)
+        self.max_posts_seen.append(max_posts)
         return [username]
 
 
@@ -966,6 +968,41 @@ def test_plan_picker_falls_back_to_dynamic_when_pool_has_no_plan(monkeypatch):
         assert service.collector.seen == ["bad", "good"]
         assert service.pool.noted == [("good", VideoType.TYPE_1)]
         assert service.state.any_media_used(["good:1"])
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_dynamic_picker_limits_posts_per_account(monkeypatch):
+    monkeypatch.setattr("app.service.random.shuffle", lambda values: None)
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"picker-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = replace(
+            get_settings(),
+            account_pick_attempts=0,
+            dynamic_pick_max_posts_per_account=12,
+            max_posts_per_account=100,
+        )
+        service.state = StateStore(root / "state")
+        service.collector = FakeCollector()
+        service.selector = PlanWhenGoodSelector()
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        plan, tried = service._pick_account_with_plan(
+            ["bad", "good"],
+            request,
+        )
+
+        assert plan.chosen_account == "good"
+        assert tried == ["bad", "good"]
+        assert service.collector.max_posts_seen == [12, 12]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

@@ -57,6 +57,7 @@ FEBRUARY_TEXT_GROUP_GAP = 38
 HOOK_BASE_FONT_SIZE = 126
 HOOK_MIN_FONT_SIZE = 54
 HOOK_SIDE_MARGIN = 48
+TYPE_1_HOOK_SIDE_MARGIN = 24
 SAFE_TEXT_TOP_MARGIN = 160
 SAFE_TEXT_BOTTOM_MARGIN = 230
 TYPE_3_TOOL_BADGES: dict[str, tuple[str, tuple[int, int, int], tuple[int, int, int]]] = {
@@ -1265,7 +1266,10 @@ class VideoRenderer:
         width, height = image.size
 
         stroke_width = max(2, _scale_x(3, width))
-        side_margin = _scale_x(HOOK_SIDE_MARGIN, width)
+        side_margin = _scale_x(
+            TYPE_1_HOOK_SIDE_MARGIN if video_type == VideoType.TYPE_1 else HOOK_SIDE_MARGIN,
+            width,
+        )
         max_width = width - (side_margin * 2)
         max_height = int(height * 0.40)
         base_size = self._scaled_text_size(HOOK_BASE_FONT_SIZE, minimum=38)

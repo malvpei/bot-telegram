@@ -21,6 +21,7 @@ from app.render import (
     SAFE_TEXT_BOTTOM_MARGIN,
     SAFE_TEXT_TOP_MARGIN,
     TEXT_AVOID_CLEARANCE_MARGIN,
+    TYPE_1_HOOK_SIDE_MARGIN,
     TYPE_3_TITLE_FONT_SIZE,
     VideoRenderer,
 )
@@ -307,7 +308,7 @@ def test_type_1_two_line_hook_reflows_to_larger_balanced_text(monkeypatch):
     manual_font = renderer._fit_prebroken_lines(
         text.splitlines(),
         draw,
-        max_width=1080 - (HOOK_SIDE_MARGIN * 2),
+        max_width=1080 - (TYPE_1_HOOK_SIDE_MARGIN * 2),
         max_height=int(1920 * 0.40),
         base_size=HOOK_BASE_FONT_SIZE,
         min_size=HOOK_MIN_FONT_SIZE,
@@ -323,7 +324,8 @@ def test_type_1_two_line_hook_reflows_to_larger_balanced_text(monkeypatch):
     assert len(captured["lines"]) == 2
     assert captured["lines"] != text.splitlines()
     assert captured["font"].size > manual_font.size
-    assert max(widths) <= 1080 - (HOOK_SIDE_MARGIN * 2)
+    assert captured["font"].size >= 46
+    assert max(widths) <= 1080 - (TYPE_1_HOOK_SIDE_MARGIN * 2)
 
 
 def test_hook_text_renders_in_middle_third_without_avoid_regions(monkeypatch):

@@ -933,10 +933,14 @@ class VideoCreationService:
         tried: list[str] = []
         errors: list[str] = []
         last_plan_error: str | None = None
+        max_posts = self._dynamic_pick_max_posts()
         for username in ordered[:max_attempts]:
             tried.append(username)
             try:
-                candidates = self.collector.collect_one(username)
+                candidates = self._collect_one_for_dynamic_pick(
+                    username,
+                    max_posts=max_posts,
+                )
             except InstagramCollectorError as error:
                 LOGGER.warning("@%s descartada (fetch): %s", username, error)
                 errors.append(f"@{username}: {error}")
@@ -1011,6 +1015,27 @@ class VideoCreationService:
             sample,
         )
         return shuffled
+
+    def _collect_one_for_dynamic_pick(
+        self,
+        username: str,
+        *,
+        max_posts: int | None,
+    ) -> list[MediaCandidate]:
+        if max_posts is None:
+            return self.collector.collect_one(username)
+        return self.collector.collect_one(username, max_posts=max_posts)
+
+    def _dynamic_pick_max_posts(self) -> int | None:
+        configured = int(
+            getattr(self.settings, "dynamic_pick_max_posts_per_account", 0) or 0
+        )
+        if configured <= 0:
+            return None
+        account_limit = int(getattr(self.settings, "max_posts_per_account", 0) or 0)
+        if account_limit <= 0:
+            return max(1, configured)
+        return min(account_limit, max(1, configured))
 
     def _without_excluded_accounts(self, usernames: list[str]) -> list[str]:
         excluded = self.state.read_excluded_accounts()

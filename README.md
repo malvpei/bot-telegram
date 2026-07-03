@@ -107,6 +107,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `FIXED_IMAGE_PATH` | `assets/fixed/imagen6.png` | ubicación de imagen6 |
 | `ACCOUNTS_FILE` | `accounts.txt` | archivo con cuentas (una por línea) |
 | `MAX_POSTS_PER_ACCOUNT` | 100 | posts con foto a escanear por cuenta |
+| `DYNAMIC_PICK_MAX_POSTS_PER_ACCOUNT` | 24 | posts maximos por cuenta cuando `/create` cae a busqueda dinamica fuera del pool |
 | `MAX_URLS_PER_JOB` | 8 | URLs máximas por job (del archivo) |
 | `POOL_TARGET_IMAGES` | 100 | fotos disponibles que `/download_pool` intenta mantener en el pool |
 | `POOL_LOW_STOCK_THRESHOLD` | 12 | aviso cuando el pool baja de este stock |
