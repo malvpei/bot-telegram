@@ -1419,11 +1419,16 @@ class ImageSelector:
         metrics = media.metrics
         if metrics is None:
             return 0.0
-        if metrics.quality_score < 0.28:
-            return 0.0
         if self._is_landscape_media(media):
             return 0.0
-        if not self._is_hook_person_visible_media(media):
+
+        type_2_hook_score = self._score_type_2(media, SlideRole.HOOK)
+        fallback_portrait = (
+            type_2_hook_score <= 0
+            and metrics.quality_score >= 0.28
+            and self._is_type_3_fallback_portrait_hook(metrics)
+        )
+        if type_2_hook_score <= 0 and not fallback_portrait:
             return 0.0
 
         person_or_hands = max(
@@ -1432,6 +1437,8 @@ class ImageSelector:
             metrics.body_focus_score,
             metrics.hands_score,
         )
+        if fallback_portrait:
+            person_or_hands = max(person_or_hands, 0.35)
         if person_or_hands <= 0:
             return 0.0
 
@@ -1442,12 +1449,29 @@ class ImageSelector:
             + 0.14 * metrics.laptop_score
             + 0.12 * person_or_hands
             + 0.04 * metrics.daylight
+            + 0.18 * min(type_2_hook_score, 1.0)
         )
         if metrics.laptop_score > 0 and person_or_hands > 0:
             score += 0.18
         if metrics.has_visual_luxury:
             score += 0.08
         return score
+
+    def _is_type_3_fallback_portrait_hook(self, metrics: ImageMetrics) -> bool:
+        portrait_shape = metrics.aspect_ratio <= 0.92
+        affluent_square = (
+            metrics.aspect_ratio <= 1.0
+            and max(metrics.affluent_lifestyle_score, metrics.luxury_score) >= 0.55
+        )
+        return (
+            metrics.faces == 0
+            and metrics.quality_score >= 0.52
+            and metrics.daylight >= 0.38
+            and (portrait_shape or affluent_square)
+            and not metrics.is_landscape
+            and metrics.laptop_score < 0.75
+            and metrics.hands_score < 0.75
+        )
 
     def _score_extra_image(self, media: MediaCandidate, video_type: VideoType) -> float:
         if self._is_landscape_media(media) or not self._is_person_visible_media(media):

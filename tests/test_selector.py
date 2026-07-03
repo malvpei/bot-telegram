@@ -1207,6 +1207,78 @@ def test_type_3_hook_requires_person_over_laptop_only_photo(temp_workspace):
     assert selector._is_hook_person_visible_media(plan.slides[0].media)
 
 
+def test_type_3_hook_accepts_type_2_hook_photo(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "type3_type2_compatible"
+    account_dir.mkdir()
+
+    candidate = _make_candidate(
+        account_dir,
+        username="type3_type2_compatible",
+        idx=1,
+    )
+    candidate.metrics = _metrics_stub(
+        quality=0.24,
+        daylight=0.62,
+        faces=1,
+        is_landscape=False,
+        outdoor=0.18,
+        casual=0.2,
+        luxury=0.05,
+        face_area=0.04,
+        portrait_focus=0.42,
+        affluent=0.05,
+        laptop=0.0,
+        hands=0.0,
+    )
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"type3_type2_compatible": [candidate]},
+        VideoType.TYPE_3,
+        Language.ES,
+    )
+
+    assert selector._score_type_2(candidate, SlideRole.HOOK) > 0.0
+    assert selector._score_type_3_hook(candidate) > 0.0
+    assert plan.slides[0].media.source_id == candidate.source_id
+
+
+def test_type_3_hook_accepts_quality_portrait_when_detectors_miss_person(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "type3_detector_miss"
+    account_dir.mkdir()
+
+    candidate = _make_candidate(
+        account_dir,
+        username="type3_detector_miss",
+        idx=1,
+    )
+    candidate.metrics = _metrics_stub(
+        quality=0.78,
+        daylight=0.64,
+        faces=0,
+        is_landscape=False,
+        casual=0.08,
+        luxury=0.42,
+        portrait_focus=0.0,
+        affluent=0.48,
+        laptop=0.0,
+        hands=0.0,
+    )
+    candidate.metrics.aspect_ratio = 0.82
+
+    selector = ImageSelector(settings, state)
+    plan = selector.create_plan(
+        {"type3_detector_miss": [candidate]},
+        VideoType.TYPE_3,
+        Language.ES,
+    )
+
+    assert selector._score_type_3_hook(candidate) > 0.0
+    assert plan.slides[0].media.source_id == candidate.source_id
+
+
 def test_type_1_hook_candidate_must_pass_quality_gate(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "hook_quality"
