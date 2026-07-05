@@ -19,6 +19,7 @@ WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN python -c "import cv2; from pathlib import Path; assert hasattr(cv2, 'CascadeClassifier'), f'OpenCV objdetect missing: {getattr(cv2, \"__file__\", \"unknown\")}'; haar=getattr(getattr(cv2, 'data', None), 'haarcascades', ''); assert haar and Path(haar, 'haarcascade_frontalface_default.xml').exists(), f'OpenCV haarcascades missing: {haar}'"
 
 COPY . .
 

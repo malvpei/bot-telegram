@@ -15,7 +15,7 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from app.config import Settings
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
-from app.opencv_compat import build_cascade, build_people_detector
+from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
 
 
 LOGGER = logging.getLogger(__name__)
@@ -125,6 +125,8 @@ TEXT_FACE_AVOID_WEIGHT = 260.0
 TEXT_EYE_AVOID_WEIGHT = 220.0
 TEXT_HEAD_AVOID_WEIGHT = 120.0
 TEXT_BODY_AVOID_WEIGHT = 2.5
+TEXT_FALLBACK_HEAD_AVOID_WEIGHT = 150.0
+TEXT_FALLBACK_BODY_AVOID_WEIGHT = 3.5
 TEXT_CARD_EDGE_MARGIN = 84
 TEXT_CARD_PADDING_X = 46
 TEXT_CARD_PADDING_Y = 16
@@ -2070,7 +2072,9 @@ class VideoRenderer:
         try:
             rgb = np.asarray(image.convert("RGB"))
             gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
-        except cv2.error:
+        except CV2_ERROR:
+            if self._face_avoid_detectors_unavailable():
+                return self._fallback_portrait_avoid_regions(width, height)
             return []
 
         regions: list[tuple[tuple[int, int, int, int], float]] = []
@@ -2121,7 +2125,49 @@ class VideoRenderer:
             )
             regions.append((body, TEXT_BODY_AVOID_WEIGHT))
             regions.append((head, TEXT_HEAD_AVOID_WEIGHT))
+        if not regions and self._face_avoid_detectors_unavailable():
+            return self._fallback_portrait_avoid_regions(width, height)
         return regions
+
+    def _fallback_portrait_avoid_regions(
+        self,
+        width: int,
+        height: int,
+    ) -> list[tuple[tuple[int, int, int, int], float]]:
+        if width <= 0 or height <= 0:
+            return []
+        if width / max(height, 1) > 1.05:
+            return []
+
+        head = (
+            int(width * 0.14),
+            int(height * 0.08),
+            int(width * 0.86),
+            int(height * 0.56),
+        )
+        body = (
+            int(width * 0.10),
+            int(height * 0.28),
+            int(width * 0.90),
+            int(height * 0.88),
+        )
+        return [
+            (body, TEXT_FALLBACK_BODY_AVOID_WEIGHT),
+            (head, TEXT_FALLBACK_HEAD_AVOID_WEIGHT),
+        ]
+
+    def _face_avoid_detectors_unavailable(self) -> bool:
+        return (
+            self._detector_empty(self._face_detector)
+            and self._detector_empty(self._eye_detector)
+        )
+
+    @staticmethod
+    def _detector_empty(detector: object) -> bool:
+        empty = getattr(detector, "empty", None)
+        if callable(empty):
+            return bool(empty())
+        return False
 
     def _detect_render_faces(self, gray: np.ndarray) -> np.ndarray:
         if self._face_detector.empty():

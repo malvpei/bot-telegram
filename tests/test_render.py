@@ -10,6 +10,7 @@ from PIL import Image, ImageDraw
 
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoType
+from app.opencv_compat import EmptyCascade, EmptyPeopleDetector
 from app.render import (
     FEBRUARY_FIXED_SCREEN_TEXT_MARGIN,
     FEBRUARY_TITLE_MIN_BOX_WIDTH,
@@ -21,6 +22,7 @@ from app.render import (
     SAFE_TEXT_BOTTOM_MARGIN,
     SAFE_TEXT_TOP_MARGIN,
     TEXT_AVOID_CLEARANCE_MARGIN,
+    TEXT_FALLBACK_HEAD_AVOID_WEIGHT,
     TYPE_1_HOOK_SIDE_MARGIN,
     TYPE_3_TITLE_FONT_SIZE,
     VideoRenderer,
@@ -914,6 +916,38 @@ def test_safe_text_position_avoids_face_region(monkeypatch):
     text_box = (50, y, 310, y + 90)
 
     assert renderer._intersection_area(text_box, face_region) == 0
+
+
+def test_text_avoid_regions_keeps_fallback_when_cv2_detectors_are_unavailable():
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    renderer._face_detector = EmptyCascade()
+    renderer._eye_detector = EmptyCascade()
+    renderer._people_detector = EmptyPeopleDetector()
+    image = Image.new("RGBA", (360, 640), (20, 20, 20, 255))
+
+    regions = renderer._text_avoid_regions(image)
+    fallback_regions = [
+        region
+        for region, weight in regions
+        if weight >= TEXT_FALLBACK_HEAD_AVOID_WEIGHT
+    ]
+
+    assert fallback_regions
+
+    block_height = 90
+    y = renderer._safe_text_start_y(
+        image,
+        block_width=260,
+        block_height=block_height,
+        preferred_centers=(0.44,),
+    )
+    text_box = (50, y, 310, y + block_height)
+
+    assert all(
+        renderer._intersection_area(text_box, region) == 0
+        for region in fallback_regions
+    )
 
 
 def test_safe_text_position_keeps_clearance_from_face_region(monkeypatch):
