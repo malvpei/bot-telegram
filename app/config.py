@@ -32,6 +32,7 @@ DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
 DEFAULT_OPENAI_IMAGE_SIZE = "1024x1536"
 DEFAULT_OPENAI_IMAGE_QUALITY = "high"
 DEFAULT_OPENAI_REQUEST_TIMEOUT_SECONDS = 180.0
+DEFAULT_BATCH_TIMEZONE = "Europe/Madrid"
 
 
 def _split_chat_ids(raw_value: str) -> set[int]:
@@ -155,6 +156,7 @@ class Settings:
     openai_image_size: str
     openai_image_quality: str
     openai_request_timeout_seconds: float
+    batch_timezone: str
 
 
 @lru_cache(maxsize=1)
@@ -327,4 +329,9 @@ def get_settings() -> Settings:
             "OPENAI_REQUEST_TIMEOUT_SECONDS",
             DEFAULT_OPENAI_REQUEST_TIMEOUT_SECONDS,
         ),
+        batch_timezone=os.getenv(
+            "BATCH_TIMEZONE",
+            DEFAULT_BATCH_TIMEZONE,
+        ).strip()
+        or DEFAULT_BATCH_TIMEZONE,
     )

@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.error import NetworkError, RetryAfter, TelegramError
@@ -24,6 +25,16 @@ from app.accounts import (
     load_accounts,
     normalize_account,
     remove_account,
+)
+from app.batches import (
+    DEFAULT_BATCH_SIZE,
+    MAX_BATCH_SIZE,
+    ROTATION,
+    BatchItem,
+    BatchItemKind,
+    build_batch_plan,
+    parse_schedule_values,
+    schedule_time_to_datetime_time,
 )
 from app.config import get_settings
 from app.models import (
@@ -59,6 +70,7 @@ TELEGRAM_TEXT_LIMIT = 4096
 POOL_SUMMARY_ACCOUNT_DETAIL_LIMIT = 12
 POOL_SUMMARY_ERROR_DETAIL_LIMIT = 4
 ACCOUNT_AUDIT_DETAIL_LIMIT = 12
+BATCH_JOB_NAME_PREFIX = "scheduled-batch:"
 
 
 def run_bot() -> None:
@@ -85,7 +97,12 @@ def run_bot() -> None:
     except AccountsFileError as error:
         LOGGER.warning("%s", error)
 
-    application: Application = ApplicationBuilder().token(settings.telegram_bot_token).build()
+    application: Application = (
+        ApplicationBuilder()
+        .token(settings.telegram_bot_token)
+        .post_init(_post_init)
+        .build()
+    )
     application.bot_data["service"] = service
 
     wizard_handler = ConversationHandler(
@@ -141,12 +158,460 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("memory", memory_command))
     application.add_handler(CommandHandler("template_video", template_video_command))
     application.add_handler(CommandHandler("video_template", template_video_command))
+    application.add_handler(CommandHandler("batch", batch_command))
+    application.add_handler(CommandHandler("lote", batch_command))
+    application.add_handler(CommandHandler("schedule", schedule_command))
+    application.add_handler(CommandHandler("programar", schedule_command))
+    application.add_handler(CommandHandler("batch_reset", batch_reset_command))
     application.add_handler(wizard_handler)
     application.add_handler(CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN))
     application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
     application.add_error_handler(error_handler)
 
     application.run_polling(drop_pending_updates=True)
+
+
+async def _post_init(application: Application) -> None:
+    application.bot_data["batch_lock"] = asyncio.Lock()
+    try:
+        _replace_scheduled_batch_jobs(application)
+    except Exception:
+        LOGGER.exception("Could not restore the saved batch schedule")
+
+
+async def batch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_allowed(update):
+        return
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+    if message is None or chat is None or user is None:
+        return
+
+    values = [str(value).strip() for value in (context.args or []) if str(value).strip()]
+    try:
+        if len(values) > 1:
+            raise ValueError("Uso: /batch [cantidad]")
+        count = int(values[0]) if values else DEFAULT_BATCH_SIZE
+        if count < 1 or count > MAX_BATCH_SIZE:
+            raise ValueError(
+                f"La cantidad debe estar entre 1 y {MAX_BATCH_SIZE} videos."
+            )
+    except ValueError as error:
+        await message.reply_text(str(error))
+        return
+
+    lock = _batch_lock(context.application)
+    queue_line = " Hay otro lote activo; este queda en cola." if lock.locked() else ""
+    await message.reply_text(
+        f"Lote de {count} videos recibido.{queue_line} Te avisare del progreso aqui."
+    )
+    context.application.create_task(
+        _run_batch(
+            context.application,
+            chat_id=chat.id,
+            user_id=user.id,
+            count=count,
+            source="manual",
+        ),
+        update=update,
+        name=f"manual-batch-{uuid4().hex[:8]}",
+    )
+
+
+async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_allowed(update):
+        return
+    message = update.effective_message
+    chat = update.effective_chat
+    user = update.effective_user
+    if message is None or chat is None or user is None:
+        return
+
+    settings = get_settings()
+    store = _batch_store()
+    values = [
+        piece
+        for raw_value in (context.args or [])
+        for piece in str(raw_value).split(",")
+        if piece.strip()
+    ]
+    if not values:
+        await message.reply_text(_format_batch_schedule_status(store))
+        return
+
+    action = values[0].strip().lower()
+    if action in {"off", "stop", "disable", "desactivar"}:
+        store.disable_batch_schedule()
+        _replace_scheduled_batch_jobs(context.application)
+        await message.reply_text("Programacion diaria desactivada. La rotacion queda guardada.")
+        return
+
+    try:
+        count, times = parse_schedule_values(values)
+        _load_batch_timezone(settings.batch_timezone)
+    except ValueError as error:
+        await message.reply_text(
+            f"{error}\n\nUso: /schedule 6 08:00 18:00\n"
+            "Para apagarla: /schedule off"
+        )
+        return
+
+    store.write_batch_schedule(
+        enabled=True,
+        chat_id=chat.id,
+        user_id=user.id,
+        count=count,
+        times=times,
+        timezone_name=settings.batch_timezone,
+    )
+    _replace_scheduled_batch_jobs(context.application)
+    await message.reply_text(
+        f"Programacion activada: {count} videos a las {', '.join(times)}, "
+        f"todos los dias ({settings.batch_timezone}).\n"
+        "Puedes crear el siguiente lote ahora con /batch."
+    )
+
+
+async def batch_reset_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    if not await _ensure_allowed(update):
+        return
+    lock = _batch_lock(context.application)
+    if lock.locked():
+        await update.effective_message.reply_text(
+            "Hay un lote en curso. Espera a que termine antes de reiniciar la rotacion."
+        )
+        return
+    store = _batch_store()
+    store.reset_batch_rotation()
+    await update.effective_message.reply_text(
+        "Rotacion reiniciada. El siguiente lote volvera al orden inicial: "
+        "1 ES, 2 ES, 3 EN, herramientas ES, 1 EN y mujer 2 ES."
+    )
+
+
+async def _scheduled_batch_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
+    data = context.job.data if context.job is not None else {}
+    if not isinstance(data, dict):
+        LOGGER.error("Scheduled batch has invalid job data: %r", data)
+        return
+    await _run_batch(
+        context.application,
+        chat_id=int(data["chat_id"]),
+        user_id=int(data["user_id"]),
+        count=int(data["count"]),
+        source=f"programado {data.get('time', '')}".strip(),
+    )
+
+
+async def _run_batch(
+    application: Application,
+    *,
+    chat_id: int,
+    user_id: int,
+    count: int,
+    source: str,
+) -> None:
+    lock = _batch_lock(application)
+    async with lock:
+        service: VideoCreationService = application.bot_data["service"]
+        store = service.state
+        phase = store.get_batch_rotation_phase(cycle_length=len(ROTATION))
+        plan = build_batch_plan(count, phase)
+        batch_id = uuid4().hex
+        accounts_by_gender = _load_accounts_by_gender(get_settings())
+        plan_lines = "\n".join(
+            f"{item.position}. {item.short_label}" for item in plan
+        )
+        status_message = await _send_message(
+            application,
+            chat_id,
+            (
+                f"Lote {source} iniciado ({count} videos).\n"
+                f"Rotacion {phase + 1}/{len(ROTATION)}:\n{plan_lines}"
+            ),
+        )
+        store.write_last_batch_run(
+            {
+                "batch_id": batch_id,
+                "status": "running",
+                "source": source,
+                "chat_id": chat_id,
+                "count": count,
+                "phase": phase,
+                "plan": [item.short_label for item in plan],
+            }
+        )
+
+        succeeded = 0
+        failures: list[str] = []
+        for item in plan:
+            try:
+                await _edit_batch_status(
+                    status_message,
+                    f"Lote en curso: preparando {item.position}/{count} "
+                    f"({item.short_label}). Completados: {succeeded}.",
+                )
+                if item.kind == BatchItemKind.TOOLS:
+                    await _create_and_send_batch_tools_video(
+                        application,
+                        chat_id,
+                        item,
+                        count,
+                    )
+                else:
+                    accounts = accounts_by_gender.get(item.gender, [])
+                    if not accounts:
+                        account_file = _accounts_path_for_gender(
+                            get_settings(),
+                            item.gender,
+                        )
+                        raise ValueError(
+                            f"No hay cuentas disponibles en {account_file.name}."
+                        )
+                    await _create_and_send_batch_generated_video(
+                        application,
+                        chat_id=chat_id,
+                        user_id=user_id,
+                        item=item,
+                        count=count,
+                        accounts=accounts,
+                    )
+                succeeded += 1
+            except Exception as error:
+                LOGGER.exception(
+                    "Batch %s item %d failed (%s)",
+                    batch_id,
+                    item.position,
+                    item.short_label,
+                )
+                failures.append(f"{item.position}. {item.short_label}: {error}")
+                try:
+                    await _send_message(
+                        application,
+                        chat_id,
+                        f"Fallo el video {item.position}/{count} ({item.short_label}): {error}",
+                    )
+                except TelegramError:
+                    LOGGER.exception("Could not report a batch item failure to Telegram")
+
+        if succeeded:
+            next_phase = store.advance_batch_rotation(cycle_length=len(ROTATION))
+        else:
+            next_phase = phase
+        final_status = "completed" if not failures else "completed_with_errors"
+        store.write_last_batch_run(
+            {
+                "batch_id": batch_id,
+                "status": final_status,
+                "source": source,
+                "chat_id": chat_id,
+                "count": count,
+                "phase": phase,
+                "next_phase": next_phase,
+                "succeeded": succeeded,
+                "failed": len(failures),
+                "failures": failures,
+                "plan": [item.short_label for item in plan],
+            }
+        )
+        summary = (
+            f"Lote terminado: {succeeded}/{count} videos enviados. "
+            f"Fallos: {len(failures)}."
+        )
+        if not failures:
+            summary += " La rotacion queda preparada para el siguiente lote."
+        await _edit_batch_status(status_message, summary)
+
+
+async def _create_and_send_batch_tools_video(
+    application: Application,
+    chat_id: int,
+    item: BatchItem,
+    count: int,
+) -> None:
+    service: VideoCreationService = application.bot_data["service"]
+    result = await asyncio.to_thread(
+        service.create_template_video,
+        None,
+        item.language,
+    )
+    await _send_message(
+        application,
+        chat_id,
+        f"Lote {item.position}/{count}: video de herramientas {item.language.value.upper()}.",
+    )
+    if result.queue_restarted:
+        await _send_message(
+            application,
+            chat_id,
+            "La cola de videos de herramientas termino y se reinicio desde el principio.",
+        )
+    await _send_video(application, chat_id, result.video_path)
+    for text in result.social_copy.messages:
+        await _send_message(application, chat_id, text)
+
+
+async def _create_and_send_batch_generated_video(
+    application: Application,
+    *,
+    chat_id: int,
+    user_id: int,
+    item: BatchItem,
+    count: int,
+    accounts: list[str],
+) -> None:
+    if item.video_type is None:
+        raise ValueError("El elemento del lote no tiene tipo de video.")
+    request = VideoRequest(
+        chat_id=chat_id,
+        user_id=user_id,
+        video_type=item.video_type,
+        language=item.language,
+        account_inputs=list(accounts),
+        gender=item.gender,
+    )
+    service: VideoCreationService = application.bot_data["service"]
+    result = await asyncio.to_thread(service.create_video, request)
+    await _send_message(
+        application,
+        chat_id,
+        (
+            f"Lote {item.position}/{count}: tipo {result.video_type.value} "
+            f"{result.language.value.upper()}, {_gender_label_plural(item.gender)}.\n"
+            f"Cuenta elegida: @{result.chosen_account}"
+        ),
+    )
+    for text in result.social_copy.messages:
+        await _send_message(application, chat_id, text)
+    await _send_slides_text_then_image(
+        application,
+        chat_id,
+        result.slides,
+        video_type=result.video_type,
+        separate_slide_text=result.separate_slide_text,
+    )
+    if result.pool_low_stock:
+        await _send_message(
+            application,
+            chat_id,
+            f"Aviso: quedan {result.pool_remaining} fotos disponibles en el pool.",
+        )
+
+
+def _batch_lock(application: Application) -> asyncio.Lock:
+    lock = application.bot_data.get("batch_lock")
+    if not isinstance(lock, asyncio.Lock):
+        lock = asyncio.Lock()
+        application.bot_data["batch_lock"] = lock
+    return lock
+
+
+def _batch_store() -> StateStore:
+    settings = get_settings()
+    return StateStore(
+        settings.state_dir,
+        history_max_per_bucket=settings.history_max_per_bucket,
+    )
+
+
+def _replace_scheduled_batch_jobs(application: Application) -> None:
+    job_queue = application.job_queue
+    if job_queue is None:
+        raise RuntimeError(
+            "El planificador no esta instalado. Instala python-telegram-bot[job-queue]."
+        )
+    for job in job_queue.jobs(rf"^{BATCH_JOB_NAME_PREFIX}"):
+        job.schedule_removal()
+
+    schedule = _batch_store().read_batch_schedule()
+    if not schedule.get("enabled"):
+        return
+    timezone_name = str(schedule.get("timezone") or get_settings().batch_timezone)
+    timezone = _load_batch_timezone(timezone_name)
+    count = int(schedule.get("count", DEFAULT_BATCH_SIZE))
+    chat_id = int(schedule["chat_id"])
+    user_id = int(schedule["user_id"])
+    times = list(schedule.get("times") or [])
+    for raw_time in times:
+        normalized_time = str(raw_time)
+        job_queue.run_daily(
+            _scheduled_batch_callback,
+            time=schedule_time_to_datetime_time(normalized_time, timezone),
+            data={
+                "chat_id": chat_id,
+                "user_id": user_id,
+                "count": count,
+                "time": normalized_time,
+            },
+            name=f"{BATCH_JOB_NAME_PREFIX}{normalized_time}",
+            chat_id=chat_id,
+            user_id=user_id,
+            job_kwargs={
+                "coalesce": True,
+                "max_instances": 1,
+                "misfire_grace_time": 300,
+            },
+        )
+    LOGGER.info(
+        "Scheduled %d-video batch at %s (%s)",
+        count,
+        ", ".join(str(value) for value in times),
+        timezone_name,
+    )
+
+
+def _load_batch_timezone(timezone_name: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(timezone_name)
+    except ZoneInfoNotFoundError as error:
+        raise ValueError(
+            f"No se reconoce la zona horaria {timezone_name}. "
+            "Configura BATCH_TIMEZONE, por ejemplo Europe/Madrid."
+        ) from error
+
+
+def _format_batch_schedule_status(store: StateStore) -> str:
+    schedule = store.read_batch_schedule()
+    phase = store.get_batch_rotation_phase(cycle_length=len(ROTATION))
+    last_run = store.read_last_batch_run()
+    next_plan = build_batch_plan(
+        int(schedule.get("count", DEFAULT_BATCH_SIZE)),
+        phase,
+    )
+    plan_line = ", ".join(item.short_label for item in next_plan)
+    if schedule.get("enabled"):
+        schedule_line = (
+            f"Activa: {schedule.get('count', DEFAULT_BATCH_SIZE)} videos a las "
+            f"{', '.join(schedule.get('times') or [])} "
+            f"({schedule.get('timezone') or get_settings().batch_timezone})"
+        )
+    else:
+        schedule_line = "Desactivada"
+    last_line = "Sin lotes ejecutados"
+    if last_run:
+        last_line = (
+            f"Ultimo lote: {last_run.get('status', '-')} "
+            f"({last_run.get('succeeded', 0)}/{last_run.get('count', 0)} enviados)"
+        )
+    return (
+        f"Programacion de lotes\n{schedule_line}\n"
+        f"Siguiente rotacion: {phase + 1}/{len(ROTATION)}\n"
+        f"Siguiente lote: {plan_line}\n{last_line}\n\n"
+        "Configurar: /schedule 6 08:00 18:00\n"
+        "Desactivar: /schedule off\n"
+        "Crear ahora: /batch"
+    )
+
+
+async def _edit_batch_status(status_message, text: str) -> None:
+    try:
+        await status_message.edit_text(text)
+    except TelegramError:
+        LOGGER.exception("Could not update batch status message")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -166,6 +631,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
         "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
+        "/batch [cantidad] - crear ahora un lote rotativo (6 por defecto)\n"
+        "/schedule 6 08:00 18:00 - programar lotes diarios\n"
+        "/schedule off - desactivar la programacion\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
@@ -205,6 +673,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "estan gastadas, sin cache local o sin suficientes fotos aptas.\n\n"
         "Usa /template_video [prefijo-r2] para coger un MP4 de R2 y "
         "aplicarle la plantilla fija de herramientas. El MP4 final sale sin audio.\n\n"
+        "Usa /batch para crear el lote rotativo ahora. Por ejemplo, "
+        "/schedule 6 08:00 18:00 genera seis piezas todos los dias a esas "
+        "horas (Europe/Madrid por defecto). La rotacion hace dos vueltas "
+        "1-2-3, despues herramientas y vuelve al tipo 1.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
     )

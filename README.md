@@ -166,6 +166,39 @@ cooldown durante `ACCOUNT_COOLDOWN_DAYS`. Después, **/create** elige desde ese
 pool local, rota cuentas para evitar favoritismo, y permite **Pasar cuenta** si
 quieres forzar la siguiente cuenta disponible.
 
+### Lotes y programacion diaria
+
+`/batch [cantidad]` mete varias creaciones en una cola y mantiene el bot
+disponible mientras se procesan. Se admiten entre 1 y 24 piezas; si se piden
+mas de seis, se repite el perfil de las seis posiciones.
+
+El primer lote de seis es:
+
+1. tipo 1 en espanol (hombre)
+2. tipo 2 en espanol (hombre)
+3. tipo 3 en ingles (hombre)
+4. video de herramientas en espanol
+5. tipo 1 en ingles (hombre)
+6. tipo 2 en espanol (mujer)
+
+Cada posicion avanza por su propia secuencia
+`1 -> 2 -> 3 -> 1 -> 2 -> 3 -> herramientas -> 1`. El paso actual, los
+horarios y el ultimo resultado se guardan dentro de `DATA_DIR/state`, por lo
+que sobreviven a los reinicios y redeploys. Solo se procesa un lote a la vez
+para no reutilizar fotos ni compartir a la vez la sesion de Instagram.
+
+Ejemplo para crear seis piezas todos los dias a las 08:00 y a las 18:00:
+
+```text
+/schedule 6 08:00 18:00
+```
+
+Comandos relacionados: `/schedule` muestra el estado, `/schedule off`
+desactiva los horarios, `/batch 6` crea el siguiente lote ahora y
+`/batch_reset` reinicia la rotacion. La zona horaria predeterminada es
+`Europe/Madrid`, incluido el cambio de hora de verano; se puede cambiar con
+`BATCH_TIMEZONE`.
+
 ### Web para subir imagenes a R2
 
 El proyecto incluye una web interna para subir imagenes al mismo bucket R2 que

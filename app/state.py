@@ -42,6 +42,9 @@ class StateStore:
         self._type_3_background_queue_path = self.state_dir / "type3_background_queue.json"
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
+        self._batch_schedule_path = self.state_dir / "batch_schedule.json"
+        self._batch_rotation_path = self.state_dir / "batch_rotation.json"
+        self._last_batch_run_path = self.state_dir / "last_batch_run.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
         self._persistence_marker_path = self.state_dir / "persistence_marker.json"
         self._lock_path = self.state_dir / ".state.lock"
@@ -401,6 +404,99 @@ class StateStore:
     def write_media_pool(self, pool: dict[str, Any]) -> None:
         with self._exclusive():
             self._write_json(self._media_pool_path, pool)
+
+    def read_batch_schedule(self) -> dict[str, Any]:
+        with self._exclusive():
+            payload = self._read_json(self._batch_schedule_path, {})
+        if not isinstance(payload, dict):
+            return {}
+        return dict(payload)
+
+    def write_batch_schedule(
+        self,
+        *,
+        enabled: bool,
+        chat_id: int,
+        user_id: int,
+        count: int,
+        times: list[str],
+        timezone_name: str,
+    ) -> dict[str, Any]:
+        payload = {
+            "enabled": bool(enabled),
+            "chat_id": int(chat_id),
+            "user_id": int(user_id),
+            "count": int(count),
+            "times": list(times),
+            "timezone": str(timezone_name),
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        with self._exclusive():
+            self._write_json(self._batch_schedule_path, payload)
+        return dict(payload)
+
+    def disable_batch_schedule(self) -> dict[str, Any]:
+        with self._exclusive():
+            payload = self._read_json(self._batch_schedule_path, {})
+            if not isinstance(payload, dict):
+                payload = {}
+            payload["enabled"] = False
+            payload["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self._write_json(self._batch_schedule_path, payload)
+        return dict(payload)
+
+    def get_batch_rotation_phase(self, *, cycle_length: int = 7) -> int:
+        normalized_length = max(1, int(cycle_length))
+        with self._exclusive():
+            payload = self._read_json(self._batch_rotation_path, {})
+        if not isinstance(payload, dict):
+            return 0
+        try:
+            phase = int(payload.get("phase", 0))
+        except (TypeError, ValueError):
+            phase = 0
+        return max(0, phase) % normalized_length
+
+    def advance_batch_rotation(self, *, cycle_length: int = 7) -> int:
+        normalized_length = max(1, int(cycle_length))
+        with self._exclusive():
+            payload = self._read_json(self._batch_rotation_path, {})
+            if not isinstance(payload, dict):
+                payload = {}
+            try:
+                phase = int(payload.get("phase", 0))
+            except (TypeError, ValueError):
+                phase = 0
+            next_phase = (max(0, phase) + 1) % normalized_length
+            self._write_json(
+                self._batch_rotation_path,
+                {
+                    "phase": next_phase,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        return next_phase
+
+    def reset_batch_rotation(self) -> None:
+        with self._exclusive():
+            self._write_json(
+                self._batch_rotation_path,
+                {
+                    "phase": 0,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+
+    def write_last_batch_run(self, payload: dict[str, Any]) -> None:
+        data = dict(payload)
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        with self._exclusive():
+            self._write_json(self._last_batch_run_path, data)
+
+    def read_last_batch_run(self) -> dict[str, Any]:
+        with self._exclusive():
+            payload = self._read_json(self._last_batch_run_path, {})
+        return dict(payload) if isinstance(payload, dict) else {}
 
     def read_excluded_accounts(self) -> set[str]:
         with self._exclusive():

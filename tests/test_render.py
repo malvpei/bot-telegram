@@ -1205,6 +1205,10 @@ def test_template_video_render_forces_output_without_audio(monkeypatch):
             "_video_duration_seconds",
             lambda input_video: 13.0,
         )
+        monkeypatch.setattr(
+            "app.render.imageio_ffmpeg.get_ffmpeg_exe",
+            lambda: "ffmpeg",
+        )
 
         def fake_run(cmd, check, capture_output, text=False):
             captured["cmd"] = cmd

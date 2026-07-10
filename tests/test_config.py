@@ -226,3 +226,21 @@ def test_dynamic_pick_max_posts_env(monkeypatch):
         assert settings.dynamic_pick_max_posts_per_account == 12
     finally:
         get_settings.cache_clear()
+
+
+def test_batch_timezone_defaults_to_madrid(monkeypatch):
+    monkeypatch.delenv("BATCH_TIMEZONE", raising=False)
+    get_settings.cache_clear()
+    try:
+        assert get_settings().batch_timezone == "Europe/Madrid"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_batch_timezone_can_be_configured(monkeypatch):
+    monkeypatch.setenv("BATCH_TIMEZONE", "America/New_York")
+    get_settings.cache_clear()
+    try:
+        assert get_settings().batch_timezone == "America/New_York"
+    finally:
+        get_settings.cache_clear()

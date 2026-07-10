@@ -174,3 +174,54 @@ def test_claim_or_check_owner_allows_only_first_telegram_user(state_dir):
         username="other",
     )
     assert store.get_owner_user_id() == 10
+
+
+def test_batch_schedule_and_rotation_survive_new_store_instance(state_dir):
+    store = StateStore(state_dir)
+    store.write_batch_schedule(
+        enabled=True,
+        chat_id=100,
+        user_id=10,
+        count=6,
+        times=["08:00", "18:00"],
+        timezone_name="Europe/Madrid",
+    )
+    assert store.get_batch_rotation_phase() == 0
+    assert store.advance_batch_rotation() == 1
+
+    restored = StateStore(state_dir)
+    schedule = restored.read_batch_schedule()
+    assert schedule["enabled"] is True
+    assert schedule["chat_id"] == 100
+    assert schedule["count"] == 6
+    assert schedule["times"] == ["08:00", "18:00"]
+    assert restored.get_batch_rotation_phase() == 1
+
+
+def test_batch_rotation_wraps_and_can_be_reset(state_dir):
+    store = StateStore(state_dir)
+    for _ in range(7):
+        store.advance_batch_rotation(cycle_length=7)
+    assert store.get_batch_rotation_phase(cycle_length=7) == 0
+
+    store.advance_batch_rotation(cycle_length=7)
+    store.reset_batch_rotation()
+    assert store.get_batch_rotation_phase(cycle_length=7) == 0
+
+
+def test_disabling_batch_schedule_keeps_its_configuration(state_dir):
+    store = StateStore(state_dir)
+    store.write_batch_schedule(
+        enabled=True,
+        chat_id=100,
+        user_id=10,
+        count=4,
+        times=["09:30"],
+        timezone_name="Europe/Madrid",
+    )
+
+    disabled = store.disable_batch_schedule()
+
+    assert disabled["enabled"] is False
+    assert disabled["count"] == 4
+    assert disabled["times"] == ["09:30"]
