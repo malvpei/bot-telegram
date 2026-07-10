@@ -25,6 +25,7 @@ R2_ACCESS_KEY_ID_LENGTH = 32
 class R2Object:
     key: str
     size: int
+    etag: str = ""
 
 
 class R2StorageError(RuntimeError):
@@ -136,7 +137,13 @@ class R2StorageClient:
                     continue
                 if Path(key).suffix.lower() not in extensions:
                     continue
-                objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
+                objects.append(
+                    R2Object(
+                        key=key,
+                        size=int(item.get("Size") or 0),
+                        etag=str(item.get("ETag") or "").strip('"'),
+                    )
+                )
         return objects
 
     def _list_image_objects(self, prefix: str) -> list[R2Object]:
@@ -152,13 +159,31 @@ class R2StorageClient:
                 if not key or key.endswith("/"):
                     continue
                 if Path(key).suffix.lower() in R2_IMAGE_EXTENSIONS:
-                    objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
+                    objects.append(
+                        R2Object(
+                            key=key,
+                            size=int(item.get("Size") or 0),
+                            etag=str(item.get("ETag") or "").strip('"'),
+                        )
+                    )
                     continue
                 if self._key_looks_like_image_content_type(key):
-                    objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
+                    objects.append(
+                        R2Object(
+                            key=key,
+                            size=int(item.get("Size") or 0),
+                            etag=str(item.get("ETag") or "").strip('"'),
+                        )
+                    )
                     continue
                 if self._object_has_content_type(key, "image/"):
-                    objects.append(R2Object(key=key, size=int(item.get("Size") or 0)))
+                    objects.append(
+                        R2Object(
+                            key=key,
+                            size=int(item.get("Size") or 0),
+                            etag=str(item.get("ETag") or "").strip('"'),
+                        )
+                    )
         return objects
 
     def download(self, key: str, destination: Path) -> Path:

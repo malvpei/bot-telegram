@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import os
 import shutil
+import time
 from dataclasses import replace
 from pathlib import Path
 from threading import Lock
@@ -135,6 +137,7 @@ class FakeR2Storage:
         self.listed_prefix: str | None = None
         self.listed_image_prefix: str | None = None
         self.downloaded_key: str | None = None
+        self.download_count = 0
 
     def list_videos(self, prefix: str):
         self.listed_prefix = prefix
@@ -146,6 +149,7 @@ class FakeR2Storage:
 
     def download(self, key: str, destination: Path) -> Path:
         self.downloaded_key = key
+        self.download_count += 1
         destination.parent.mkdir(parents=True, exist_ok=True)
         if Path(key).suffix.lower() in {".jpg", ".jpeg", ".png", ".webp"}:
             Image.new("RGB", (90, 120), (20, 40, 60)).save(destination)
@@ -684,8 +688,41 @@ def test_create_template_video_downloads_from_r2_when_configured(monkeypatch):
         assert service.r2_storage.downloaded_key == "videos/source.mp4"
         assert service.renderer.template_input_video is not None
         assert service.renderer.template_input_video.read_bytes() == b"r2-video"
+
+        service.create_template_video("campaign-a")
+        assert service.r2_storage.download_count == 1
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_r2_template_cache_is_bounded_and_prunes_stale_partials(
+    tmp_path,
+    monkeypatch,
+):
+    cache_dir = tmp_path / "template_cache"
+    cache_dir.mkdir()
+    files = []
+    now = time.time()
+    for index in range(4):
+        path = cache_dir / f"template-{index}.mp4"
+        path.write_bytes(b"x" * 10)
+        os.utime(path, (now - (40 - index), now - (40 - index)))
+        files.append(path)
+    stale_partial = cache_dir / "old.mp4.part"
+    stale_partial.write_bytes(b"partial")
+    stale_time = now - (7 * 60 * 60)
+    os.utime(stale_partial, (stale_time, stale_time))
+    monkeypatch.setattr("app.service.R2_TEMPLATE_CACHE_MAX_ITEMS", 2)
+    monkeypatch.setattr("app.service.R2_TEMPLATE_CACHE_MAX_BYTES", 25)
+
+    VideoCreationService._prune_r2_template_cache(
+        cache_dir,
+        keep_path=files[-1],
+    )
+
+    remaining = sorted(cache_dir.glob("*.mp4"))
+    assert remaining == files[-2:]
+    assert not stale_partial.exists()
 
 
 def test_template_video_queue_cycles_and_reports_restart():

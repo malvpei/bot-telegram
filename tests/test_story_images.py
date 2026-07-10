@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
+from threading import Barrier, Event, Lock
 
 import pytest
 from PIL import Image
@@ -123,6 +124,65 @@ def test_story_generator_requires_fal_key(tmp_path):
             STORY_SCENES[0],
             tmp_path / "story.png",
         )
+
+
+def test_story_scenes_are_generated_with_bounded_parallelism(tmp_path, monkeypatch):
+    settings = replace(get_settings(), story_image_workers=3)
+    generator = StoryCarouselImageGenerator(settings)
+    reference = tmp_path / "reference.jpg"
+    Image.new("RGB", (90, 120), (20, 40, 60)).save(reference)
+    barrier = Barrier(3, timeout=3)
+    counter_lock = Lock()
+    active = 0
+    max_active = 0
+
+    def fake_generate(reference_path, scene, output_path):
+        nonlocal active, max_active
+        index = int(output_path.name.split("_")[1])
+        with counter_lock:
+            active += 1
+            max_active = max(max_active, active)
+        if index <= 3:
+            barrier.wait()
+        Image.new("RGB", (90, 120), (index * 20, 40, 60)).save(output_path)
+        with counter_lock:
+            active -= 1
+
+    monkeypatch.setattr(generator, "_generate_scene", fake_generate)
+
+    slides = generator.generate_slides(reference, tmp_path / "job")
+
+    assert max_active == 3
+    assert [slide.source_id for slide in slides] == [
+        f"story_ai:{index}:{scene.role.value}"
+        for index, scene in enumerate(STORY_SCENES, start=1)
+    ]
+
+
+def test_story_generator_waits_for_started_requests_after_an_error(tmp_path, monkeypatch):
+    settings = replace(get_settings(), story_image_workers=2)
+    generator = StoryCarouselImageGenerator(settings)
+    reference = tmp_path / "reference.jpg"
+    Image.new("RGB", (90, 120), (20, 40, 60)).save(reference)
+    second_started = Event()
+    second_finished = Event()
+
+    def fake_generate(reference_path, scene, output_path):
+        index = int(output_path.name.split("_")[1])
+        if index == 1:
+            assert second_started.wait(timeout=1)
+            raise RuntimeError("provider failed")
+        if index == 2:
+            second_started.set()
+            Event().wait(0.1)
+            second_finished.set()
+
+    monkeypatch.setattr(generator, "_generate_scene", fake_generate)
+
+    with pytest.raises(RuntimeError, match="provider failed"):
+        generator.generate_slides(reference, tmp_path / "job")
+
+    assert second_finished.is_set()
 
 
 def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import gc
 import shutil
+import weakref
 from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
@@ -9,7 +11,15 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 from app.config import get_settings
-from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoType
+from app.models import (
+    ImageMetrics,
+    Language,
+    MediaCandidate,
+    SlidePlan,
+    SlideRole,
+    VideoPlan,
+    VideoType,
+)
 from app.opencv_compat import EmptyCascade, EmptyPeopleDetector
 from app.render import (
     FEBRUARY_FIXED_SCREEN_TEXT_MARGIN,
@@ -19,9 +29,11 @@ from app.render import (
     HOOK_MIN_FONT_SIZE,
     HOOK_SIDE_MARGIN,
     HOOK_TEXT_STROKE_FILL,
+    HOOK_TEXT_STROKE_WIDTH,
     SAFE_TEXT_BOTTOM_MARGIN,
     SAFE_TEXT_TOP_MARGIN,
     TEXT_AVOID_CLEARANCE_MARGIN,
+    TEXT_FACE_AVOID_WEIGHT,
     TEXT_FALLBACK_HEAD_AVOID_WEIGHT,
     TYPE_1_HOOK_SIDE_MARGIN,
     TYPE_3_TITLE_FONT_SIZE,
@@ -362,7 +374,7 @@ def test_hook_text_renders_in_middle_third_without_avoid_regions(monkeypatch):
         ys, _xs = np.where(white)
         center_y = (ys.min() + ys.max()) / 2
 
-        assert still.height / 3 <= center_y <= still.height * 2 / 3
+        assert abs((center_y / still.height) - 0.5) <= 0.08
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -468,7 +480,7 @@ def test_hook_text_uses_slightly_softer_stroke(monkeypatch):
 
     renderer._draw_hook_text(image, "I would have paid to know these 4 things")
 
-    assert captured["stroke_width"] == 3
+    assert captured["stroke_width"] == HOOK_TEXT_STROKE_WIDTH
     assert captured["stroke_fill"] == HOOK_TEXT_STROKE_FILL
 
 
@@ -822,6 +834,325 @@ def test_type_4_story_caption_prefers_top_area():
     assert renderer._caption_preferred_centers(slide)[0] == 0.20
 
 
+def test_type_4_success_caption_also_uses_reserved_top_area():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    slide = SlidePlan(
+        index=6,
+        role=SlideRole.STORY_SUCCESS_COMIC,
+        text="Despues de mucho trabajo consegui mi objetivo",
+        media=_candidate(Path("source.jpg")),
+    )
+
+    assert renderer._caption_preferred_centers(slide)[0] == 0.20
+
+
+def test_front_and_profile_faces_are_combined_for_multi_person_images():
+    class StaticCascade:
+        def __init__(self, boxes):
+            self.boxes = np.asarray(boxes, dtype=np.int32)
+
+        def empty(self):
+            return False
+
+        def detectMultiScale(self, *args, **kwargs):
+            return self.boxes
+
+    class StaticPeopleDetector:
+        def __init__(self):
+            self.calls = 0
+
+        def detectMultiScale(self, *args, **kwargs):
+            self.calls += 1
+            return np.empty((0, 4), dtype=np.int32), np.asarray([])
+
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    renderer._face_detector = StaticCascade([(24, 110, 58, 58)])
+    renderer._profile_face_detector = StaticCascade([(210, 180, 64, 64)])
+    renderer._eye_detector = StaticCascade([])
+    people_detector = StaticPeopleDetector()
+    renderer._people_detector = people_detector
+
+    regions = renderer._text_avoid_regions(
+        Image.new("RGBA", (360, 640), (80, 100, 120, 255))
+    )
+
+    face_regions = [box for box, weight in regions if weight == TEXT_FACE_AVOID_WEIGHT]
+
+    assert len(face_regions) >= 2
+    assert any(box[0] == 0 for box in face_regions)
+    assert any(box[0] > 100 for box in face_regions)
+    assert people_detector.calls == 1
+
+
+def test_profile_face_cascade_is_optional_at_renderer_startup(monkeypatch):
+    cascade_calls = []
+
+    def fake_build_cascade(filename, *, required=True):
+        cascade_calls.append((filename, required))
+        return EmptyCascade()
+
+    monkeypatch.setattr("app.render.build_cascade", fake_build_cascade)
+
+    VideoRenderer(replace(get_settings(), width=360, height=640))
+
+    assert (
+        "haarcascade_profileface.xml",
+        False,
+    ) in cascade_calls
+
+
+def test_text_overlay_layout_is_computed_once_for_repeated_frames(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "source.jpg"
+        Image.new("RGB", (360, 640), (30, 40, 50)).save(image_path)
+        renderer = VideoRenderer(
+            replace(
+                get_settings(),
+                root_dir=root,
+                width=360,
+                height=640,
+                fonts_dir=root / "fonts",
+            )
+        )
+        calls = 0
+
+        def fixed_layout(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            return 260
+
+        monkeypatch.setattr(renderer, "_safe_text_start_y", fixed_layout)
+        slide = SlidePlan(
+            index=1,
+            role=SlideRole.HOOK,
+            text="Como crear una tienda rentable desde cero",
+            media=_candidate(image_path),
+        )
+
+        renderer.render_slide_still(slide, VideoType.TYPE_1)
+        renderer.render_slide_still(slide, VideoType.TYPE_1)
+
+        assert calls == 1
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_video_overlay_protects_face_across_the_full_zoom_path(monkeypatch):
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    source = Image.new("RGB", (800, 640), (30, 40, 50))
+    slide = SlidePlan(
+        index=1,
+        role=SlideRole.HOOK,
+        text="Texto centrado y seguro",
+        media=_candidate(Path("moving-face.jpg")),
+    )
+    detected_region = ((400, 100, 500, 220), TEXT_FACE_AVOID_WEIGHT)
+    captured_regions = []
+    detection_calls = 0
+
+    def detect_once(image):
+        nonlocal detection_calls
+        detection_calls += 1
+        return [detected_region]
+
+    def capture_overlay(image, slide, video_type, *, avoid_regions=None):
+        captured_regions.extend(avoid_regions or [])
+
+    monkeypatch.setattr(renderer, "_text_avoid_regions", detect_once)
+    monkeypatch.setattr(renderer, "_draw_text", capture_overlay)
+
+    renderer._prepare_slide_text_overlay(slide, source, VideoType.TYPE_1)
+
+    assert detection_calls == 1
+    assert len(captured_regions) == 1
+    swept_box, weight = captured_regions[0]
+    assert weight == TEXT_FACE_AVOID_WEIGHT
+    assert swept_box[0] < 100
+    assert swept_box[2] == 360
+
+
+def test_person_fallback_covers_story_scenes_and_missed_portraits():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    story = SlidePlan(
+        index=1,
+        role=SlideRole.STORY_MCDONALD,
+        text="Historia",
+        media=_candidate(Path("story.png")),
+    )
+    portrait_media = _candidate(Path("portrait.jpg"))
+    portrait_media.metrics = ImageMetrics(
+        brightness=130,
+        daylight=0.70,
+        sharpness=180,
+        faces=0,
+        aspect_ratio=0.80,
+        is_landscape=False,
+        outdoor_score=0.2,
+        casual_score=0.2,
+        luxury_score=0.2,
+        quality_score=0.75,
+    )
+    portrait = SlidePlan(
+        index=2,
+        role=SlideRole.OCTOBER,
+        text="Retrato",
+        media=portrait_media,
+    )
+
+    assert renderer._slide_expects_person(story)
+    assert renderer._slide_expects_person(portrait)
+    story_fallback = renderer._fallback_slide_avoid_regions(story, 360, 640)
+    assert min(region[1] for region, _weight in story_fallback) > int(640 * 0.25)
+
+
+def test_repeated_fixed_background_is_decoded_only_once(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "background.jpg"
+        Image.new("RGB", (1200, 1200), (30, 40, 50)).save(image_path)
+        renderer = VideoRenderer(
+            replace(get_settings(), root_dir=root, width=360, height=640)
+        )
+        original_load = renderer._load_source_image
+        loads = 0
+
+        def counting_load(path):
+            nonlocal loads
+            loads += 1
+            return original_load(path)
+
+        monkeypatch.setattr(renderer, "_load_source_image", counting_load)
+        monkeypatch.setattr(
+            renderer,
+            "_composite_type_3_tool_overlay",
+            lambda image, slide: None,
+        )
+        for index, role in enumerate(
+            (SlideRole.TOOL_STORE, SlideRole.TOOL_PRODUCT_SEARCH),
+            start=2,
+        ):
+            renderer.render_slide_still(
+                SlidePlan(
+                    index=index,
+                    role=role,
+                    text="Herramienta",
+                    media=_candidate(image_path),
+                    fixed_asset=True,
+                ),
+                VideoType.TYPE_3,
+            )
+
+        assert loads == 1
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_video_render_reuses_fixed_background_for_every_frame(tmp_path, monkeypatch):
+    image_path = tmp_path / "background.jpg"
+    Image.new("RGB", (900, 900), (30, 40, 50)).save(image_path)
+    renderer = VideoRenderer(
+        replace(
+            get_settings(),
+            root_dir=tmp_path,
+            width=180,
+            height=320,
+            fps=2,
+            slide_seconds=1.0,
+            transition_seconds=0.5,
+        )
+    )
+    original_load = renderer._load_source_image
+    loads = 0
+
+    def counting_load(path):
+        nonlocal loads
+        loads += 1
+        return original_load(path)
+
+    class MemoryWriter:
+        def __init__(self):
+            self.frames = []
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def append_data(self, frame):
+            self.frames.append(frame)
+
+    writer = MemoryWriter()
+    monkeypatch.setattr(renderer, "_load_source_image", counting_load)
+    monkeypatch.setattr(
+        renderer,
+        "_composite_type_3_tool_overlay",
+        lambda image, slide: None,
+    )
+    monkeypatch.setattr("app.render.imageio.get_writer", lambda *args, **kwargs: writer)
+    monkeypatch.setattr(renderer, "_enforce_size_limit", lambda path: None)
+    slides = [
+        SlidePlan(
+            index=index,
+            role=role,
+            text="",
+            media=_candidate(image_path),
+            fixed_asset=True,
+        )
+        for index, role in enumerate(
+            (SlideRole.TOOL_STORE, SlideRole.TOOL_PRODUCT_SEARCH),
+            start=1,
+        )
+    ]
+    plan = VideoPlan(
+        chosen_account="test",
+        video_type=VideoType.TYPE_3,
+        language=Language.ES,
+        slides=slides,
+    )
+
+    renderer.render(plan, tmp_path / "job")
+
+    assert loads == 1
+    assert len(writer.frames) == 4
+
+
+def test_face_detector_keeps_original_small_face_threshold_after_downscale():
+    class RecordingCascade:
+        def __init__(self):
+            self.min_size = None
+
+        def empty(self):
+            return False
+
+        def detectMultiScale(self, *args, **kwargs):
+            self.min_size = kwargs["minSize"]
+            return np.empty((0, 4), dtype=np.int32)
+
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    detector = RecordingCascade()
+    renderer._face_detector = detector
+
+    renderer._detect_render_faces(np.zeros((720, 405), dtype=np.uint8))
+
+    assert detector.min_size == (16, 16)
+
+
+def test_font_cache_does_not_keep_renderer_instances_alive():
+    def cached_renderer_reference():
+        renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+        renderer._load_font(size=24, bold=True)
+        return weakref.ref(renderer)
+
+    renderer_reference = cached_renderer_reference()
+    gc.collect()
+
+    assert renderer_reference() is None
+
+
 def test_fixed_february_title_card_has_symmetric_minimum_width(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -922,6 +1253,7 @@ def test_text_avoid_regions_keeps_fallback_when_cv2_detectors_are_unavailable():
     settings = replace(get_settings(), width=360, height=640)
     renderer = VideoRenderer(settings)
     renderer._face_detector = EmptyCascade()
+    renderer._profile_face_detector = EmptyCascade()
     renderer._eye_detector = EmptyCascade()
     renderer._people_detector = EmptyPeopleDetector()
     image = Image.new("RGBA", (360, 640), (20, 20, 20, 255))

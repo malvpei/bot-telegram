@@ -1,9 +1,11 @@
 ﻿from __future__ import annotations
 
+import hashlib
 import logging
 import os
 import random
 import shutil
+import time
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -38,6 +40,9 @@ from app.texts import ScriptGenerator
 
 LOGGER = logging.getLogger(__name__)
 VIDEO_TEMPLATE_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
+R2_TEMPLATE_CACHE_MAX_ITEMS = 8
+R2_TEMPLATE_CACHE_MAX_BYTES = 512 * 1024 * 1024
+R2_TEMPLATE_PARTIAL_MAX_AGE_SECONDS = 6 * 60 * 60
 TEMPLATE_VIDEO_SOCIAL_COPIES: dict[Language, tuple[SocialCopy, ...]] = {
     Language.ES: (
         SocialCopy(
@@ -534,6 +539,19 @@ class VideoCreationService:
 
         self._cleanup_old_outputs()
 
+        if hasattr(self, "pool"):
+            pool_counts = self.pool.stock_counts(usernames)
+            pool_remaining = int(
+                pool_counts.get("by_type", {}).get(request.video_type.value, 0)
+            )
+            pool_low_stock = pool_remaining <= max(
+                1,
+                self.settings.pool_low_stock_threshold,
+            )
+        else:
+            pool_remaining = 0
+            pool_low_stock = False
+
         return GenerationResult(
             video_path=video_path,
             script_path=script_path,
@@ -544,21 +562,8 @@ class VideoCreationService:
             language=request.language,
             fallback_accounts=plan.fallback_accounts,
             slides=list(plan.slides),
-            pool_remaining=(
-                int(
-                    self.pool.stock_counts(usernames)["by_type"].get(
-                        request.video_type.value,
-                        0,
-                    )
-                )
-                if hasattr(self, "pool")
-                else 0
-            ),
-            pool_low_stock=(
-                self.pool.is_low_stock(request.video_type, usernames)
-                if hasattr(self, "pool")
-                else False
-            ),
+            pool_remaining=pool_remaining,
+            pool_low_stock=pool_low_stock,
             separate_slide_text=request.separate_slide_text,
         )
 
@@ -1080,7 +1085,7 @@ class VideoCreationService:
     def _download_template_video_from_r2(
         self,
         prefix: str | None,
-        job_dir: Path,
+        _job_dir: Path,
     ) -> tuple[Path, bool]:
         r2_prefix = (
             prefix.strip().lstrip("/")
@@ -1101,8 +1106,95 @@ class VideoCreationService:
             ordered_videos[0],
         )
         suffix = Path(selected.key).suffix.lower() or ".mp4"
-        local_input = job_dir / "input" / f"source{suffix}"
-        return self.r2_storage.download(selected.key, local_input), queue_restarted
+        object_identity = "|".join(
+            (
+                self.settings.r2_bucket,
+                self.settings.r2_account_id or self.settings.r2_endpoint_url,
+                selected.key,
+                str(getattr(selected, "etag", "") or ""),
+            )
+        )
+        cache_name = (
+            hashlib.sha256(object_identity.encode("utf-8")).hexdigest()[:20]
+            + f"-{selected.size}"
+            + suffix
+        )
+        cache_dir = (
+            self.settings.data_dir
+            / "r2_downloads"
+            / "template_cache"
+        )
+        local_input = cache_dir / cache_name
+        if local_input.exists() and local_input.stat().st_size > 0:
+            try:
+                os.utime(local_input, None)
+            except OSError:
+                pass
+            self._prune_r2_template_cache(cache_dir, keep_path=local_input)
+            LOGGER.info("Using cached R2 template video %s", selected.key)
+            return local_input, queue_restarted
+        self._prune_r2_template_cache(cache_dir)
+        partial_input = local_input.with_suffix(local_input.suffix + ".part")
+        try:
+            downloaded = self.r2_storage.download(selected.key, partial_input)
+            if not downloaded.exists() or downloaded.stat().st_size <= 0:
+                raise RuntimeError(
+                    f"R2 devolvio un video vacio para {selected.key}."
+                )
+            local_input.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(downloaded, local_input)
+        except Exception:
+            try:
+                partial_input.unlink()
+            except OSError:
+                pass
+            raise
+        self._prune_r2_template_cache(cache_dir, keep_path=local_input)
+        return local_input, queue_restarted
+
+    @staticmethod
+    def _prune_r2_template_cache(
+        cache_dir: Path,
+        *,
+        keep_path: Path | None = None,
+    ) -> None:
+        if not cache_dir.exists():
+            return
+        now = time.time()
+        cached_files: list[tuple[Path, os.stat_result]] = []
+        for path in cache_dir.iterdir():
+            if not path.is_file():
+                continue
+            try:
+                stat = path.stat()
+            except OSError:
+                continue
+            if path.suffix.lower() == ".part":
+                if now - stat.st_mtime >= R2_TEMPLATE_PARTIAL_MAX_AGE_SECONDS:
+                    try:
+                        path.unlink()
+                    except OSError:
+                        pass
+                continue
+            cached_files.append((path, stat))
+
+        cached_files.sort(key=lambda item: item[1].st_mtime, reverse=True)
+        retained_items = 0
+        retained_bytes = 0
+        for path, stat in cached_files:
+            must_keep = keep_path is not None and path == keep_path
+            within_limits = (
+                retained_items < R2_TEMPLATE_CACHE_MAX_ITEMS
+                and retained_bytes + stat.st_size <= R2_TEMPLATE_CACHE_MAX_BYTES
+            )
+            if must_keep or within_limits:
+                retained_items += 1
+                retained_bytes += stat.st_size
+                continue
+            try:
+                path.unlink()
+            except OSError:
+                pass
 
     def _resolve_template_video_dir(self, folder: str | None) -> Path:
         if folder is None or not folder.strip():
@@ -1257,6 +1349,11 @@ class VideoCreationService:
         retention_days = self.settings.output_retention_days
         if retention_days <= 0:
             return
+        now_monotonic = time.monotonic()
+        last_cleanup = getattr(self, "_last_output_cleanup_monotonic", None)
+        if last_cleanup is not None and now_monotonic - last_cleanup < 3600:
+            return
+        self._last_output_cleanup_monotonic = now_monotonic
         cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
         outputs_dir = self.settings.outputs_dir
         if not outputs_dir.exists():

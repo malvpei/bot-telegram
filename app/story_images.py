@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import mimetypes
 import time
+from concurrent.futures import Future, ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -164,10 +165,41 @@ class StoryCarouselImageGenerator:
     ) -> list[MediaCandidate]:
         scenes_dir = job_dir / "story_ai_sources"
         scenes_dir.mkdir(parents=True, exist_ok=True)
+        workers = max(
+            1,
+            min(len(STORY_SCENES), int(self.settings.story_image_workers or 1)),
+        )
+        scene_outputs = [
+            (
+                index,
+                scene,
+                scenes_dir / f"story_{index:02d}_{scene.role.value}.png",
+            )
+            for index, scene in enumerate(STORY_SCENES, start=1)
+        ]
+        with ThreadPoolExecutor(
+            max_workers=workers,
+            thread_name_prefix="story-image",
+        ) as executor:
+            futures: list[Future[None]] = [
+                executor.submit(
+                    self._generate_scene,
+                    reference_image_path,
+                    scene,
+                    output_path,
+                )
+                for _index, scene, output_path in scene_outputs
+            ]
+            try:
+                for future in as_completed(futures):
+                    future.result()
+            except Exception:
+                for future in futures:
+                    future.cancel()
+                raise
+
         generated: list[MediaCandidate] = []
-        for index, scene in enumerate(STORY_SCENES, start=1):
-            output_path = scenes_dir / f"story_{index:02d}_{scene.role.value}.png"
-            self._generate_scene(reference_image_path, scene, output_path)
+        for index, scene, output_path in scene_outputs:
             generated.append(
                 self._candidate_for_path(
                     output_path,

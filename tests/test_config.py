@@ -244,3 +244,24 @@ def test_batch_timezone_can_be_configured(monkeypatch):
         assert get_settings().batch_timezone == "America/New_York"
     finally:
         get_settings.cache_clear()
+
+
+def test_fast_ffmpeg_and_story_worker_defaults(monkeypatch):
+    monkeypatch.delenv("FFMPEG_PRESET", raising=False)
+    monkeypatch.delenv("STORY_IMAGE_WORKERS", raising=False)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        assert settings.ffmpeg_preset == "veryfast"
+        assert settings.story_image_workers == 3
+    finally:
+        get_settings.cache_clear()
+
+
+def test_invalid_ffmpeg_preset_falls_back_to_safe_default(monkeypatch):
+    monkeypatch.setenv("FFMPEG_PRESET", "not-a-preset")
+    get_settings.cache_clear()
+    try:
+        assert get_settings().ffmpeg_preset == "veryfast"
+    finally:
+        get_settings.cache_clear()

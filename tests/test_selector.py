@@ -1475,7 +1475,121 @@ def test_type_3_backgrounds_are_cached_between_plan_builds(temp_workspace, monke
     selector.create_plan({"type3_cache": candidates}, VideoType.TYPE_3, Language.ES)
 
     background_calls = [source_id for source_id in analyzed_ids if source_id.startswith("tipo3_fondo:")]
-    assert len(background_calls) == 3
+    # Decorative backgrounds do not need face/body metrics. Reading only their
+    # dimensions avoids decoding and analysing several huge 8K assets.
+    assert background_calls == []
+
+
+def test_type_3_background_catalog_skips_truncated_images(temp_workspace):
+    settings, state = temp_workspace
+    backgrounds_dir = settings.root_dir / "tipo3" / "fondocolores"
+    truncated_path = backgrounds_dir / "truncated.png"
+    Image.new("RGB", (320, 480), (40, 80, 120)).save(truncated_path)
+    payload = truncated_path.read_bytes()
+    truncated_path.write_bytes(payload[: len(payload) // 2])
+
+    backgrounds = ImageSelector(settings, state)._type_3_backgrounds()
+
+    assert truncated_path not in {background.local_path for background in backgrounds}
+
+
+def test_image_analysis_is_restored_from_persistent_cache(temp_workspace, monkeypatch):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "analysis_cache"
+    account_dir.mkdir()
+    first = _make_candidate(
+        account_dir,
+        username="analysis_cache",
+        idx=1,
+        caption="portrait",
+    )
+    selector = ImageSelector(settings, state)
+    original_analyze = selector._analyze_image
+    analyze_calls = 0
+
+    def counting_analyze(media):
+        nonlocal analyze_calls
+        analyze_calls += 1
+        return original_analyze(media)
+
+    monkeypatch.setattr(selector, "_analyze_image", counting_analyze)
+    selector._prepare_candidates([first])
+
+    restored = replace(
+        first,
+        metrics=None,
+        content_fingerprint=None,
+        content_fingerprints=[],
+    )
+    second_selector = ImageSelector(settings, state)
+    monkeypatch.setattr(
+        second_selector,
+        "_analyze_image",
+        lambda media: (_ for _ in ()).throw(
+            AssertionError("cached image must not be analysed again")
+        ),
+    )
+    second_selector._prepare_candidates([restored])
+
+    assert analyze_calls == 1
+    assert restored.metrics == first.metrics
+    assert restored.content_fingerprints == first.content_fingerprints
+
+
+def test_image_analysis_cache_is_invalidated_when_caption_changes(
+    temp_workspace,
+    monkeypatch,
+):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "analysis_caption_cache"
+    account_dir.mkdir()
+    first = _make_candidate(
+        account_dir,
+        username="analysis_caption_cache",
+        idx=1,
+        caption="portrait indoors",
+    )
+    ImageSelector(settings, state)._prepare_candidates([first])
+    changed = replace(
+        first,
+        caption="outdoor mountain landscape",
+        metrics=None,
+        content_fingerprint=None,
+        content_fingerprints=[],
+    )
+    selector = ImageSelector(settings, state)
+    original_analyze = selector._analyze_image
+    analyze_calls = 0
+
+    def counting_analyze(media):
+        nonlocal analyze_calls
+        analyze_calls += 1
+        return original_analyze(media)
+
+    monkeypatch.setattr(selector, "_analyze_image", counting_analyze)
+    selector._prepare_candidates([changed])
+
+    assert analyze_calls == 1
+    assert changed.metrics is not None
+
+
+def test_used_media_snapshot_avoids_repeated_state_reads(temp_workspace, monkeypatch):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "used_snapshot"
+    account_dir.mkdir()
+    candidate = _make_candidate(account_dir, username="used_snapshot", idx=1)
+    state.mark_media_used([candidate.source_id], "old-job")
+    selector = ImageSelector(settings, state)
+    selector._used_media_snapshot = state.read_used_media()
+    monkeypatch.setattr(
+        state,
+        "any_media_used",
+        lambda keys: (_ for _ in ()).throw(
+            AssertionError("snapshot should avoid per-candidate JSON reads")
+        ),
+    )
+
+    assert selector._is_candidate_used(candidate) is True
 
 
 def test_type_3_background_rotation_is_global_across_languages(temp_workspace):

@@ -1165,6 +1165,49 @@ def test_pool_refill_prunes_used_items_before_adding_replacement_stock():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_addition_stops_analysis_as_soon_as_target_is_ready(monkeypatch):
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+
+    class CountingSelector(FakePlanSelector):
+        def __init__(self):
+            self.prepared_batch_sizes: list[int] = []
+
+        def _prepare_candidates(self, media_items):
+            self.prepared_batch_sizes.append(len(media_items))
+
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        selector = CountingSelector()
+        service = MediaPoolService(settings, state, None, selector)  # type: ignore[arg-type]
+        candidates = [
+            _candidate(root, f"alpha:POST{index}:0", f"sha256:{index}")
+            for index in range(40)
+        ]
+        ready_calls = 0
+
+        def ready_after_first_batch(*args, **kwargs):
+            nonlocal ready_calls
+            ready_calls += 1
+            return ready_calls >= 2
+
+        monkeypatch.setattr(service, "_pool_ready", ready_after_first_batch)
+        added, valid = service._add_candidates_to_pool(
+            {"version": 1, "items": [], "cursor_by_type": {}},
+            candidates,
+            used_media={},
+            usernames=["alpha"],
+            target=100,
+        )
+
+        assert (added, valid) == (16, 16)
+        assert selector.prepared_batch_sizes == [16]
+        assert ready_calls == 2
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def _candidate(root: Path, source_id: str, dhash: str) -> MediaCandidate:
     path = root / (source_id.replace(":", "_") + ".jpg")
     Image.new("RGB", (32, 32), (100, 100, 100)).save(path)

@@ -45,6 +45,7 @@ class StateStore:
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
         self._last_batch_run_path = self.state_dir / "last_batch_run.json"
+        self._image_analysis_cache_path = self.state_dir / "image_analysis_cache.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
         self._persistence_marker_path = self.state_dir / "persistence_marker.json"
         self._lock_path = self.state_dir / ".state.lock"
@@ -497,6 +498,24 @@ class StateStore:
         with self._exclusive():
             payload = self._read_json(self._last_batch_run_path, {})
         return dict(payload) if isinstance(payload, dict) else {}
+
+    def read_image_analysis_cache(self) -> dict[str, Any]:
+        with self._exclusive():
+            payload = self._read_json(self._image_analysis_cache_path, {})
+        if not isinstance(payload, dict):
+            return {}
+        items = payload.get("items")
+        if not isinstance(items, dict):
+            payload["items"] = {}
+        return payload
+
+    def write_image_analysis_cache(self, payload: dict[str, Any]) -> None:
+        data = dict(payload)
+        if not isinstance(data.get("items"), dict):
+            data["items"] = {}
+        data["updated_at"] = datetime.now(timezone.utc).isoformat()
+        with self._exclusive():
+            self._write_json(self._image_analysis_cache_path, data)
 
     def read_excluded_accounts(self) -> set[str]:
         with self._exclusive():

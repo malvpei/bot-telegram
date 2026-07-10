@@ -26,6 +26,7 @@ MIN_POOL_ITEMS_BY_TYPE = {
     VideoType.TYPE_2: 4,
     VideoType.TYPE_3: 1,
 }
+POOL_READINESS_CHECK_INTERVAL = 16
 
 
 class MediaPoolService:
@@ -161,11 +162,7 @@ class MediaPoolService:
         pool["updated_at"] = datetime.now(timezone.utc).isoformat()
         self.state.write_media_pool(pool)
         after = self._stock_counts(pool, used_media=used_media, usernames=usernames)
-        viable_accounts_after = self._viable_accounts_by_type(
-            pool,
-            usernames,
-            used_media=used_media,
-        )
+        viable_accounts_after = after["viable_accounts_by_type"]
         viable_after = {
             video_type: bool(accounts)
             for video_type, accounts in viable_accounts_after.items()
@@ -184,21 +181,22 @@ class MediaPoolService:
             "viable_after": viable_after,
             "ready_by_type": ready_by_type,
             "viable_accounts_after": viable_accounts_after,
-            "ready": self._pool_ready(
-                pool,
-                usernames,
-                target,
-                used_media=used_media,
-            ),
+            "ready": all(ready_by_type.values()),
             "added": sum(added_by_account.values()),
             "pruned": pruned,
             "added_by_account": added_by_account,
             "valid_by_account": valid_by_account,
-            "valid_by_type_by_account": self._valid_by_type_by_account(
-                pool,
-                added_by_account,
-                used_media=used_media,
-            ),
+            "valid_by_type_by_account": {
+                account: {
+                    video_type.value: int(
+                        after["by_type_by_account"]
+                        .get(account.lower(), {})
+                        .get(video_type.value, 0)
+                    )
+                    for video_type in ALL_VIDEO_TYPES
+                }
+                for account in added_by_account
+            },
             "fresh_limit": fresh_limit,
             "fresh_limit_reached": fresh_limit_reached,
             "fresh_attempts": fresh_attempts,
@@ -515,35 +513,55 @@ class MediaPoolService:
             if check_readiness
             else False
         )
-        for candidate in candidates:
-            if ready:
-                break
+        if ready:
+            return 0, 0
 
+        pending_candidates: list[MediaCandidate] = []
+        for candidate in candidates:
             known_keys = self._candidate_known_keys(candidate)
             if known_keys and (
                 self._keys_used(list(known_keys), used_media)
                 or self._keys_conflict(seen_keys, known_keys)
             ):
                 continue
+            pending_candidates.append(candidate)
+        batch_size = (
+            POOL_READINESS_CHECK_INTERVAL
+            if check_readiness
+            else max(1, len(pending_candidates))
+        )
+        for batch_start in range(0, len(pending_candidates), batch_size):
+            if ready:
+                break
+            batch = pending_candidates[batch_start : batch_start + batch_size]
+            self.selector._prepare_candidates(batch)
 
-            self.selector._prepare_candidates([candidate])
-            if candidate.metrics is None:
-                continue
-            keys = self.selector.reservation_keys_for([candidate])
-            if not keys:
-                continue
-            incoming = set(keys)
-            if self._keys_used(keys, used_media) or self._keys_conflict(
-                seen_keys, incoming
-            ):
-                continue
-            eligible_types = self._eligible_types(candidate)
-            if not eligible_types:
-                continue
-            items.append(self._candidate_to_item(candidate, eligible_types))
-            seen_keys.update(incoming)
-            valid += 1
-            added += 1
+            for candidate in batch:
+                known_keys = self._candidate_known_keys(candidate)
+                if known_keys and (
+                    self._keys_used(list(known_keys), used_media)
+                    or self._keys_conflict(seen_keys, known_keys)
+                ):
+                    continue
+
+                if candidate.metrics is None:
+                    continue
+                keys = self.selector.reservation_keys_for([candidate])
+                if not keys:
+                    continue
+                incoming = set(keys)
+                if self._keys_used(keys, used_media) or self._keys_conflict(
+                    seen_keys, incoming
+                ):
+                    continue
+                eligible_types = self._eligible_types(candidate)
+                if not eligible_types:
+                    continue
+                items.append(self._candidate_to_item(candidate, eligible_types))
+                seen_keys.update(incoming)
+                valid += 1
+                added += 1
+
             if check_readiness:
                 ready = self._pool_ready(
                     pool,

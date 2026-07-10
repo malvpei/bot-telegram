@@ -166,6 +166,22 @@ cooldown durante `ACCOUNT_COOLDOWN_DAYS`. Después, **/create** elige desde ese
 pool local, rota cuentas para evitar favoritismo, y permite **Pasar cuenta** si
 quieres forzar la siguiente cuenta disponible.
 
+### Colocacion de texto y rendimiento
+
+El renderer detecta caras frontales y de perfil sobre una copia reducida de la
+imagen, reserva una zona alrededor de cabeza/ojos y solo despues elige la zona
+mas centrada y con menos ruido visual. Los hooks usan un contorno reforzado y
+los captions mantienen tarjeta blanca. El layout se calcula una vez por slide y
+se reutiliza durante todos sus frames.
+
+Las metricas y fingerprints de las fotos quedan cacheadas en
+`data/state/image_analysis_cache.json`. Los fondos decorativos del tipo 3 no se
+analizan como retratos y el mismo canvas se reutiliza en sus seis slides. Los
+videos plantilla usan `FFMPEG_PRESET=veryfast` por defecto y conservan en
+`data/r2_downloads/template_cache` los originales ya descargados de R2, con una
+poda LRU limitada a 8 archivos o 512 MB. El
+carrusel IA genera hasta `STORY_IMAGE_WORKERS=3` escenas simultaneas.
+
 ### Lotes y programacion diaria
 
 `/batch [cantidad]` mete varias creaciones en una cola y mantiene el bot

@@ -5,7 +5,8 @@ import math
 import random
 import re
 import hashlib
-from dataclasses import dataclass, replace
+import time
+from dataclasses import asdict, dataclass, replace
 from typing import Callable
 
 import cv2
@@ -113,6 +114,8 @@ MIN_VISIBLE_FACE_AREA_RATIO = 0.006
 MIN_VISIBLE_PERSON_FOCUS_SCORE = 0.22
 MIN_VISIBLE_BODY_AREA_RATIO = 0.035
 MIN_VISIBLE_BODY_FOCUS_SCORE = 0.18
+IMAGE_ANALYSIS_CACHE_VERSION = 2
+IMAGE_ANALYSIS_CACHE_MAX_ITEMS = 5000
 
 
 def _word_in_text(word: str, lowered: str) -> bool:
@@ -135,6 +138,7 @@ class ImageSelector:
         self._fixed_media_cache: MediaCandidate | None = None
         self._type_2_tip3_fixed_media_cache: MediaCandidate | None = None
         self._type_3_backgrounds_cache: tuple[MediaCandidate, ...] | None = None
+        self._used_media_snapshot: dict[str, object] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -146,19 +150,57 @@ class ImageSelector:
         video_type: VideoType,
         language: Language,
     ) -> VideoPlan:
-        # Pre-compute metrics once per candidate before any per-account loop.
-        for items in catalog.values():
-            self._prepare_candidates(items)
+        previous_snapshot = self._used_media_snapshot
+        snapshot = self.state.read_used_media()
+        self._used_media_snapshot = snapshot
+        try:
+            # Skip exact source IDs before decoding images. Perceptual
+            # fingerprint conflicts are checked again after analysis.
+            available_catalog = {
+                account: [
+                    media
+                    for media in items
+                    if not self.state.any_media_used_in_snapshot(
+                        [media.source_id],
+                        snapshot,
+                    )
+                ]
+                for account, items in catalog.items()
+            }
+            for items in available_catalog.values():
+                self._prepare_candidates(items)
 
-        if video_type == VideoType.TYPE_1:
-            return self._create_type_1_plan(catalog, language)
-        if video_type == VideoType.TYPE_2:
-            return self._create_type_2_plan(catalog, language)
-        if video_type == VideoType.TYPE_3:
-            return self._create_type_3_plan(catalog, language)
-        raise ValueError(f"El tipo {video_type.value} no usa selector de Instagram.")
+            if video_type == VideoType.TYPE_1:
+                return self._create_type_1_plan(available_catalog, language)
+            if video_type == VideoType.TYPE_2:
+                return self._create_type_2_plan(available_catalog, language)
+            if video_type == VideoType.TYPE_3:
+                return self._create_type_3_plan(available_catalog, language)
+            raise ValueError(
+                f"El tipo {video_type.value} no usa selector de Instagram."
+            )
+        finally:
+            self._used_media_snapshot = previous_snapshot
 
     def pick_extra_image(
+        self,
+        media_items: list[MediaCandidate],
+        video_type: VideoType,
+        *,
+        allow_plan_compatible_fallback: bool = False,
+    ) -> MediaCandidate:
+        previous_snapshot = self._used_media_snapshot
+        self._used_media_snapshot = self.state.read_used_media()
+        try:
+            return self._pick_extra_image_from_candidates(
+                media_items,
+                video_type,
+                allow_plan_compatible_fallback=allow_plan_compatible_fallback,
+            )
+        finally:
+            self._used_media_snapshot = previous_snapshot
+
+    def _pick_extra_image_from_candidates(
         self,
         media_items: list[MediaCandidate],
         video_type: VideoType,
@@ -907,7 +949,38 @@ class ImageSelector:
         *,
         ensure_fingerprints: bool = True,
     ) -> None:
+        needs_analysis = any(
+            media.metrics is None
+            or (ensure_fingerprints and not media.content_fingerprints)
+            for media in media_items
+        )
+        if not needs_analysis:
+            return
+        cache_payload: dict[str, object] = {}
+        cache_items: dict[str, object] = {}
+        cache_changed = False
+        if needs_analysis:
+            cache_payload = self.state.read_image_analysis_cache()
+            if cache_payload.get("version") == IMAGE_ANALYSIS_CACHE_VERSION:
+                raw_items = cache_payload.get("items")
+                if isinstance(raw_items, dict):
+                    cache_items = dict(raw_items)
+            else:
+                cache_payload = {
+                    "version": IMAGE_ANALYSIS_CACHE_VERSION,
+                    "items": {},
+                }
+
         for media in media_items:
+            cache_key = self._image_analysis_cache_key(media)
+            if media.metrics is None and cache_key:
+                cached = cache_items.get(cache_key)
+                if isinstance(cached, dict) and self._restore_cached_analysis(
+                    media,
+                    cached,
+                    require_fingerprints=ensure_fingerprints,
+                ):
+                    continue
             if media.metrics is not None:
                 if ensure_fingerprints and not media.content_fingerprints:
                     try:
@@ -918,21 +991,101 @@ class ImageSelector:
                             "Skipping unreadable image %s: %s", media.local_path, error
                         )
                         media.metrics = None
-                continue
-            try:
-                media.metrics = self._analyze_image(media)
-                media.content_fingerprints = self._fingerprint_images(media)
-                media.content_fingerprint = media.content_fingerprints[0]
-            except (UnidentifiedImageError, OSError, ValueError) as error:
-                LOGGER.warning(
-                    "Skipping unreadable image %s: %s", media.local_path, error
-                )
-                media.metrics = None
-                media.content_fingerprint = None
-                media.content_fingerprints = []
+            else:
+                try:
+                    media.metrics = self._analyze_image(media)
+                    if not media.content_fingerprints:
+                        media.content_fingerprints = self._fingerprint_images(media)
+                        media.content_fingerprint = media.content_fingerprints[0]
+                except (UnidentifiedImageError, OSError, ValueError) as error:
+                    LOGGER.warning(
+                        "Skipping unreadable image %s: %s", media.local_path, error
+                    )
+                    media.metrics = None
+                    media.content_fingerprint = None
+                    media.content_fingerprints = []
+
+            if media.metrics is not None and cache_key:
+                cache_items.pop(cache_key, None)
+                cache_items[cache_key] = {
+                    "metrics": asdict(media.metrics),
+                    "content_fingerprint": media.content_fingerprint,
+                    "content_fingerprints": list(media.content_fingerprints),
+                    "width": media.width,
+                    "height": media.height,
+                    "cached_at": time.time(),
+                }
+                cache_changed = True
+
+        if cache_changed:
+            if len(cache_items) > IMAGE_ANALYSIS_CACHE_MAX_ITEMS:
+                overflow = len(cache_items) - IMAGE_ANALYSIS_CACHE_MAX_ITEMS
+                for stale_key in list(cache_items)[:overflow]:
+                    cache_items.pop(stale_key, None)
+            cache_payload["version"] = IMAGE_ANALYSIS_CACHE_VERSION
+            cache_payload["items"] = cache_items
+            self.state.write_image_analysis_cache(cache_payload)
+
+    def _image_analysis_cache_key(self, media: MediaCandidate) -> str | None:
+        try:
+            stat = media.local_path.stat()
+            resolved = media.local_path.resolve()
+        except OSError:
+            return None
+        caption_hash = hashlib.sha256(
+            (media.caption or "").encode("utf-8")
+        ).hexdigest()[:20]
+        return "|".join(
+            (
+                media.source_id,
+                str(resolved),
+                str(stat.st_size),
+                str(stat.st_mtime_ns),
+                caption_hash,
+            )
+        )
+
+    def _restore_cached_analysis(
+        self,
+        media: MediaCandidate,
+        cached: dict[str, object],
+        *,
+        require_fingerprints: bool,
+    ) -> bool:
+        metrics = cached.get("metrics")
+        fingerprints = cached.get("content_fingerprints")
+        if not isinstance(metrics, dict):
+            return False
+        if require_fingerprints and not isinstance(fingerprints, list):
+            return False
+        try:
+            media.metrics = ImageMetrics(**metrics)
+            media.width = int(cached.get("width") or media.width)
+            media.height = int(cached.get("height") or media.height)
+        except (TypeError, ValueError):
+            media.metrics = None
+            return False
+        media.content_fingerprints = [
+            str(value) for value in (fingerprints or []) if value
+        ]
+        media.content_fingerprint = (
+            str(cached.get("content_fingerprint"))
+            if cached.get("content_fingerprint")
+            else (
+                media.content_fingerprints[0]
+                if media.content_fingerprints
+                else None
+            )
+        )
+        return not require_fingerprints or bool(media.content_fingerprints)
 
     def _analyze_image(self, media: MediaCandidate) -> ImageMetrics:
         rgb = self._open_image_rgb_array(media)
+        if not media.content_fingerprints:
+            media.content_fingerprints = self._fingerprints_from_image(
+                Image.fromarray(rgb)
+            )
+            media.content_fingerprint = media.content_fingerprints[0]
 
         gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
         brightness = float(np.mean(gray))
@@ -1064,6 +1217,9 @@ class ImageSelector:
     def _fingerprint_images(self, media: MediaCandidate) -> list[str]:
         with Image.open(media.local_path) as raw:
             image = raw.convert("RGB")
+        return self._fingerprints_from_image(image)
+
+    def _fingerprints_from_image(self, image: Image.Image) -> list[str]:
         digest = hashlib.sha256()
         digest.update(str(image.size).encode("ascii"))
         digest.update(image.tobytes())
@@ -1571,7 +1727,13 @@ class ImageSelector:
         )
 
     def _is_candidate_used(self, media: MediaCandidate) -> bool:
-        return self.state.any_media_used(self._reservation_keys([media]))
+        keys = self._reservation_keys([media])
+        if self._used_media_snapshot is not None:
+            return self.state.any_media_used_in_snapshot(
+                keys,
+                self._used_media_snapshot,
+            )
+        return self.state.any_media_used(keys)
 
     def _reservation_keys(self, media_items) -> list[str]:
         keys: list[str] = []
@@ -1703,22 +1865,25 @@ class ImageSelector:
 
         backgrounds: list[MediaCandidate] = []
         for index, path in enumerate(paths):
-            candidate = MediaCandidate(
-                source_account="tipo3_fondo",
-                source_id=f"tipo3_fondo:{index}",
-                local_path=path,
-                permalink=f"asset://{path.name}",
-                caption=path.stem,
-                width=self.settings.width,
-                height=self.settings.height,
-                created_at="fixed",
-            )
             try:
-                candidate.metrics = self._analyze_image(candidate)
+                with Image.open(path) as image:
+                    width, height = image.size
+                    image.verify()
             except (UnidentifiedImageError, OSError, ValueError):
                 LOGGER.warning("Fondo tipo3 no legible, lo salto: %s", path)
                 continue
-            backgrounds.append(candidate)
+            backgrounds.append(
+                MediaCandidate(
+                    source_account="tipo3_fondo",
+                    source_id=f"tipo3_fondo:{index}",
+                    local_path=path,
+                    permalink=f"asset://{path.name}",
+                    caption=path.stem,
+                    width=width,
+                    height=height,
+                    created_at="fixed",
+                )
+            )
 
         if not backgrounds:
             raise FileNotFoundError(

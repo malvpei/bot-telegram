@@ -51,6 +51,7 @@ TIKTOK_OVERLAY_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
 )
 HOOK_TEXT_STROKE_FILL = (12, 12, 12)
+HOOK_TEXT_STROKE_WIDTH = 4
 FIXED_SCREEN_TEXT_MARGIN = 78
 FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 30
 FEBRUARY_TITLE_MIN_BOX_WIDTH = 380
@@ -135,6 +136,10 @@ TEXT_CARD_LINE_OVERLAP = 12
 TEXT_CARD_GROUP_GAP = 20
 TEXT_CARD_FAUX_BOLD_PIXELS = 1
 TEXT_AVOID_CLEARANCE_MARGIN = 58
+TEXT_DETECTION_MAX_DIMENSION = 720
+TEXT_OVERLAY_CACHE_MAX_ITEMS = 8
+FIXED_CANVAS_CACHE_MAX_ITEMS = 2
+FONT_CACHE_MAX_ITEMS = 256
 TYPE_4_TITLE_LINES: dict[Language, tuple[str, str]] = {
     Language.ES: ("Empieza tu negocio online", "en 24h"),
     Language.EN: ("Start your online business", "in 24h"),
@@ -191,6 +196,7 @@ TYPE_4_STORY_CAPTION_ROLES = {
     SlideRole.STORY_FIRST_FAILURE,
     SlideRole.STORY_DEEP_FAILURE,
     SlideRole.STORY_DROPRADAR,
+    SlideRole.STORY_SUCCESS_COMIC,
 }
 
 
@@ -214,8 +220,16 @@ class VideoRenderer:
         self._type_3_icons_dir = settings.root_dir / "tipo3" / "iconos"
         self._type_4_icons_dir = settings.root_dir / "tipo4" / "iconos"
         self._face_detector = build_cascade("haarcascade_frontalface_default.xml")
+        self._profile_face_detector = build_cascade(
+            "haarcascade_profileface.xml",
+            required=False,
+        )
         self._eye_detector = build_cascade("haarcascade_eye.xml")
         self._people_detector = build_people_detector()
+        self._text_overlay_cache: dict[tuple[object, ...], Image.Image] = {}
+        self._type_4_overlay_cache: dict[Language, Image.Image] = {}
+        self._fixed_canvas_cache: dict[tuple[object, ...], Image.Image] = {}
+        self._font_cache: dict[tuple[str, int, bool], ImageFont.ImageFont] = {}
 
     def render(self, plan: VideoPlan, job_dir: Path) -> tuple[Path, Path]:
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -234,15 +248,37 @@ class VideoRenderer:
             format="FFMPEG",
             quality=None,
             output_params=[
-                "-preset", "medium",
+                "-preset", self.settings.ffmpeg_preset,
                 "-crf", "23",
                 "-movflags", "+faststart",
             ],
         ) as writer:
-            source_images = {
-                slide.index: self._load_source_image(slide.media.local_path)
-                for slide in plan.slides
-            }
+            source_images: dict[int, Image.Image] = {}
+            fixed_frames: dict[int, np.ndarray] = {}
+            for slide in plan.slides:
+                if slide.fixed_asset:
+                    fixed_frames[slide.index] = np.asarray(
+                        self.render_slide_still(slide, plan.video_type)
+                    )
+                    continue
+                source_image = self._load_source_image(slide.media.local_path)
+                source_images[slide.index] = source_image
+                self._prepare_slide_text_overlay(
+                    slide,
+                    source_image,
+                    plan.video_type,
+                )
+
+            def render_frame(slide: SlidePlan, progress: float) -> np.ndarray:
+                fixed = fixed_frames.get(slide.index)
+                if fixed is not None:
+                    return fixed
+                return self._render_slide_frame(
+                    slide,
+                    source_images[slide.index],
+                    progress,
+                    plan.video_type,
+                )
 
             for index, slide in enumerate(plan.slides):
                 main_frames = total_frames
@@ -251,28 +287,13 @@ class VideoRenderer:
 
                 for frame_index in range(main_frames):
                     progress = frame_index / max(main_frames - 1, 1)
-                    frame = self._render_slide_frame(
-                        slide,
-                        source_images[slide.index],
-                        progress,
-                        plan.video_type,
-                    )
+                    frame = render_frame(slide, progress)
                     writer.append_data(frame)
 
                 if index < len(plan.slides) - 1:
-                    current_final = self._render_slide_frame(
-                        slide,
-                        source_images[slide.index],
-                        1.0,
-                        plan.video_type,
-                    )
+                    current_final = render_frame(slide, 1.0)
                     next_slide = plan.slides[index + 1]
-                    next_initial = self._render_slide_frame(
-                        next_slide,
-                        source_images[next_slide.index],
-                        0.0,
-                        plan.video_type,
-                    )
+                    next_initial = render_frame(next_slide, 0.0)
                     for transition_index in range(transition_frames):
                         alpha = (transition_index + 1) / transition_frames
                         blended = (
@@ -286,9 +307,53 @@ class VideoRenderer:
         return video_path, script_path
 
     def render_slide_still(self, slide: SlidePlan, video_type: VideoType) -> Image.Image:
+        if slide.fixed_asset:
+            canvas = self._cached_fixed_slide_canvas(slide, video_type).convert("RGBA")
+            if video_type == VideoType.TYPE_3:
+                if slide.role != SlideRole.HOOK:
+                    self._composite_type_3_tool_overlay(canvas, slide)
+            else:
+                self._draw_text(canvas, slide, video_type)
+            return canvas.convert("RGB")
         source_image = self._load_source_image(slide.media.local_path)
         frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
         return Image.fromarray(frame)
+
+    def _cached_fixed_slide_canvas(
+        self,
+        slide: SlidePlan,
+        video_type: VideoType,
+    ) -> Image.Image:
+        path = slide.media.local_path
+        try:
+            stat = path.stat()
+            file_signature: tuple[object, ...] = (
+                str(path.resolve()),
+                stat.st_size,
+                stat.st_mtime_ns,
+            )
+        except OSError:
+            file_signature = (str(path),)
+        fit_mode = "cover" if video_type == VideoType.TYPE_3 else "fixed"
+        cache_key = (
+            *file_signature,
+            fit_mode,
+            self.settings.width,
+            self.settings.height,
+        )
+        cached = self._fixed_canvas_cache.get(cache_key)
+        if cached is None:
+            source_image = self._load_source_image(path)
+            cached = (
+                self._cover_image(source_image, 1.0)
+                if fit_mode == "cover"
+                else self._fit_fixed_image(source_image)
+            ).convert("RGB")
+            self._fixed_canvas_cache[cache_key] = cached
+            if len(self._fixed_canvas_cache) > FIXED_CANVAS_CACHE_MAX_ITEMS:
+                oldest_key = next(iter(self._fixed_canvas_cache))
+                self._fixed_canvas_cache.pop(oldest_key, None)
+        return cached.copy()
 
     def render_template_video(
         self,
@@ -300,7 +365,7 @@ class VideoRenderer:
         overlay_path = job_dir / "template_overlay.png"
         output_path = job_dir / "template_video.mp4"
         template_language = self._type_4_language(language)
-        self.build_type_4_template_overlay(template_language).save(overlay_path)
+        self._cached_type_4_template_overlay(template_language).save(overlay_path)
 
         width = self.settings.width
         height = self.settings.height
@@ -332,7 +397,7 @@ class VideoRenderer:
             "-c:v",
             "libx264",
             "-preset",
-            "medium",
+            self.settings.ffmpeg_preset,
             "-crf",
             "23",
             "-pix_fmt",
@@ -390,6 +455,13 @@ class VideoRenderer:
             self._draw_type_4_template_row(image, draw, row, labels)
         return image
 
+    def _cached_type_4_template_overlay(self, language: Language) -> Image.Image:
+        cached = self._type_4_overlay_cache.get(language)
+        if cached is None:
+            cached = self.build_type_4_template_overlay(language)
+            self._type_4_overlay_cache[language] = cached
+        return cached.copy()
+
     def write_script(self, plan: VideoPlan, job_dir: Path) -> Path:
         job_dir.mkdir(parents=True, exist_ok=True)
         script_path = job_dir / "script.txt"
@@ -418,6 +490,90 @@ class VideoRenderer:
         composed = canvas.convert("RGBA")
         self._draw_text(composed, slide, video_type)
         return np.asarray(composed.convert("RGB"))
+
+    def _prepare_slide_text_overlay(
+        self,
+        slide: SlidePlan,
+        source_image: Image.Image,
+        video_type: VideoType,
+    ) -> None:
+        if not slide.text or video_type == VideoType.TYPE_3:
+            return
+        cache_key = self._slide_overlay_cache_key(
+            slide,
+            video_type,
+            (self.settings.width, self.settings.height),
+        )
+        if cache_key in self._text_overlay_cache:
+            return
+
+        source_regions = self._text_avoid_regions(source_image)
+        avoid_regions = self._project_cover_avoid_regions(
+            source_image,
+            source_regions,
+            progresses=(0.0, 0.5, 1.0),
+        )
+        layout_image = self._cover_image(source_image, 0.5).convert("RGBA")
+        self._draw_text(
+            layout_image,
+            slide,
+            video_type,
+            avoid_regions=avoid_regions,
+        )
+
+    def _project_cover_avoid_regions(
+        self,
+        source: Image.Image,
+        regions: list[tuple[tuple[int, int, int, int], float]],
+        *,
+        progresses: tuple[float, ...],
+    ) -> list[tuple[tuple[int, int, int, int], float]]:
+        if not regions:
+            return []
+        canvas_width = self.settings.width
+        canvas_height = self.settings.height
+        base_scale = max(
+            canvas_width / max(source.width, 1),
+            canvas_height / max(source.height, 1),
+        )
+        projected_regions: list[tuple[tuple[int, int, int, int], float]] = []
+        for region, weight in regions:
+            swept_boxes: list[tuple[int, int, int, int]] = []
+            for progress in progresses:
+                scale = base_scale * (1.0 + 0.06 * progress)
+                resized_width = max(1, int(source.width * scale))
+                resized_height = max(1, int(source.height * scale))
+                offset_x = int(
+                    max(0, resized_width - canvas_width)
+                    * (0.3 + 0.4 * progress)
+                )
+                offset_y = int(max(0, resized_height - canvas_height) * 0.5)
+                left = max(0, min(canvas_width, int(region[0] * scale) - offset_x))
+                top = max(0, min(canvas_height, int(region[1] * scale) - offset_y))
+                right = max(
+                    0,
+                    min(canvas_width, int(round(region[2] * scale)) - offset_x),
+                )
+                bottom = max(
+                    0,
+                    min(canvas_height, int(round(region[3] * scale)) - offset_y),
+                )
+                if right > left and bottom > top:
+                    swept_boxes.append((left, top, right, bottom))
+            if not swept_boxes:
+                continue
+            projected_regions.append(
+                (
+                    (
+                        min(box[0] for box in swept_boxes),
+                        min(box[1] for box in swept_boxes),
+                        max(box[2] for box in swept_boxes),
+                        max(box[3] for box in swept_boxes),
+                    ),
+                    weight,
+                )
+            )
+        return projected_regions
 
     def _cover_image(self, source: Image.Image, progress: float) -> Image.Image:
         width = self.settings.width
@@ -465,8 +621,25 @@ class VideoRenderer:
         if slide.role == SlideRole.HOOK:
             return np.asarray(canvas.convert("RGB"))
         else:
-            self._draw_type_3_tool_slide(canvas, slide)
+            self._composite_type_3_tool_overlay(canvas, slide)
         return np.asarray(canvas.convert("RGB"))
+
+    def _composite_type_3_tool_overlay(
+        self,
+        image: Image.Image,
+        slide: SlidePlan,
+    ) -> None:
+        cache_key = self._slide_overlay_cache_key(
+            slide,
+            VideoType.TYPE_3,
+            image.size,
+        )
+        overlay = self._text_overlay_cache.get(cache_key)
+        if overlay is None:
+            overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+            self._draw_type_3_tool_slide(overlay, slide)
+            self._remember_text_overlay(cache_key, overlay)
+        image.alpha_composite(overlay)
 
     def _draw_type_3_hook_text(self, image: Image.Image, text: str) -> None:
         if not text:
@@ -1222,21 +1395,84 @@ class VideoRenderer:
         image: Image.Image,
         slide: SlidePlan,
         video_type: VideoType,
+        *,
+        avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
     ) -> None:
         if not slide.text:
             return
 
+        cache_key = self._slide_overlay_cache_key(slide, video_type, image.size)
+        cached = self._text_overlay_cache.get(cache_key)
+        if cached is not None:
+            image.alpha_composite(cached)
+            return
+
+        overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+
         if slide.role == SlideRole.HOOK:
             if video_type == VideoType.TYPE_3:
                 return
-            self._draw_hook_text(image, slide.text, video_type=video_type)
-            return
+            self._draw_hook_text(
+                overlay,
+                slide.text,
+                video_type=video_type,
+                slide=slide,
+                layout_image=image,
+                avoid_regions=avoid_regions,
+            )
+        elif self._uses_hook_paragraph_style(slide, video_type):
+            self._draw_hook_paragraph_text(
+                overlay,
+                slide.text,
+                slide=slide,
+                layout_image=image,
+                avoid_regions=avoid_regions,
+            )
+        else:
+            self._draw_caption_card_text(
+                overlay,
+                slide.text,
+                slide=slide,
+                layout_image=image,
+                avoid_regions=avoid_regions,
+            )
+        self._remember_text_overlay(cache_key, overlay)
+        image.alpha_composite(overlay)
 
-        if self._uses_hook_paragraph_style(slide, video_type):
-            self._draw_hook_paragraph_text(image, slide.text, slide=slide)
-            return
+    def _slide_overlay_cache_key(
+        self,
+        slide: SlidePlan,
+        video_type: VideoType,
+        image_size: tuple[int, int],
+    ) -> tuple[object, ...]:
+        try:
+            stat = slide.media.local_path.stat()
+            file_signature: tuple[object, ...] = (
+                str(slide.media.local_path.resolve()),
+                stat.st_size,
+                stat.st_mtime_ns,
+            )
+        except OSError:
+            file_signature = (str(slide.media.local_path),)
+        return (
+            *file_signature,
+            slide.media.source_id,
+            slide.role.value,
+            slide.text,
+            slide.fixed_asset,
+            video_type.value,
+            image_size,
+        )
 
-        self._draw_caption_card_text(image, slide.text, slide=slide)
+    def _remember_text_overlay(
+        self,
+        cache_key: tuple[object, ...],
+        overlay: Image.Image,
+    ) -> None:
+        self._text_overlay_cache[cache_key] = overlay
+        if len(self._text_overlay_cache) > TEXT_OVERLAY_CACHE_MAX_ITEMS:
+            oldest_key = next(iter(self._text_overlay_cache))
+            self._text_overlay_cache.pop(oldest_key, None)
 
     def _uses_hook_paragraph_style(
         self,
@@ -1253,17 +1489,74 @@ class VideoRenderer:
             and bool(re.match(r"^\d+\.\s+\S+", text))
         )
 
+    def _slide_expects_person(self, slide: SlidePlan | None) -> bool:
+        if slide is None or slide.fixed_asset:
+            return False
+        if slide.role in TYPE_4_STORY_CAPTION_ROLES:
+            return True
+        metrics = slide.media.metrics
+        if metrics is None:
+            return False
+        detected_person = bool(
+            metrics.faces
+            or metrics.face_area_ratio >= 0.004
+            or metrics.portrait_focus_score >= 0.18
+            or metrics.body_area_ratio >= 0.025
+            or metrics.body_focus_score >= 0.16
+        )
+        likely_missed_portrait = bool(
+            metrics.faces == 0
+            and metrics.quality_score >= 0.58
+            and metrics.daylight >= 0.50
+            and metrics.aspect_ratio <= 0.92
+            and not metrics.is_landscape
+        )
+        return detected_person or likely_missed_portrait
+
+    def _fallback_slide_avoid_regions(
+        self,
+        slide: SlidePlan | None,
+        width: int,
+        height: int,
+    ) -> list[tuple[tuple[int, int, int, int], float]]:
+        if slide is not None and slide.role in TYPE_4_STORY_CAPTION_ROLES:
+            return [
+                (
+                    (
+                        int(width * 0.08),
+                        int(height * 0.42),
+                        int(width * 0.92),
+                        int(height * 0.94),
+                    ),
+                    TEXT_FALLBACK_BODY_AVOID_WEIGHT,
+                ),
+                (
+                    (
+                        int(width * 0.10),
+                        int(height * 0.28),
+                        int(width * 0.90),
+                        int(height * 0.70),
+                    ),
+                    TEXT_FALLBACK_HEAD_AVOID_WEIGHT,
+                ),
+            ]
+        return self._fallback_portrait_avoid_regions(width, height)
+
     def _draw_hook_text(
         self,
         image: Image.Image,
         text: str,
         *,
         video_type: VideoType | None = None,
+        slide: SlidePlan | None = None,
+        layout_image: Image.Image | None = None,
+        avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
     ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
+        layout_source = layout_image or image
 
-        stroke_width = max(2, _scale_x(3, width))
+        stroke_width = max(2, _scale_x(HOOK_TEXT_STROKE_WIDTH, width))
         side_margin = _scale_x(
             TYPE_1_HOOK_SIDE_MARGIN if video_type == VideoType.TYPE_1 else HOOK_SIDE_MARGIN,
             width,
@@ -1307,10 +1600,17 @@ class VideoRenderer:
             + _scale_x(40, width),
         )
         start_y = self._safe_text_start_y(
-            image,
+            layout_source,
             block_width=block_width,
             block_height=text_height,
-            preferred_centers=(0.38, 0.42, 0.34, 0.46, 0.50, 0.30, 0.54),
+            preferred_centers=(0.50, 0.46, 0.54, 0.42, 0.58, 0.38, 0.62),
+            expect_person=self._slide_expects_person(slide),
+            avoid_regions=avoid_regions,
+            fallback_regions=self._fallback_slide_avoid_regions(
+                slide,
+                width,
+                height,
+            ),
         )
         self._draw_lines(
             draw,
@@ -1329,11 +1629,14 @@ class VideoRenderer:
         text: str,
         *,
         slide: SlidePlan | None = None,
+        layout_image: Image.Image | None = None,
+        avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
     ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
+        layout_source = layout_image or image
         text = self._normalise_hook_paragraph_text(text)
-        stroke_width = max(2, _scale_x(3, width))
+        stroke_width = max(2, _scale_x(HOOK_TEXT_STROKE_WIDTH, width))
         line_gap = _scale_y(8, height)
         font, lines = self._fit_text(
             text.strip(),
@@ -1360,13 +1663,25 @@ class VideoRenderer:
             + _scale_x(40, width),
         )
         start_y = self._safe_text_start_y(
-            image,
+            layout_source,
             block_width=block_width,
             block_height=text_height,
             preferred_centers=(
                 self._caption_preferred_centers(slide)
                 if slide is not None and slide.fixed_asset and slide.role == SlideRole.TIP3
-                else (0.40, 0.44, 0.36, 0.48, 0.52, 0.32, 0.56)
+                else (0.50, 0.46, 0.54, 0.42, 0.58, 0.38, 0.62)
+            ),
+            expect_person=self._slide_expects_person(slide),
+            avoid_regions=avoid_regions,
+            fallback_regions=self._fallback_slide_avoid_regions(
+                slide,
+                width,
+                height,
+            ),
+            max_start_y=self._fixed_screen_max_start_y(
+                slide,
+                text_height,
+                canvas_height=height,
             ),
         )
         start_y = self._clamp_fixed_screen_caption_y(
@@ -1515,9 +1830,12 @@ class VideoRenderer:
         text: str,
         *,
         slide: SlidePlan | None = None,
+        layout_image: Image.Image | None = None,
+        avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
     ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
+        layout_source = layout_image or image
         first_line, body = self._split_slide_text(text)
         edge_margin = _scale_x(TEXT_CARD_EDGE_MARGIN, width)
         padding_x = _scale_x(TEXT_CARD_PADDING_X, width)
@@ -1586,10 +1904,22 @@ class VideoRenderer:
             ),
         )
         start_y = self._safe_text_start_y(
-            image,
+            layout_source,
             block_width=block_width,
             block_height=total_height,
             preferred_centers=self._caption_preferred_centers(slide),
+            expect_person=self._slide_expects_person(slide),
+            avoid_regions=avoid_regions,
+            fallback_regions=self._fallback_slide_avoid_regions(
+                slide,
+                width,
+                height,
+            ),
+            max_start_y=self._fixed_screen_max_start_y(
+                slide,
+                total_height,
+                canvas_height=height,
+            ),
         )
         start_y = self._clamp_fixed_screen_caption_y(
             slide,
@@ -1640,7 +1970,7 @@ class VideoRenderer:
             slide is not None and slide.fixed_asset and slide.role == SlideRole.FEBRUARY
         ):
             return (0.38, 0.40, 0.36, 0.42, 0.34, 0.32)
-        return (0.58, 0.62, 0.52, 0.66, 0.46, 0.40, 0.34)
+        return (0.50, 0.46, 0.54, 0.42, 0.58, 0.38, 0.62)
 
     def _clamp_fixed_screen_caption_y(
         self,
@@ -1650,18 +1980,34 @@ class VideoRenderer:
         *,
         canvas_height: int,
     ) -> int:
-        if slide is None or not slide.fixed_asset:
+        max_start_y = self._fixed_screen_max_start_y(
+            slide,
+            block_height,
+            canvas_height=canvas_height,
+        )
+        if max_start_y is None:
             return start_y
+        min_y, _max_y = self._safe_text_vertical_bounds(canvas_height, block_height)
+        return max(min_y, min(start_y, max_start_y))
+
+    def _fixed_screen_max_start_y(
+        self,
+        slide: SlidePlan | None,
+        block_height: int,
+        *,
+        canvas_height: int,
+    ) -> int | None:
+        if slide is None or not slide.fixed_asset:
+            return None
         if slide.role == SlideRole.TIP3:
             margin = _scale_y(FIXED_SCREEN_TEXT_MARGIN, canvas_height)
         elif slide.role == SlideRole.FEBRUARY:
             margin = _scale_y(FEBRUARY_FIXED_SCREEN_TEXT_MARGIN, canvas_height)
         else:
-            return start_y
+            return None
         screen_top = int(canvas_height * 0.525)
         min_y, _max_y = self._safe_text_vertical_bounds(canvas_height, block_height)
-        max_start_y = max(min_y, screen_top - margin - block_height)
-        return max(min_y, min(start_y, max_start_y))
+        return max(min_y, screen_top - margin - block_height)
 
     def _scaled_text_size(self, base_size: int, *, minimum: int) -> int:
         return max(minimum, _scale_x(base_size, self.settings.width))
@@ -1865,10 +2211,26 @@ class VideoRenderer:
         block_width: int,
         block_height: int,
         preferred_centers: tuple[float, ...],
+        expect_person: bool = False,
+        avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
+        fallback_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
+        max_start_y: int | None = None,
     ) -> int:
         width, height = image.size
         min_y, max_y = self._safe_text_vertical_bounds(height, block_height)
-        regions = self._text_avoid_regions(image)
+        if max_start_y is not None:
+            max_y = max(min_y, min(max_y, max_start_y))
+        regions = (
+            self._text_avoid_regions(image)
+            if avoid_regions is None
+            else list(avoid_regions)
+        )
+        if not regions and expect_person:
+            regions = list(
+                fallback_regions
+                if fallback_regions is not None
+                else self._fallback_portrait_avoid_regions(width, height)
+            )
         centers = list(preferred_centers)
         centers.extend(value / 100.0 for value in range(18, 84, 4))
         candidates: list[int] = []
@@ -1897,8 +2259,21 @@ class VideoRenderer:
 
         primary_center = preferred_centers[0] if preferred_centers else 0.55
         luminance = np.asarray(image.convert("L"), dtype=np.float32)
+        face_safe_candidates = [
+            y
+            for y in candidates
+            if self._text_candidate_clears_priority_regions(
+                y,
+                block_width=block_width,
+                block_height=block_height,
+                canvas_width=width,
+                canvas_height=height,
+                avoid_regions=regions,
+            )
+        ]
+        scored_candidates = face_safe_candidates or candidates
         best_y = min(
-            candidates,
+            scored_candidates,
             key=lambda y: self._text_position_score(
                 y,
                 block_width=block_width,
@@ -1911,6 +2286,37 @@ class VideoRenderer:
             ),
         )
         return best_y
+
+    def _text_candidate_clears_priority_regions(
+        self,
+        y: int,
+        *,
+        block_width: int,
+        block_height: int,
+        canvas_width: int,
+        canvas_height: int,
+        avoid_regions: list[tuple[tuple[int, int, int, int], float]],
+    ) -> bool:
+        x = max(0, (canvas_width - block_width) // 2)
+        box = (
+            x,
+            y,
+            min(canvas_width, x + block_width),
+            min(canvas_height, y + block_height),
+        )
+        for region, weight in avoid_regions:
+            if weight < TEXT_HEAD_AVOID_WEIGHT:
+                continue
+            if self._intersection_area(box, region) > 0:
+                return False
+            if self._avoid_region_clearance_score(
+                box,
+                region,
+                region_weight=weight,
+                canvas_height=canvas_height,
+            ) > 0:
+                return False
+        return True
 
     @staticmethod
     def _safe_text_vertical_bounds(
@@ -1989,11 +2395,11 @@ class VideoRenderer:
         box = (x, y, min(canvas_width, x + block_width), min(canvas_height, y + block_height))
         box_area = max(1, self._box_area(box))
         center = (box[1] + box[3]) / 2.0 / max(canvas_height, 1)
-        score = abs(center - preferred_center) * 2.2
-        score += abs(center - 0.5) * 0.45
+        score = abs(center - preferred_center) * 3.2
+        score += abs(center - 0.5) * 0.85
         if preferred_center >= 0.50 and center < 0.42:
             score += (0.42 - center) * 2.8
-        score += self._background_clutter_score(luminance, box) * 0.6
+        score += self._background_clutter_score(luminance, box) * 1.05
         for region, weight in avoid_regions:
             overlap = self._intersection_area(box, region)
             region_area = max(1, self._box_area(region))
@@ -2070,25 +2476,54 @@ class VideoRenderer:
     ) -> list[tuple[tuple[int, int, int, int], float]]:
         width, height = image.size
         try:
-            rgb = np.asarray(image.convert("RGB"))
+            full_rgb = np.asarray(image.convert("RGB"))
+            detection_scale = min(
+                1.0,
+                TEXT_DETECTION_MAX_DIMENSION / max(width, height, 1),
+            )
+            if detection_scale < 1.0:
+                rgb = cv2.resize(
+                    full_rgb,
+                    (
+                        max(1, int(round(width * detection_scale))),
+                        max(1, int(round(height * detection_scale))),
+                    ),
+                    interpolation=cv2.INTER_AREA,
+                )
+            else:
+                rgb = full_rgb
             gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+            gray = cv2.equalizeHist(gray)
         except CV2_ERROR:
             if self._face_avoid_detectors_unavailable():
                 return self._fallback_portrait_avoid_regions(width, height)
             return []
 
         regions: list[tuple[tuple[int, int, int, int], float]] = []
-        for x, y, w, h in self._detect_render_faces(gray):
+        face_boxes = self._deduplicate_detection_boxes(
+            self._detect_render_faces(gray),
+            self._detect_render_profile_faces(gray),
+        )
+        restored_faces = self._restore_detection_boxes(
+            face_boxes,
+            detection_scale,
+        )
+        for x, y, w, h in restored_faces:
             face = self._expanded_box(
                 (int(x), int(y), int(x + w), int(y + h)),
                 width,
                 height,
-                x_pad=int(w * 0.48),
-                y_pad=int(h * 0.72),
+                x_pad=int(w * 0.58),
+                y_pad=int(h * 0.88),
             )
             regions.append((face, TEXT_FACE_AVOID_WEIGHT))
 
-        for x, y, w, h in self._detect_render_eyes(gray):
+        eye_boxes = self._detect_render_eyes(gray)
+        restored_eyes = self._restore_detection_boxes(
+            eye_boxes,
+            detection_scale,
+        )
+        for x, y, w, h in restored_eyes:
             eye_face = self._expanded_box(
                 (
                     int(x - w * 1.4),
@@ -2103,7 +2538,12 @@ class VideoRenderer:
             )
             regions.append((eye_face, TEXT_EYE_AVOID_WEIGHT))
 
-        for x, y, w, h in self._detect_render_people(rgb):
+        people_boxes = self._detect_render_people(rgb)
+        restored_people = self._restore_detection_boxes(
+            people_boxes,
+            detection_scale,
+        )
+        for x, y, w, h in restored_people:
             body = self._expanded_box(
                 (int(x), int(y), int(x + w), int(y + h)),
                 width,
@@ -2128,6 +2568,67 @@ class VideoRenderer:
         if not regions and self._face_avoid_detectors_unavailable():
             return self._fallback_portrait_avoid_regions(width, height)
         return regions
+
+    @staticmethod
+    def _restore_detection_boxes(
+        boxes: np.ndarray,
+        detection_scale: float,
+    ) -> np.ndarray:
+        if len(boxes) == 0:
+            return np.empty((0, 4), dtype=np.int32)
+        restored = np.asarray(boxes, dtype=np.float32).copy()
+        if detection_scale < 1.0:
+            restored[:, :4] /= detection_scale
+        return np.rint(restored).astype(np.int32)
+
+    @staticmethod
+    def _deduplicate_detection_boxes(*groups: np.ndarray) -> np.ndarray:
+        boxes = [
+            tuple(int(value) for value in box[:4])
+            for group in groups
+            for box in np.asarray(group).reshape((-1, 4))
+            if int(box[2]) > 0 and int(box[3]) > 0
+        ]
+        boxes.sort(key=lambda box: box[2] * box[3], reverse=True)
+        kept: list[tuple[int, int, int, int]] = []
+        for candidate in boxes:
+            candidate_xyxy = (
+                candidate[0],
+                candidate[1],
+                candidate[0] + candidate[2],
+                candidate[1] + candidate[3],
+            )
+            candidate_area = candidate[2] * candidate[3]
+            duplicate = False
+            for existing in kept:
+                existing_xyxy = (
+                    existing[0],
+                    existing[1],
+                    existing[0] + existing[2],
+                    existing[1] + existing[3],
+                )
+                left = max(candidate_xyxy[0], existing_xyxy[0])
+                top = max(candidate_xyxy[1], existing_xyxy[1])
+                right = min(candidate_xyxy[2], existing_xyxy[2])
+                bottom = min(candidate_xyxy[3], existing_xyxy[3])
+                intersection = max(0, right - left) * max(0, bottom - top)
+                if intersection <= 0:
+                    continue
+                existing_area = existing[2] * existing[3]
+                union = candidate_area + existing_area - intersection
+                iou = intersection / max(1, union)
+                containment = intersection / max(
+                    1,
+                    min(candidate_area, existing_area),
+                )
+                if iou >= 0.30 or containment >= 0.58:
+                    duplicate = True
+                    break
+            if not duplicate:
+                kept.append(candidate)
+        if not kept:
+            return np.empty((0, 4), dtype=np.int32)
+        return np.asarray(kept, dtype=np.int32)
 
     def _fallback_portrait_avoid_regions(
         self,
@@ -2159,6 +2660,7 @@ class VideoRenderer:
     def _face_avoid_detectors_unavailable(self) -> bool:
         return (
             self._detector_empty(self._face_detector)
+            and self._detector_empty(self._profile_face_detector)
             and self._detector_empty(self._eye_detector)
         )
 
@@ -2173,7 +2675,7 @@ class VideoRenderer:
         if self._face_detector.empty():
             return np.empty((0, 4), dtype=np.int32)
         height, width = gray.shape[:2]
-        min_size = max(24, _scale_x(42, width))
+        min_size = max(12, _scale_x(42, width))
         detected = self._face_detector.detectMultiScale(
             gray,
             scaleFactor=1.16,
@@ -2184,11 +2686,37 @@ class VideoRenderer:
             return np.empty((0, 4), dtype=np.int32)
         return np.asarray(detected, dtype=np.int32)
 
+    def _detect_render_profile_faces(self, gray: np.ndarray) -> np.ndarray:
+        if self._profile_face_detector.empty():
+            return np.empty((0, 4), dtype=np.int32)
+        height, width = gray.shape[:2]
+        min_size = max(12, _scale_x(42, width))
+
+        def detect(source: np.ndarray) -> np.ndarray:
+            boxes = self._profile_face_detector.detectMultiScale(
+                source,
+                scaleFactor=1.16,
+                minNeighbors=4,
+                minSize=(min_size, min_size),
+            )
+            if len(boxes) == 0:
+                return np.empty((0, 4), dtype=np.int32)
+            return np.asarray(boxes, dtype=np.int32)
+
+        direct = detect(gray)
+        mirrored = detect(cv2.flip(gray, 1))
+        if len(mirrored):
+            mirrored = mirrored.copy()
+            mirrored[:, 0] = width - mirrored[:, 0] - mirrored[:, 2]
+        if len(direct) and len(mirrored):
+            return np.vstack((direct, mirrored))
+        return direct if len(direct) else mirrored
+
     def _detect_render_eyes(self, gray: np.ndarray) -> np.ndarray:
         if self._eye_detector.empty():
             return np.empty((0, 4), dtype=np.int32)
         height, width = gray.shape[:2]
-        min_size = max(10, _scale_x(22, width))
+        min_size = max(8, _scale_x(22, width))
         detected = self._eye_detector.detectMultiScale(
             gray,
             scaleFactor=1.10,
@@ -2597,6 +3125,15 @@ class VideoRenderer:
         return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
     def _load_font(self, *, size: int, bold: bool) -> ImageFont.ImageFont:
+        cache_key = ("base", size, bold)
+        cached = self._font_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        font = self._load_font_uncached(size=size, bold=bold)
+        self._remember_font(cache_key, font)
+        return font
+
+    def _load_font_uncached(self, *, size: int, bold: bool) -> ImageFont.ImageFont:
         suffix = "Bold" if bold else "Regular"
         if self._font_dir.exists():
             for font_file in sorted(self._font_dir.glob("*.ttf")):
@@ -2654,6 +3191,19 @@ class VideoRenderer:
             return ImageFont.load_default()
 
     def _load_overlay_font(self, size: int, bold: bool) -> ImageFont.ImageFont:
+        cache_key = ("overlay", size, bold)
+        cached = self._font_cache.get(cache_key)
+        if cached is not None:
+            return cached
+        font = self._load_overlay_font_uncached(size, bold)
+        self._remember_font(cache_key, font)
+        return font
+
+    def _load_overlay_font_uncached(
+        self,
+        size: int,
+        bold: bool,
+    ) -> ImageFont.ImageFont:
         if self._font_dir.exists():
             preferred_tokens = (
                 "tiktok",
@@ -2680,6 +3230,16 @@ class VideoRenderer:
                 continue
 
         return self._load_font(size=size, bold=bold)
+
+    def _remember_font(
+        self,
+        cache_key: tuple[str, int, bool],
+        font: ImageFont.ImageFont,
+    ) -> None:
+        self._font_cache[cache_key] = font
+        if len(self._font_cache) > FONT_CACHE_MAX_ITEMS:
+            oldest_key = next(iter(self._font_cache))
+            self._font_cache.pop(oldest_key, None)
 
     # ------------------------------------------------------------------
     # Output management
@@ -2720,7 +3280,7 @@ class VideoRenderer:
                 "-map", "0:v:0",
                 "-map", "0:a?",
                 "-c:v", "libx264",
-                "-preset", "medium",
+                "-preset", self.settings.ffmpeg_preset,
                 "-crf", str(crf),
                 "-pix_fmt", "yuv420p",
                 "-movflags", "+faststart",

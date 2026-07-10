@@ -33,6 +33,19 @@ DEFAULT_OPENAI_IMAGE_SIZE = "1024x1536"
 DEFAULT_OPENAI_IMAGE_QUALITY = "high"
 DEFAULT_OPENAI_REQUEST_TIMEOUT_SECONDS = 180.0
 DEFAULT_BATCH_TIMEZONE = "Europe/Madrid"
+DEFAULT_FFMPEG_PRESET = "veryfast"
+DEFAULT_STORY_IMAGE_WORKERS = 3
+VALID_FFMPEG_PRESETS = {
+    "ultrafast",
+    "superfast",
+    "veryfast",
+    "faster",
+    "fast",
+    "medium",
+    "slow",
+    "slower",
+    "veryslow",
+}
 
 
 def _split_chat_ids(raw_value: str) -> set[int]:
@@ -75,6 +88,11 @@ def _env_bool(key: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_ffmpeg_preset(key: str, default: str) -> str:
+    value = os.getenv(key, default).strip().lower() or default
+    return value if value in VALID_FFMPEG_PRESETS else default
+
+
 def _env_path(key: str, default: Path, root_dir: Path) -> Path:
     raw = os.getenv(key, "").strip()
     if not raw:
@@ -111,6 +129,7 @@ class Settings:
     fps: int
     slide_seconds: float
     transition_seconds: float
+    ffmpeg_preset: str
     max_urls_per_job: int
     max_video_size_mb: int
     history_max_per_bucket: int
@@ -157,6 +176,7 @@ class Settings:
     openai_image_quality: str
     openai_request_timeout_seconds: float
     batch_timezone: str
+    story_image_workers: int
 
 
 @lru_cache(maxsize=1)
@@ -221,6 +241,10 @@ def get_settings() -> Settings:
         fps=_env_int("VIDEO_FPS", 30),
         slide_seconds=_env_float("SLIDE_SECONDS", 3.8),
         transition_seconds=_env_float("TRANSITION_SECONDS", 0.35),
+        ffmpeg_preset=_env_ffmpeg_preset(
+            "FFMPEG_PRESET",
+            DEFAULT_FFMPEG_PRESET,
+        ),
         max_urls_per_job=_env_int("MAX_URLS_PER_JOB", 8),
         max_video_size_mb=_env_int("MAX_VIDEO_SIZE_MB", 48),
         history_max_per_bucket=_env_int("HISTORY_MAX_PER_BUCKET", 200),
@@ -334,4 +358,8 @@ def get_settings() -> Settings:
             DEFAULT_BATCH_TIMEZONE,
         ).strip()
         or DEFAULT_BATCH_TIMEZONE,
+        story_image_workers=_env_int(
+            "STORY_IMAGE_WORKERS",
+            DEFAULT_STORY_IMAGE_WORKERS,
+        ),
     )
