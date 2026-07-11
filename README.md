@@ -180,7 +180,14 @@ analizan como retratos y el mismo canvas se reutiliza en sus seis slides. Los
 videos plantilla usan `FFMPEG_PRESET=veryfast` por defecto y conservan en
 `data/r2_downloads/template_cache` los originales ya descargados de R2, con una
 poda LRU limitada a 8 archivos o 512 MB. El
-carrusel IA genera hasta `STORY_IMAGE_WORKERS=3` escenas simultaneas.
+carrusel IA usa por defecto `openai/gpt-image-2/edit` a traves de fal.ai. La
+primera escena fija el personaje y el estilo; la segunda fija la habitacion; las
+escenas restantes reutilizan esas referencias y generan hasta
+`STORY_IMAGE_WORKERS=2` imagenes simultaneas. Los textos exactos se componen
+despues para que el modelo no introduzca letras deformadas. Un revisor visual
+barato valida cada escena y solo regenera las que no alcancen
+`STORY_REVIEW_MIN_SCORE`: usa OpenAI si existe `OPENAI_API_KEY` y, si no, el
+router visual de fal.ai con la misma `FAL_KEY`.
 
 ### Lotes y programacion diaria
 

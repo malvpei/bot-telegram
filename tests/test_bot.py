@@ -33,6 +33,7 @@ from app.bot import (
     create_command,
     story_carousel_command,
     wizard_delivery,
+    wizard_gender,
     wizard_type,
 )
 from app.config import get_settings
@@ -545,11 +546,30 @@ def test_create_command_offers_template_video_without_accounts():
 
     assert state == GENDER_STATE
     buttons = update.effective_message.reply_markup.inline_keyboard
-    assert len(buttons) == 1
+    assert len(buttons) == 2
     assert buttons[0][0].text == "Video herramientas R2 ES"
     assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
     assert buttons[0][1].text == "Video tools R2 EN"
     assert buttons[0][1].callback_data == TEMPLATE_VIDEO_CREATE_EN
+    assert buttons[1][0].text == "Historia IA desde R2"
+    assert buttons[1][0].callback_data == "wizard:type:4"
+
+
+def test_wizard_gender_restores_type_4_story_option():
+    context = FakeContext()
+    context.user_data["accounts_by_gender"] = {
+        VideoGender.MALE.value: ["alpha"],
+        VideoGender.FEMALE.value: [],
+    }
+    query = FakeRegenerateQuery("wizard:gender:male")
+    update = FakeRegenerateUpdate(query)
+
+    state = asyncio.run(wizard_gender(update, context))
+
+    assert state != ConversationHandler.END
+    buttons = query.reply_markup.inline_keyboard
+    assert buttons[1][0].text == "Tipo 4 - Historia IA"
+    assert buttons[1][0].callback_data == "wizard:type:4"
 
 
 def test_wizard_type_asks_how_to_deliver_slide_text():

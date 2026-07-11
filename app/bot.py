@@ -631,6 +631,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
         "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
+        "/story_carousel - crear una historia IA desde una foto enviada al bot\n"
         "/batch [cantidad] - crear ahora un lote rotativo (6 por defecto)\n"
         "/schedule 6 08:00 18:00 - programar lotes diarios\n"
         "/schedule off - desactivar la programacion\n"
@@ -653,7 +654,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Flujo:\n"
         "1. /create\n"
         "2. elige Hombres o Mujeres\n"
-        "3. elige Tipo 1, Tipo 2 o Tipo 3\n"
+        "3. elige Tipo 1, Tipo 2, Tipo 3 o la Historia IA\n"
         "4. elige si quieres texto incrustado en la imagen o separado\n"
         "5. elige Español o English\n"
         "6. elige si quieres textos normales o todo en minúscula\n"
@@ -661,7 +662,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Tipos:\n"
         "1 = historia de 7 imágenes (slide 6 = tip3_dropradar.jpg, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = tip3_dropradar.jpg, tip3)\n"
-        "3 = hook + herramientas para empezar dropshipping en 2026\n\n"
+        "3 = hook + herramientas para empezar dropshipping en 2026\n"
+        "4 = historia IA vertical de 6 escenas + la foto original, con el "
+        "texto del guion compuesto fuera de la IA para que siempre se lea bien\n\n"
         "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
         "accounts_women.txt (una por línea). Para cambiarlas edita el archivo "
         "y guarda; se releen en cada /create.\n\n"
@@ -1054,13 +1057,19 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         callback_data=TEMPLATE_VIDEO_CREATE_EN,
                     ),
                 ],
+                [
+                    InlineKeyboardButton(
+                        "Historia IA desde R2",
+                        callback_data="wizard:type:4",
+                    ),
+                ],
             ]
         )
         await update.effective_message.reply_text(
             (
                 "Que quieres crear?\n\n"
-                "No encontre cuentas cargadas, asi que por ahora estan "
-                "disponible el video de herramientas R2."
+                "No encontre cuentas cargadas, asi que puedes crear el video "
+                "de herramientas R2 o la historia IA desde R2."
             ),
             reply_markup=keyboard,
         )
@@ -1086,6 +1095,12 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 InlineKeyboardButton(
                     f"Mujeres ({len(accounts_by_gender[VideoGender.FEMALE])})",
                     callback_data="wizard:gender:female",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "Historia IA desde R2",
+                    callback_data="wizard:type:4",
                 ),
             ],
         ]
@@ -1132,6 +1147,12 @@ async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                 InlineKeyboardButton("Tipo 1", callback_data="wizard:type:1"),
                 InlineKeyboardButton("Tipo 2", callback_data="wizard:type:2"),
                 InlineKeyboardButton("Tipo 3", callback_data="wizard:type:3"),
+            ],
+            [
+                InlineKeyboardButton(
+                    "Tipo 4 - Historia IA",
+                    callback_data="wizard:type:4",
+                ),
             ],
         ]
     )

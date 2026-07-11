@@ -574,33 +574,33 @@ def test_type_4_story_texts_are_exactly_fixed(state_dir):
     assert len(package.ordered_slides) == len(TYPE_4_ROLES)
     assert package.ordered_slides[:5] == [
         (
-            "Así es como pasé de trabajar en el MacDonald a cumplir mi sueño "
-            "de comprarme un Porsche 911 GT3"
+            "Así pasé de trabajar en McDonald's a cumplir mi sueño: "
+            "comprarme un Porsche 911 GT3."
         ),
         (
-            "Monte mi tienda estuve horas analizando un buen producto y "
-            "estudiando creativos"
+            "Monté mi tienda y pasé horas analizando productos y estudiando "
+            "creativos."
         ),
         (
-            "El primer mes tuve 0 ventas simplemente era un producto que no "
-            "causaba interés"
+            "El primer mes hice 0 ventas. El producto simplemente no "
+            "despertaba interés."
         ),
         (
-            "En los siguientes mesese fue peor tuve 0 ventas y probé 3 productos "
-            "diferentes ninguno se vendia, estuve a punto de dejarlo para siempre"
+            "Los meses siguientes fueron peores: probé 3 productos, no vendí "
+            "ninguno y estuve a punto de dejarlo para siempre."
         ),
         (
-            "Investigando encontré Dropradar me dio un gran producto y empecé "
-            "de 0 ese mes tuve mi primera venta"
+            "Entonces encontré Dropradar, validé un producto con datos y ese "
+            "mes conseguí mi primera venta."
         ),
     ]
     assert package.ordered_slides[5:] == [
-        "después de año y medio...",
+        "Después de un año y medio...",
         "",
     ]
-    assert package.slides_by_role[SlideRole.STORY_MCDONALD].startswith("Así es")
-    assert package.slides_by_role[SlideRole.STORY_DROPRADAR].startswith("Investigando")
-    assert package.slides_by_role[SlideRole.STORY_SUCCESS_COMIC] == "después de año y medio..."
+    assert package.slides_by_role[SlideRole.STORY_MCDONALD].startswith("Así pasé")
+    assert package.slides_by_role[SlideRole.STORY_DROPRADAR].startswith("Entonces")
+    assert package.slides_by_role[SlideRole.STORY_SUCCESS_COMIC] == "Después de un año y medio..."
 
 
 def test_type_3_can_use_paypal_and_instagram(state_dir, monkeypatch):

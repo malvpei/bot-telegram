@@ -637,27 +637,27 @@ class ScriptGenerator:
     def _build_type_4_es(self) -> ScriptPackage:
         slides_by_role = {
             SlideRole.STORY_MCDONALD: (
-                "Así es como pasé de trabajar en el MacDonald a cumplir mi sueño "
-                "de comprarme un Porsche 911 GT3"
+                "Así pasé de trabajar en McDonald's a cumplir mi sueño: "
+                "comprarme un Porsche 911 GT3."
             ),
             SlideRole.STORY_BUILDING_STORE: (
-                "Monte mi tienda estuve horas analizando un buen producto y "
-                "estudiando creativos"
+                "Monté mi tienda y pasé horas analizando productos y estudiando "
+                "creativos."
             ),
             SlideRole.STORY_FIRST_FAILURE: (
-                "El primer mes tuve 0 ventas simplemente era un producto que no "
-                "causaba interés"
+                "El primer mes hice 0 ventas. El producto simplemente no "
+                "despertaba interés."
             ),
             SlideRole.STORY_DEEP_FAILURE: (
-                "En los siguientes mesese fue peor tuve 0 ventas y probé 3 productos "
-                "diferentes ninguno se vendia, estuve a punto de dejarlo para siempre"
+                "Los meses siguientes fueron peores: probé 3 productos, no vendí "
+                "ninguno y estuve a punto de dejarlo para siempre."
             ),
             SlideRole.STORY_DROPRADAR: (
-                "Investigando encontré Dropradar me dio un gran producto y empecé "
-                "de 0 ese mes tuve mi primera venta"
+                "Entonces encontré Dropradar, validé un producto con datos y ese "
+                "mes conseguí mi primera venta."
             ),
             SlideRole.STORY_SUCCESS_COMIC: (
-                "después de año y medio..."
+                "Después de un año y medio..."
             ),
             SlideRole.STORY_ORIGINAL_REFERENCE: "",
         }
@@ -688,7 +688,7 @@ class ScriptGenerator:
             slides_by_role[SlideRole.STORY_SUCCESS_COMIC],
         ]
         if any(not text.strip() for text in required_texts):
-            raise ValueError("Tipo 4: los 5 textos narrativos son obligatorios.")
+            raise ValueError("Tipo 4: los 6 textos narrativos son obligatorios.")
         if "Dropradar" not in slides_by_role[SlideRole.STORY_DROPRADAR]:
             raise ValueError("Tipo 4: el punto de inflexion debe mencionar Dropradar.")
 

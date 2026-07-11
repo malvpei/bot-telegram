@@ -332,6 +332,15 @@ class VideoCreationService:
             warnings.append(
                 "Falta OPENAI_API_KEY; el carrusel IA tipo 4 no podra generar imagenes con OpenAI."
             )
+        if (
+            self.settings.story_review_enabled
+            and not self.settings.openai_api_key
+            and not self.settings.fal_key
+        ):
+            warnings.append(
+                "Faltan OPENAI_API_KEY y FAL_KEY; el carrusel IA funcionara, "
+                "pero sin revision semantica automatica de cada escena."
+            )
         return warnings
 
     def create_video(self, request: VideoRequest) -> GenerationResult:
@@ -1239,9 +1248,9 @@ class VideoCreationService:
         *,
         embed_slide_text: bool = True,
     ) -> None:
-        # Telegram-bound images must share the vertical TikTok carousel format
-        # (1080x1920 by default). We center-crop each slide to cover the canvas
-        # so the aspect ratio is identical for every image we send.
+        # Telegram-bound images share the same vertical TikTok carousel format
+        # (1080x1920 by default). Generated panels use cover; the fixed original
+        # uses the renderer's blurred fit so the full photo remains visible.
         target_width = self.settings.width
         target_height = self.settings.height
         slides_dir = job_dir / "slides"
@@ -1249,20 +1258,6 @@ class VideoCreationService:
         for slide in plan.slides:
             source_path = slide.media.local_path
             if not source_path.exists():
-                continue
-            if (
-                plan.video_type == VideoType.TYPE_4
-                and slide.role == SlideRole.STORY_ORIGINAL_REFERENCE
-            ):
-                out_path = self._copy_original_story_slide(source_path, slides_dir, slide.index)
-                with Image.open(out_path) as image:
-                    width, height = image.size
-                slide.media = replace(
-                    slide.media,
-                    local_path=out_path,
-                    width=width,
-                    height=height,
-                )
                 continue
             out_path = slides_dir / f"slide_{slide.index:02d}.jpg"
             try:
@@ -1309,17 +1304,6 @@ class VideoCreationService:
             height=height,
             created_at="reference",
         )
-
-    def _copy_original_story_slide(
-        self,
-        source_path: Path,
-        slides_dir: Path,
-        slide_index: int,
-    ) -> Path:
-        suffix = source_path.suffix.lower() or ".jpg"
-        out_path = slides_dir / f"slide_{slide_index:02d}_original{suffix}"
-        shutil.copy2(source_path, out_path)
-        return out_path
 
     def _normalize_extra_image(
         self,

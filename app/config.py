@@ -21,20 +21,27 @@ DEFAULT_UPLOAD_SITE_USERNAME = "admin"
 DEFAULT_UPLOAD_SITE_PASSWORD = "pon_una_password"
 DEFAULT_UPLOAD_SITE_MAX_IMAGE_MB = 20
 DEFAULT_IMAGE_PROVIDER = "fal"
-DEFAULT_FAL_MODEL = "fal-ai/flux-pro/kontext"
+DEFAULT_FAL_MODEL = "openai/gpt-image-2/edit"
 DEFAULT_FAL_IMAGE_ASPECT_RATIO = "9:16"
+DEFAULT_FAL_IMAGE_SIZE = "864x1536"
+DEFAULT_FAL_IMAGE_QUALITY = "medium"
 DEFAULT_FAL_OUTPUT_FORMAT = "png"
 DEFAULT_FAL_SAFETY_TOLERANCE = "2"
 DEFAULT_FAL_GUIDANCE_SCALE = 3.5
 DEFAULT_FAL_POLL_INTERVAL_SECONDS = 2.0
 DEFAULT_FAL_REQUEST_TIMEOUT_SECONDS = 240.0
 DEFAULT_OPENAI_IMAGE_MODEL = "gpt-image-2"
-DEFAULT_OPENAI_IMAGE_SIZE = "1024x1536"
-DEFAULT_OPENAI_IMAGE_QUALITY = "high"
+DEFAULT_OPENAI_IMAGE_SIZE = "864x1536"
+DEFAULT_OPENAI_IMAGE_QUALITY = "medium"
 DEFAULT_OPENAI_REQUEST_TIMEOUT_SECONDS = 180.0
 DEFAULT_BATCH_TIMEZONE = "Europe/Madrid"
 DEFAULT_FFMPEG_PRESET = "veryfast"
-DEFAULT_STORY_IMAGE_WORKERS = 3
+DEFAULT_STORY_IMAGE_WORKERS = 2
+DEFAULT_STORY_REVIEW_ENABLED = True
+DEFAULT_STORY_REVIEW_MODEL = "gpt-5.4-nano"
+DEFAULT_STORY_REVIEW_FAL_MODEL = "google/gemini-2.5-flash"
+DEFAULT_STORY_REVIEW_MIN_SCORE = 8
+DEFAULT_STORY_IMAGE_MAX_ATTEMPTS = 2
 VALID_FFMPEG_PRESETS = {
     "ultrafast",
     "superfast",
@@ -165,6 +172,8 @@ class Settings:
     fal_key: str
     fal_model: str
     fal_image_aspect_ratio: str
+    fal_image_size: str
+    fal_image_quality: str
     fal_output_format: str
     fal_safety_tolerance: str
     fal_guidance_scale: float
@@ -177,6 +186,11 @@ class Settings:
     openai_request_timeout_seconds: float
     batch_timezone: str
     story_image_workers: int
+    story_review_enabled: bool
+    story_review_model: str
+    story_review_fal_model: str
+    story_review_min_score: int
+    story_image_max_attempts: int
 
 
 @lru_cache(maxsize=1)
@@ -318,6 +332,16 @@ def get_settings() -> Settings:
             DEFAULT_FAL_IMAGE_ASPECT_RATIO,
         ).strip()
         or DEFAULT_FAL_IMAGE_ASPECT_RATIO,
+        fal_image_size=os.getenv(
+            "FAL_IMAGE_SIZE",
+            DEFAULT_FAL_IMAGE_SIZE,
+        ).strip()
+        or DEFAULT_FAL_IMAGE_SIZE,
+        fal_image_quality=os.getenv(
+            "FAL_IMAGE_QUALITY",
+            DEFAULT_FAL_IMAGE_QUALITY,
+        ).strip().lower()
+        or DEFAULT_FAL_IMAGE_QUALITY,
         fal_output_format=os.getenv("FAL_OUTPUT_FORMAT", DEFAULT_FAL_OUTPUT_FORMAT)
         .strip()
         .lower()
@@ -361,5 +385,39 @@ def get_settings() -> Settings:
         story_image_workers=_env_int(
             "STORY_IMAGE_WORKERS",
             DEFAULT_STORY_IMAGE_WORKERS,
+        ),
+        story_review_enabled=_env_bool(
+            "STORY_REVIEW_ENABLED",
+            DEFAULT_STORY_REVIEW_ENABLED,
+        ),
+        story_review_model=os.getenv(
+            "STORY_REVIEW_MODEL",
+            DEFAULT_STORY_REVIEW_MODEL,
+        ).strip()
+        or DEFAULT_STORY_REVIEW_MODEL,
+        story_review_fal_model=os.getenv(
+            "STORY_REVIEW_FAL_MODEL",
+            DEFAULT_STORY_REVIEW_FAL_MODEL,
+        ).strip()
+        or DEFAULT_STORY_REVIEW_FAL_MODEL,
+        story_review_min_score=max(
+            1,
+            min(
+                10,
+                _env_int(
+                    "STORY_REVIEW_MIN_SCORE",
+                    DEFAULT_STORY_REVIEW_MIN_SCORE,
+                ),
+            ),
+        ),
+        story_image_max_attempts=max(
+            1,
+            min(
+                4,
+                _env_int(
+                    "STORY_IMAGE_MAX_ATTEMPTS",
+                    DEFAULT_STORY_IMAGE_MAX_ATTEMPTS,
+                ),
+            ),
         ),
     )

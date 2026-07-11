@@ -117,6 +117,8 @@ def test_fal_image_provider_defaults_are_loaded(monkeypatch):
         "FAL_KEY",
         "FAL_MODEL",
         "FAL_IMAGE_ASPECT_RATIO",
+        "FAL_IMAGE_SIZE",
+        "FAL_IMAGE_QUALITY",
         "FAL_OUTPUT_FORMAT",
         "FAL_SAFETY_TOLERANCE",
         "FAL_GUIDANCE_SCALE",
@@ -130,8 +132,10 @@ def test_fal_image_provider_defaults_are_loaded(monkeypatch):
 
         assert settings.image_provider == "fal"
         assert settings.fal_key == ""
-        assert settings.fal_model == "fal-ai/flux-pro/kontext"
+        assert settings.fal_model == "openai/gpt-image-2/edit"
         assert settings.fal_image_aspect_ratio == "9:16"
+        assert settings.fal_image_size == "864x1536"
+        assert settings.fal_image_quality == "medium"
         assert settings.fal_output_format == "png"
         assert settings.fal_safety_tolerance == "2"
         assert settings.fal_guidance_scale == 3.5
@@ -146,6 +150,8 @@ def test_fal_image_provider_env_is_loaded(monkeypatch):
     monkeypatch.setenv("FAL_KEY", "fal-secret")
     monkeypatch.setenv("FAL_MODEL", "fal-ai/flux-pro/kontext")
     monkeypatch.setenv("FAL_IMAGE_ASPECT_RATIO", "9:16")
+    monkeypatch.setenv("FAL_IMAGE_SIZE", "768x1360")
+    monkeypatch.setenv("FAL_IMAGE_QUALITY", "low")
     monkeypatch.setenv("FAL_OUTPUT_FORMAT", "jpeg")
     monkeypatch.setenv("FAL_SAFETY_TOLERANCE", "3")
     monkeypatch.setenv("FAL_GUIDANCE_SCALE", "4.25")
@@ -159,6 +165,8 @@ def test_fal_image_provider_env_is_loaded(monkeypatch):
         assert settings.fal_key == "fal-secret"
         assert settings.fal_model == "fal-ai/flux-pro/kontext"
         assert settings.fal_image_aspect_ratio == "9:16"
+        assert settings.fal_image_size == "768x1360"
+        assert settings.fal_image_quality == "low"
         assert settings.fal_output_format == "jpeg"
         assert settings.fal_safety_tolerance == "3"
         assert settings.fal_guidance_scale == 4.25
@@ -249,11 +257,43 @@ def test_batch_timezone_can_be_configured(monkeypatch):
 def test_fast_ffmpeg_and_story_worker_defaults(monkeypatch):
     monkeypatch.delenv("FFMPEG_PRESET", raising=False)
     monkeypatch.delenv("STORY_IMAGE_WORKERS", raising=False)
+    monkeypatch.delenv("OPENAI_IMAGE_SIZE", raising=False)
+    monkeypatch.delenv("OPENAI_IMAGE_QUALITY", raising=False)
+    monkeypatch.delenv("STORY_REVIEW_ENABLED", raising=False)
+    monkeypatch.delenv("STORY_REVIEW_MODEL", raising=False)
+    monkeypatch.delenv("STORY_REVIEW_FAL_MODEL", raising=False)
+    monkeypatch.delenv("STORY_REVIEW_MIN_SCORE", raising=False)
+    monkeypatch.delenv("STORY_IMAGE_MAX_ATTEMPTS", raising=False)
     get_settings.cache_clear()
     try:
         settings = get_settings()
         assert settings.ffmpeg_preset == "veryfast"
-        assert settings.story_image_workers == 3
+        assert settings.story_image_workers == 2
+        assert settings.openai_image_size == "864x1536"
+        assert settings.openai_image_quality == "medium"
+        assert settings.story_review_enabled is True
+        assert settings.story_review_model == "gpt-5.4-nano"
+        assert settings.story_review_fal_model == "google/gemini-2.5-flash"
+        assert settings.story_review_min_score == 8
+        assert settings.story_image_max_attempts == 2
+    finally:
+        get_settings.cache_clear()
+
+
+def test_story_quality_settings_are_clamped(monkeypatch):
+    monkeypatch.setenv("STORY_REVIEW_ENABLED", "false")
+    monkeypatch.setenv("STORY_REVIEW_MODEL", "vision-reviewer")
+    monkeypatch.setenv("STORY_REVIEW_FAL_MODEL", "provider/vision-reviewer")
+    monkeypatch.setenv("STORY_REVIEW_MIN_SCORE", "99")
+    monkeypatch.setenv("STORY_IMAGE_MAX_ATTEMPTS", "20")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        assert settings.story_review_enabled is False
+        assert settings.story_review_model == "vision-reviewer"
+        assert settings.story_review_fal_model == "provider/vision-reviewer"
+        assert settings.story_review_min_score == 10
+        assert settings.story_image_max_attempts == 4
     finally:
         get_settings.cache_clear()
 

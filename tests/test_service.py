@@ -459,7 +459,7 @@ def test_type_1_outputs_skip_full_video_render():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_4_generates_six_ai_slides_and_keeps_original_reference():
+def test_type_4_generates_six_ai_slides_and_normalizes_original_reference():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -497,13 +497,14 @@ def test_type_4_generates_six_ai_slides_and_keeps_original_reference():
         assert result.video_type == VideoType.TYPE_4
         assert len(result.slides) == 7
         assert story_generator.reference_image_path == reference
-        assert renderer.render_slide_still_calls == [VideoType.TYPE_4] * 6
+        assert renderer.render_slide_still_calls == [VideoType.TYPE_4] * 7
         assert result.slides[-1].role == SlideRole.STORY_ORIGINAL_REFERENCE
-        assert result.slides[-1].media.local_path.name == "slide_07_original.jpg"
-        assert result.slides[-1].media.local_path.read_bytes() == reference.read_bytes()
+        assert result.slides[-1].media.local_path.name == "slide_07.jpg"
+        assert Image.open(result.slides[-1].media.local_path).size == (72, 128)
+        assert result.slides[-1].media.local_path.read_bytes() != reference.read_bytes()
         assert renderer.written_plan is not None
-        assert renderer.written_plan.slides[0].text.startswith("Así es como pasé")
-        assert renderer.written_plan.slides[4].text.startswith("Investigando encontré")
+        assert renderer.written_plan.slides[0].text.startswith("Así pasé")
+        assert renderer.written_plan.slides[4].text.startswith("Entonces encontré")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -549,7 +550,7 @@ def test_type_4_downloads_reference_from_r2_when_no_photo_is_passed():
         assert story_generator.reference_image_path.name == "source.jpg"
         assert story_generator.reference_image_path.exists()
         assert result.chosen_account == "r2:videos/imagenes/reference.jpg"
-        assert result.slides[-1].media.local_path.name == "slide_07_original.jpg"
+        assert result.slides[-1].media.local_path.name == "slide_07.jpg"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
