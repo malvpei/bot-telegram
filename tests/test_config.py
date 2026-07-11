@@ -106,7 +106,7 @@ def test_upload_site_defaults_are_enabled_for_image_uploads(monkeypatch):
         assert settings.upload_site_username == "admin"
         assert settings.upload_site_password == "pon_una_password"
         assert settings.upload_site_max_image_mb == 20
-        assert settings.r2_image_prefix == "videos/imagenes"
+        assert settings.r2_image_prefix == "imagenes"
     finally:
         get_settings.cache_clear()
 
@@ -290,7 +290,7 @@ def test_fast_ffmpeg_and_story_worker_defaults(monkeypatch):
         assert settings.story_review_model == "gpt-5.4-nano"
         assert settings.story_review_fal_model == "google/gemini-2.5-flash"
         assert settings.story_review_min_score == 8
-        assert settings.story_image_max_attempts == 2
+        assert settings.story_image_max_attempts == 3
     finally:
         get_settings.cache_clear()
 

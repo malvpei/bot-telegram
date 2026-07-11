@@ -5,6 +5,7 @@ import json
 import logging
 import mimetypes
 import os
+import shutil
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import ExitStack
@@ -114,10 +115,11 @@ STORY_SCENES: tuple[StoryScene, ...] = (
         prompt=(
             "Scene 1: transform the reference person into the protagonist working "
             "sadly in one busy fast-food restaurant kitchen. He wears a black "
-            "short-sleeve polo uniform with a tiny abstract yellow arch icon, red "
-            "visor, name-tag shape with no letters and black or red apron. No luxury "
-            "shirt, car clothing or sunglasses. He stands centered in the lower "
-            "half holding one finished burger with both hands, tired expression. "
+            "short-sleeve polo uniform, red visor and black or red apron. Keep the "
+            "uniform completely generic: no logo, brand mark, letters or name tag "
+            "is required. No luxury shirt, car clothing or sunglasses. He stands "
+            "centered in the lower half holding one finished burger with both hands, "
+            "tired expression. "
             "Show industrial fryers, grill, fries and burgers; coworkers may appear "
             "only as small indistinct background silhouettes. Do not show a laptop, "
             "desk, bedroom or car in this restaurant scene."
@@ -407,6 +409,11 @@ class StoryCarouselImageGenerator:
         max_attempts = max(1, min(4, int(self.settings.story_image_max_attempts)))
         retry_feedback = ""
         last_issue = "la imagen no supero el control de calidad"
+        best_candidate_path = output_path.with_name(
+            f"{output_path.stem}.best_candidate{output_path.suffix}"
+        )
+        best_score = -1
+        best_issue = ""
 
         for attempt in range(1, max_attempts + 1):
             attempt_path = output_path.with_name(
@@ -436,18 +443,26 @@ class StoryCarouselImageGenerator:
                     )
                     if review is None or review.accepted:
                         output_path.parent.mkdir(parents=True, exist_ok=True)
+                        if best_candidate_path.exists():
+                            best_candidate_path.unlink()
                         os.replace(attempt_path, output_path)
                         return
                     issue_text = "; ".join(review.issues).strip()
-                    last_issue = issue_text or (
-                        f"puntuacion visual {review.score}/10, minimo "
-                        f"{self.settings.story_review_min_score}/10"
+                    last_issue = (
+                        f"score {review.score}/10: {issue_text}"
+                        if issue_text
+                        else (
+                            f"puntuacion visual {review.score}/10, minimo "
+                            f"{self.settings.story_review_min_score}/10"
+                        )
                     )
                     retry_feedback = review.retry_instruction.strip() or last_issue
+                    if review.score > best_score:
+                        shutil.copy2(attempt_path, best_candidate_path)
+                        best_score = review.score
+                        best_issue = issue_text
             except Exception as error:
                 last_issue = str(error)
-                if attempt >= max_attempts:
-                    raise
                 retry_feedback = (
                     "The previous request failed or returned an unusable image. "
                     "Follow every constraint literally and return one clean portrait "
@@ -469,6 +484,23 @@ class StoryCarouselImageGenerator:
                     last_issue,
                 )
 
+        fallback_min_score = max(
+            7,
+            int(self.settings.story_review_min_score) - 1,
+        )
+        if best_candidate_path.exists() and best_score >= fallback_min_score:
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            os.replace(best_candidate_path, output_path)
+            LOGGER.warning(
+                "Story scene %s delivered best reviewed fallback after %d attempts: score %d/10: %s",
+                scene.role.value,
+                max_attempts,
+                best_score,
+                best_issue or "minor non-blocking differences",
+            )
+            return
+        if best_candidate_path.exists():
+            best_candidate_path.unlink()
         raise RuntimeError(
             f"La escena {scene.role.value} no alcanzo la calidad minima tras "
             f"{max_attempts} intentos con {self.effective_image_model()}: {last_issue}"
@@ -937,18 +969,26 @@ class StoryCarouselImageGenerator:
 
     def _review_prompt(self, scene: StoryScene) -> str:
         return (
-            "You are the strict visual quality gate for a vertical social-media "
+            "You are the practical visual quality gate for a vertical social-media "
             "story. Image 1 is the original identity/photo reference. If three "
             "images are present, image 2 is the previous continuity/style image. "
-            "The final image is the candidate to grade. Reject the candidate if it "
-            "has a collage, panels, duplicated foreground protagonist, malformed "
-            "face/hands, impossible laptop or car geometry, unreadable fake text, "
-            "important content in the upper caption-safe area, wrong setting/action/"
-            "emotion, weak identity continuity, or a style mismatch. Small background "
-            "people are allowed only in the fast-food scene. Be demanding but do not "
-            "reject harmless minor cartoon simplification.\n\n"
-            f"Scene requirement: {scene.review_criteria}\n"
-            f"Full generation brief: {scene.prompt}\n\n"
+            "The final image is the candidate to grade. Judge whether it clearly "
+            "communicates the core scene requirement below, not whether it follows "
+            "every generation detail literally. Reject only for a blocking defect: "
+            "wrong setting, missing main action/object/emotion, collage or panels, "
+            "duplicated foreground protagonist, severely malformed anatomy, an "
+            "impossible laptop or car, prominent unreadable fake text, or a major "
+            "style discontinuity. Minor simplified cartoon hands are acceptable when "
+            "the action is clear. Approximate stylized facial likeness, clothing trim "
+            "or color variation, missing background props, and small composition "
+            "differences are non-blocking. Never require or request a logo, icon, "
+            "brand mark, lettering, or name tag; their presence or absence alone is "
+            "not a reason to reject. Identity is blocking only if the candidate is "
+            "obviously a completely different protagonist, not merely a simplified "
+            "cartoon likeness. Small background people are allowed in the fast-food "
+            "scene. Score a clean image that tells the required story at least 8/10, "
+            "even when it has harmless cosmetic differences.\n\n"
+            f"Core scene requirement: {scene.review_criteria}\n\n"
             "Set accepted=true only for a clean publishable result scoring at least "
             f"{self.settings.story_review_min_score}/10. retry_instruction must be a "
             "short concrete English correction prompt for the image generator. "

@@ -541,6 +541,10 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
         assert "Dropradar" not in prompt
     assert "fast-food restaurant kitchen" in prompts[STORY_SCENES[0].role]
     assert "No luxury shirt" in prompts[STORY_SCENES[0].role]
+    assert "no logo, brand mark, letters or name tag" in prompts[
+        STORY_SCENES[0].role
+    ]
+    assert "yellow arch" not in prompts[STORY_SCENES[0].role]
     assert "Bedroom base" in prompts[STORY_SCENES[1].role]
     assert "hinge is one straight horizontal line" in prompts[STORY_SCENES[1].role]
     assert "must not be twisted" in prompts[STORY_SCENES[1].role]
@@ -553,6 +557,17 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
     assert "Bedroom continuity" not in prompts[STORY_SCENES[1].role]
     assert "Bedroom continuity" not in prompts[STORY_SCENES[5].role]
     assert "Do not show a bedroom" in prompts[STORY_SCENES[5].role]
+
+
+def test_reviewer_checks_core_story_without_requiring_cosmetic_brand_details():
+    generator = StoryCarouselImageGenerator(get_settings())
+
+    prompt = generator._review_prompt(STORY_SCENES[0])
+
+    assert STORY_SCENES[0].review_criteria in prompt
+    assert "Never require or request a logo" in prompt
+    assert "Minor simplified cartoon hands are acceptable" in prompt
+    assert "Full generation brief" not in prompt
 
 
 def test_quality_gate_retries_only_the_rejected_scene(tmp_path, monkeypatch):
@@ -636,6 +651,49 @@ def test_quality_gate_refuses_to_deliver_repeated_bad_scene(tmp_path, monkeypatc
         )
 
     assert not output.exists()
+
+
+def test_quality_gate_delivers_best_usable_fallback_instead_of_failing_job(
+    tmp_path,
+    monkeypatch,
+):
+    settings = replace(
+        get_settings(),
+        story_image_max_attempts=2,
+        story_review_enabled=True,
+        story_review_min_score=8,
+        openai_api_key="review-key",
+    )
+    generator = StoryCarouselImageGenerator(settings)
+    reference = tmp_path / "reference.jpg"
+    Image.new("RGB", (720, 1280), (30, 60, 90)).save(reference)
+    output = tmp_path / "fallback.png"
+    review_scores = iter((7, 6))
+
+    def fake_generate(inputs, scene, attempt_path, *, retry_feedback=""):
+        _save_valid_story_image(attempt_path, 1)
+
+    def fake_review(*args, **kwargs):
+        score = next(review_scores)
+        return StoryImageReview(
+            False,
+            score,
+            ("minor stylized identity difference",),
+            "Match the face a little more closely.",
+        )
+
+    monkeypatch.setattr(generator, "_generate_scene", fake_generate)
+    monkeypatch.setattr(generator, "_review_generated_scene", fake_review)
+
+    generator._generate_scene_with_quality_gate(
+        reference,
+        [reference],
+        STORY_SCENES[0],
+        output,
+    )
+
+    assert output.exists()
+    assert not list(tmp_path.glob("*.best_candidate.png"))
 
 
 def test_local_quality_gate_rejects_wrong_aspect_ratio(tmp_path):
