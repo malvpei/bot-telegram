@@ -557,10 +557,10 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
         STORY_SCENES[2].role
     ]
     assert "external compositor" in prompts[STORY_SCENES[4].role]
-    assert "wide solid dark-green blank header bar" in prompts[
+    assert "one clearly shaped active browser" in prompts[
         STORY_SCENES[4].role
     ]
-    assert "no frown, sadness, worry, fear or anxiety" in prompts[
+    assert "small confident closed-mouth smile" in prompts[
         STORY_SCENES[4].role
     ]
     assert "Bedroom continuity" not in prompts[STORY_SCENES[0].role]

@@ -200,21 +200,26 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "Scene 5: preserve the same bedroom, desk, camera and protagonist for the "
             "turning point. He sits concentrated and serious, looking at the laptop. "
             "His posture is upright and hopeful, visibly different from the prior "
-            "failure scene. His face shows calm confident concentration with relaxed "
-            "level eyebrows, attentive eyes and a closed neutral mouth: no frown, "
-            "sadness, worry, fear or anxiety. "
-            "The screen shows a polished white-and-green product-research dashboard "
-            "with one wide solid dark-green blank header bar across the top, blank "
-            "product cards, clean data-row shapes, metric blocks, a small radar-like "
-            "green icon and one green rising chart. Leave the header bar empty. No "
-            "brand name or other readable text; the external compositor will add the "
-            "exact brand name inside that bar."
+            "failure scene. He looks pleased and calmly concentrated, with a small "
+            "confident closed-mouth smile, subtly raised relaxed cheeks, bright "
+            "attentive eyes and relaxed level eyebrows. He is happy with the progress "
+            "while still focused on working: never blank, sad, worried, fearful, "
+            "anxious or frowning. The complete screen shows a polished white-and-green "
+            "product-research website inside an obvious desktop browser window. Show "
+            "browser chrome across the screen top, one clearly shaped active browser "
+            "tab on the upper left and a separate address bar below it. Leave the "
+            "active tab label blank. Below the browser chrome, show blank product "
+            "cards, clean data-row shapes, metric blocks, a small radar-like green "
+            "icon and one green rising chart. No brand name or other readable text; "
+            "the external compositor will project the exact brand name into the "
+            "active browser tab using the screen perspective."
         ),
         review_criteria=(
             "Same bedroom and right-person/left-laptop three-quarter side composition; "
-            "calm concentrated protagonist with no worried expression, complete screen "
-            "visible, and a clean green product-research dashboard with a wide blank "
-            "green header bar that clearly signals improvement."
+            "happy and concentrated protagonist with a small confident smile and no "
+            "worried expression; complete screen visible with a desktop browser, one "
+            "blank active tab at the upper left, address bar, and a clean green "
+            "product-research dashboard that clearly signals improvement."
         ),
     ),
     StoryScene(
@@ -564,6 +569,11 @@ class StoryCarouselImageGenerator:
         } and any(
             marker in issue_text
             for marker in ("worried", "concerned", "anxious", "sad", "frown")
+        ):
+            return False
+        if scene.role == SlideRole.STORY_DROPRADAR and any(
+            marker in issue_text
+            for marker in ("blank expression", "neutral expression", "not smiling", "unhappy")
         ):
             return False
         return True

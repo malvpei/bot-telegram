@@ -500,115 +500,176 @@ class VideoRenderer:
     ) -> None:
         if slide.role != SlideRole.STORY_DROPRADAR:
             return
-        left, top, right, bottom = self._story_screen_header_box(image)
-        if right <= left or bottom <= top:
+        screen_quad = self._story_laptop_screen_quad(image)
+        if screen_quad is None:
+            LOGGER.warning(
+                "Could not locate laptop screen for integrated Dropradar browser tab"
+            )
             return
 
-        draw = ImageDraw.Draw(image)
-        box_height = bottom - top
-        radius = max(3, box_height // 6)
-        draw.rounded_rectangle(
-            (left, top, right, bottom),
-            radius=radius,
-            fill=(35, 133, 75, 255),
+        browser_width = 1000
+        browser_height = 220
+        browser_bar = Image.new(
+            "RGBA",
+            (browser_width, browser_height),
+            (231, 234, 238, 255),
         )
+        draw = ImageDraw.Draw(browser_bar)
+        draw.rectangle((0, 92, browser_width, browser_height), fill=(250, 251, 252, 255))
+        dot_colors = ((238, 95, 91), (244, 188, 63), (89, 190, 91))
+        for index, color in enumerate(dot_colors):
+            center_x = 34 + index * 34
+            draw.ellipse((center_x - 9, 35, center_x + 9, 53), fill=(*color, 255))
 
-        max_text_width = max(1, right - left - max(8, box_height // 3))
-        font_size = max(16, int(round(box_height * 0.56)))
-        font = self._load_font(size=font_size, bold=True)
-        text_width, text_height = self._text_size(
-            draw,
-            STORY_DROPRADAR_BRAND_TEXT,
-            font,
-            stroke_width=0,
+        tab_box = (145, 15, 690, 96)
+        draw.rounded_rectangle(
+            tab_box,
+            radius=24,
+            fill=(255, 255, 255, 255),
+            outline=(205, 210, 215, 255),
+            width=3,
         )
-        while text_width > max_text_width and font_size > 12:
-            font_size -= 1
-            font = self._load_font(size=font_size, bold=True)
-            text_width, text_height = self._text_size(
-                draw,
-                STORY_DROPRADAR_BRAND_TEXT,
-                font,
-                stroke_width=0,
-            )
-        text_x = left + ((right - left) - text_width) // 2
-        text_y = top + ((bottom - top) - text_height) // 2
+        draw.ellipse((178, 39, 208, 69), fill=(38, 151, 82, 255))
+        font = self._load_font(size=52, bold=True)
         draw.text(
-            (text_x, text_y),
+            (226, 26),
             STORY_DROPRADAR_BRAND_TEXT,
             font=font,
-            fill=(255, 255, 255, 255),
+            fill=(28, 104, 60, 255),
         )
+        draw.rounded_rectangle(
+            (120, 120, 920, 194),
+            radius=35,
+            fill=(238, 240, 243, 255),
+            outline=(209, 213, 218, 255),
+            width=3,
+        )
+        draw.ellipse((151, 143, 176, 168), outline=(112, 119, 126, 255), width=4)
+        draw.line((171, 164, 184, 178), fill=(112, 119, 126, 255), width=4)
+
+        top_left, top_right, bottom_right, bottom_left = screen_quad
+        band_fraction = 0.25
+        band_bottom_right = top_right + (bottom_right - top_right) * band_fraction
+        band_bottom_left = top_left + (bottom_left - top_left) * band_fraction
+        destination = np.asarray(
+            [top_left, top_right, band_bottom_right, band_bottom_left],
+            dtype=np.float32,
+        )
+        source = np.asarray(
+            [
+                (0, 0),
+                (browser_width - 1, 0),
+                (browser_width - 1, browser_height - 1),
+                (0, browser_height - 1),
+            ],
+            dtype=np.float32,
+        )
+        transform = cv2.getPerspectiveTransform(source, destination)
+        warped = cv2.warpPerspective(
+            np.asarray(browser_bar),
+            transform,
+            image.size,
+            flags=cv2.INTER_LANCZOS4,
+            borderMode=cv2.BORDER_CONSTANT,
+            borderValue=(0, 0, 0, 0),
+        )
+        image.alpha_composite(Image.fromarray(warped, mode="RGBA"))
 
     @staticmethod
-    def _story_screen_header_box(
+    def _story_laptop_screen_quad(
         image: Image.Image,
-    ) -> tuple[int, int, int, int]:
-        """Find the blank green header generated inside the laptop screen."""
+    ) -> np.ndarray | None:
+        """Locate the bright dashboard bounded by the laptop's dark bezel."""
         rgb = np.asarray(image.convert("RGB"))
         height, width = rgb.shape[:2]
-        roi_left = 0
-        roi_right = max(1, int(round(width * 0.62)))
-        roi_top = max(0, int(round(height * 0.45)))
-        roi_bottom = min(height, int(round(height * 0.84)))
-        roi = rgb[roi_top:roi_bottom, roi_left:roi_right]
-        if roi.size:
-            red = roi[:, :, 0].astype(np.int16)
-            green = roi[:, :, 1].astype(np.int16)
-            blue = roi[:, :, 2].astype(np.int16)
-            green_mask = (
-                (green >= 72)
-                & (green - red >= 18)
-                & (green - blue >= 10)
-                & (green * 100 >= red * 118)
-            ).astype(np.uint8)
-            kernel_width = max(3, int(round(width * 0.009)))
-            kernel_height = max(3, int(round(height * 0.004)))
-            kernel = cv2.getStructuringElement(
-                cv2.MORPH_RECT,
-                (kernel_width, kernel_height),
-            )
-            cleaned = cv2.morphologyEx(green_mask, cv2.MORPH_CLOSE, kernel)
-            count, _, stats, _ = cv2.connectedComponentsWithStats(
-                cleaned,
-                connectivity=8,
-            )
-            candidates: list[tuple[float, tuple[int, int, int, int]]] = []
-            for index in range(1, count):
-                x, y, component_width, component_height, area = (
-                    int(value) for value in stats[index]
-                )
-                if component_width < width * 0.11:
-                    continue
-                if not (height * 0.008 <= component_height <= height * 0.075):
-                    continue
-                if component_width / max(component_height, 1) < 2.2:
-                    continue
-                if area < component_width * component_height * 0.30:
-                    continue
-                absolute_top = roi_top + y
-                box = (
-                    x,
-                    absolute_top,
-                    x + component_width,
-                    absolute_top + component_height,
-                )
-                target_y = height * 0.60
-                score = component_width * 3.0 - abs(absolute_top - target_y) * 0.15
-                candidates.append((score, box))
-            if candidates:
-                _, box = max(candidates, key=lambda item: item[0])
-                return box
+        roi_right = max(1, int(round(width * 0.70)))
+        roi_top = max(0, int(round(height * 0.44)))
+        roi_bottom = min(height, int(round(height * 0.88)))
+        roi = rgb[roi_top:roi_bottom, :roi_right]
+        if not roi.size:
+            return None
 
-        # The generation prompt locks the laptop to the lower-left. This fallback
-        # guarantees an exact brand label even if the green detector misses a
-        # stylized header shade.
-        return (
-            int(round(width * 0.09)),
-            int(round(height * 0.585)),
-            int(round(width * 0.43)),
-            int(round(height * 0.625)),
+        hsv = cv2.cvtColor(roi, cv2.COLOR_RGB2HSV)
+        bright_neutral = ((hsv[:, :, 1] <= 115) & (hsv[:, :, 2] >= 132)).astype(
+            np.uint8
         )
+        close_kernel = cv2.getStructuringElement(
+            cv2.MORPH_RECT,
+            (5, 5),
+        )
+        cleaned = cv2.morphologyEx(bright_neutral, cv2.MORPH_CLOSE, close_kernel)
+        contours, _ = cv2.findContours(
+            cleaned,
+            # The bright screen is often nested inside a dark bezel, which is
+            # itself surrounded by a bright wall. RETR_LIST keeps that inner
+            # screen contour instead of returning only the wall.
+            cv2.RETR_LIST,
+            cv2.CHAIN_APPROX_SIMPLE,
+        )
+        candidates: list[tuple[float, np.ndarray]] = []
+        image_area = float(width * height)
+        roi_rgb = roi.astype(np.int16)
+        green_pixels = (
+            (roi_rgb[:, :, 1] >= 70)
+            & (roi_rgb[:, :, 1] - roi_rgb[:, :, 0] >= 12)
+            & (roi_rgb[:, :, 1] - roi_rgb[:, :, 2] >= 6)
+        )
+
+        for contour in contours:
+            area = float(cv2.contourArea(contour))
+            if not (image_area * 0.018 <= area <= image_area * 0.22):
+                continue
+            x, y, box_width, box_height = cv2.boundingRect(contour)
+            if box_width < width * 0.16 or box_height < height * 0.12:
+                continue
+            if box_width > width * 0.64 or box_height > height * 0.43:
+                continue
+            absolute_y = roi_top + y
+            if absolute_y < height * 0.48 or absolute_y > height * 0.76:
+                continue
+            contour_mask = np.zeros(cleaned.shape, dtype=np.uint8)
+            cv2.drawContours(contour_mask, [contour], -1, 1, thickness=-1)
+            green_ratio = float(
+                np.count_nonzero(green_pixels & (contour_mask > 0))
+            ) / max(area, 1.0)
+            if green_ratio < 0.003:
+                continue
+
+            perimeter = cv2.arcLength(contour, True)
+            approx = cv2.approxPolyDP(contour, 0.035 * perimeter, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                points = approx.reshape(4, 2).astype(np.float32)
+            else:
+                points = cv2.boxPoints(cv2.minAreaRect(contour)).astype(np.float32)
+            points[:, 1] += roi_top
+            ordered = VideoRenderer._order_quad_points(points)
+            top_width = np.linalg.norm(ordered[1] - ordered[0])
+            bottom_width = np.linalg.norm(ordered[2] - ordered[3])
+            left_height = np.linalg.norm(ordered[3] - ordered[0])
+            right_height = np.linalg.norm(ordered[2] - ordered[1])
+            mean_width = (top_width + bottom_width) / 2.0
+            mean_height = (left_height + right_height) / 2.0
+            aspect = mean_width / max(mean_height, 1.0)
+            if not (0.55 <= aspect <= 1.80):
+                continue
+            edge_penalty = 0.82 if x <= 2 else 1.0
+            score = area * (1.0 + min(green_ratio, 0.10) * 3.0) * edge_penalty
+            candidates.append((score, ordered))
+
+        if not candidates:
+            return None
+        return max(candidates, key=lambda item: item[0])[1]
+
+    @staticmethod
+    def _order_quad_points(points: np.ndarray) -> np.ndarray:
+        ordered = np.zeros((4, 2), dtype=np.float32)
+        coordinate_sum = points.sum(axis=1)
+        coordinate_difference = np.diff(points, axis=1).reshape(-1)
+        ordered[0] = points[np.argmin(coordinate_sum)]
+        ordered[2] = points[np.argmax(coordinate_sum)]
+        ordered[1] = points[np.argmin(coordinate_difference)]
+        ordered[3] = points[np.argmax(coordinate_difference)]
+        return ordered
 
     def _prepare_slide_text_overlay(
         self,

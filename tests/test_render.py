@@ -846,15 +846,23 @@ def test_type_4_success_caption_also_uses_reserved_top_area():
     assert renderer._caption_preferred_centers(slide)[0] == 0.20
 
 
-def test_story_dropradar_brand_is_composited_inside_detected_green_screen_header():
+def test_story_dropradar_browser_tab_is_projected_inside_detected_screen():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
         image_path = root / "dropradar-scene.png"
         source = Image.new("RGB", (360, 640), (226, 218, 205))
         draw = ImageDraw.Draw(source)
-        draw.rectangle((35, 335, 190, 535), fill=(36, 43, 47))
-        draw.rectangle((48, 350, 177, 372), fill=(35, 133, 75))
+        draw.polygon(
+            ((25, 320), (220, 300), (245, 535), (40, 550)),
+            fill=(30, 35, 39),
+        )
+        expected_screen = np.asarray(
+            ((35, 330), (210, 314), (232, 522), (49, 537)),
+            dtype=np.float32,
+        )
+        draw.polygon(tuple(map(tuple, expected_screen.astype(int))), fill=(247, 248, 246))
+        draw.rectangle((74, 410, 180, 475), fill=(54, 154, 91))
         source.save(image_path)
         renderer = VideoRenderer(
             replace(
@@ -874,12 +882,35 @@ def test_story_dropradar_brand_is_composited_inside_detected_green_screen_header
 
         still = renderer.render_slide_still(slide, VideoType.TYPE_4)
 
-        assert renderer._story_screen_header_box(source) == (48, 350, 178, 373)
-        header = np.asarray(still)[350:373, 48:178]
-        white_text_pixels = np.all(header[:, :, :3] >= 240, axis=2)
-        assert int(white_text_pixels.sum()) >= 20
+        detected = renderer._story_laptop_screen_quad(source)
+        assert detected is not None
+        assert np.allclose(detected, expected_screen, atol=5)
+        before = np.asarray(source)
+        after = np.asarray(still)
+        browser_band = after[315:390, 35:220]
+        assert int(np.abs(after.astype(int) - before.astype(int)).sum()) > 50_000
+        assert np.count_nonzero(
+            (browser_band[:, :, 1] > browser_band[:, :, 0] + 20)
+        ) >= 10
+        assert np.allclose(after[590, 320], before[590, 320], atol=2)
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_story_dropradar_never_draws_floating_fallback_without_a_screen():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    source = Image.new("RGB", (360, 640), (226, 218, 205))
+    slide = SlidePlan(
+        index=5,
+        role=SlideRole.STORY_DROPRADAR,
+        text="",
+        media=_candidate(Path("source.jpg")),
+    )
+    composed = source.convert("RGBA")
+
+    renderer._draw_story_screen_brand(composed, slide)
+
+    assert np.array_equal(np.asarray(composed.convert("RGB")), np.asarray(source))
 
 
 def test_front_and_profile_faces_are_combined_for_multi_person_images():
