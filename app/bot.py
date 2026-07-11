@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
 from telegram.error import NetworkError, RetryAfter, TelegramError
 from telegram.ext import (
     Application,
@@ -64,8 +65,14 @@ TEMPLATE_VIDEO_CREATE_EN = "template_video:create:en"
 TEMPLATE_VIDEO_CALLBACK_PATTERN = r"^template_video:create(?::(es|en))?$"
 
 LOGGER = logging.getLogger(__name__)
-TELEGRAM_SEND_ATTEMPTS = 3
+TELEGRAM_SEND_ATTEMPTS = 6
 TELEGRAM_SEND_RETRY_BASE_DELAY = 1.5
+TELEGRAM_SEND_RETRY_MAX_DELAY = 30.0
+TELEGRAM_CONNECT_TIMEOUT = 30.0
+TELEGRAM_READ_TIMEOUT = 60.0
+TELEGRAM_WRITE_TIMEOUT = 60.0
+TELEGRAM_MEDIA_WRITE_TIMEOUT = 120.0
+TELEGRAM_POOL_TIMEOUT = 30.0
 TELEGRAM_TEXT_LIMIT = 4096
 POOL_SUMMARY_ACCOUNT_DETAIL_LIMIT = 12
 POOL_SUMMARY_ERROR_DETAIL_LIMIT = 4
@@ -100,6 +107,11 @@ def run_bot() -> None:
     application: Application = (
         ApplicationBuilder()
         .token(settings.telegram_bot_token)
+        .connect_timeout(TELEGRAM_CONNECT_TIMEOUT)
+        .read_timeout(TELEGRAM_READ_TIMEOUT)
+        .write_timeout(TELEGRAM_WRITE_TIMEOUT)
+        .media_write_timeout(TELEGRAM_MEDIA_WRITE_TIMEOUT)
+        .pool_timeout(TELEGRAM_POOL_TIMEOUT)
         .post_init(_post_init)
         .build()
     )
@@ -1666,6 +1678,38 @@ async def _send_video(context, chat_id: int, path):
     )
 
 
+async def _send_photo_album(context, chat_id: int, paths):
+    paths = [Path(path) for path in paths]
+    if len(paths) < 2:
+        if paths:
+            return [await _send_photo(context, chat_id, paths[0])]
+        return []
+
+    async def send_opened_album(*, chat_id: int, photo_paths):
+        # Rebuild every InputMediaPhoto on each retry. PTB consumes file inputs
+        # while preparing the multipart request, so reusing them after a broken
+        # HTTP connection is unsafe.
+        with ExitStack() as stack:
+            media = [
+                InputMediaPhoto(stack.enter_context(path.open("rb")))
+                for path in photo_paths
+            ]
+            return await context.bot.send_media_group(
+                chat_id=chat_id,
+                media=media,
+                read_timeout=TELEGRAM_READ_TIMEOUT,
+                write_timeout=TELEGRAM_MEDIA_WRITE_TIMEOUT,
+                connect_timeout=TELEGRAM_CONNECT_TIMEOUT,
+                pool_timeout=TELEGRAM_POOL_TIMEOUT,
+            )
+
+    return await _telegram_call_with_retries(
+        send_opened_album,
+        chat_id=chat_id,
+        photo_paths=paths,
+    )
+
+
 async def _telegram_call_with_retries(call, **kwargs):
     for attempt in range(1, TELEGRAM_SEND_ATTEMPTS + 1):
         try:
@@ -1684,7 +1728,10 @@ async def _telegram_call_with_retries(call, **kwargs):
         except NetworkError:
             if attempt >= TELEGRAM_SEND_ATTEMPTS:
                 raise
-            delay = TELEGRAM_SEND_RETRY_BASE_DELAY * attempt
+            delay = min(
+                TELEGRAM_SEND_RETRY_MAX_DELAY,
+                TELEGRAM_SEND_RETRY_BASE_DELAY * (2 ** (attempt - 1)),
+            )
             LOGGER.warning(
                 "Telegram network error while sending; retrying in %.2fs (%d/%d)",
                 delay,
@@ -1706,6 +1753,16 @@ async def _send_slides_text_then_image(
     separate_slide_text: bool = False,
 ) -> None:
     slides = list(slides)
+
+    if video_type == VideoType.TYPE_4 and not separate_slide_text:
+        paths = [
+            slide.media.local_path
+            for slide in slides
+            if slide.media.local_path.exists()
+        ]
+        if paths:
+            await _send_photo_album(context, chat_id, paths)
+        return
 
     # Slide copy is embedded in generated images except the Type 3 hook,
     # which is sent as Telegram text so the hook image stays clean.

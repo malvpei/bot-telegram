@@ -66,6 +66,11 @@ class FakeTelegramBot:
     async def send_video(self, *, chat_id: int, video, supports_streaming=True) -> None:
         self.events.append(("video", Path(video.name).name))
 
+    async def send_media_group(self, *, chat_id: int, media, **kwargs):
+        filenames = ",".join(item.media.filename for item in media)
+        self.events.append(("album", filenames))
+        return tuple(media)
+
 
 class FakeContext:
     def __init__(self) -> None:
@@ -286,6 +291,111 @@ def test_send_message_retries_after_network_error():
         asyncio.run(_send_message(context, 123, "Hook text"))
 
     assert context.bot.events == [("message", "Hook text")]
+
+
+def test_type_4_sends_all_story_images_as_one_album():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        slides = []
+        for index in range(1, 4):
+            image_path = root / f"slide_{index:02d}.jpg"
+            Image.new("RGB", (10, 16), (index, 20, 30)).save(image_path)
+            slides.append(
+                SlidePlan(
+                    index=index,
+                    role=SlideRole.STORY_MCDONALD,
+                    text="",
+                    media=MediaCandidate(
+                        source_account="ai_story",
+                        source_id=f"story:{index}",
+                        local_path=image_path,
+                        permalink="",
+                        caption="",
+                        width=10,
+                        height=16,
+                        created_at="",
+                    ),
+                )
+            )
+        context = FakeContext()
+
+        asyncio.run(
+            _send_slides_text_then_image(
+                context,
+                123,
+                slides,
+                video_type=VideoType.TYPE_4,
+            )
+        )
+
+        assert context.bot.events == [
+            ("album", "slide_01.jpg,slide_02.jpg,slide_03.jpg")
+        ]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_4_album_reopens_files_and_retries_network_read_errors():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_paths = []
+        slides = []
+        for index in range(1, 3):
+            image_path = root / f"slide_{index:02d}.jpg"
+            Image.new("RGB", (10, 16), (index, 20, 30)).save(image_path)
+            image_paths.append(image_path)
+            slides.append(
+                SlidePlan(
+                    index=index,
+                    role=SlideRole.STORY_MCDONALD,
+                    text="",
+                    media=MediaCandidate(
+                        source_account="ai_story",
+                        source_id=f"story:{index}",
+                        local_path=image_path,
+                        permalink="",
+                        caption="",
+                        width=10,
+                        height=16,
+                        created_at="",
+                    ),
+                )
+            )
+
+        class FlakyAlbumBot(FakeTelegramBot):
+            def __init__(self):
+                super().__init__()
+                self.calls = 0
+
+            async def send_media_group(self, *, chat_id: int, media, **kwargs):
+                self.calls += 1
+                if self.calls <= 3:
+                    raise NetworkError("httpx.ReadError")
+                return await super().send_media_group(
+                    chat_id=chat_id,
+                    media=media,
+                    **kwargs,
+                )
+
+        context = FakeContext()
+        context.bot = FlakyAlbumBot()
+
+        with patch("app.bot.asyncio.sleep", new=_fast_sleep):
+            asyncio.run(
+                _send_slides_text_then_image(
+                    context,
+                    123,
+                    slides,
+                    video_type=VideoType.TYPE_4,
+                )
+            )
+
+        assert context.bot.calls == 4
+        assert context.bot.events == [("album", "slide_01.jpg,slide_02.jpg")]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
 
 
 def test_type_1_sends_embedded_text_image_without_slide_messages():
