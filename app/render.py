@@ -198,6 +198,7 @@ TYPE_4_STORY_CAPTION_ROLES = {
     SlideRole.STORY_DROPRADAR,
     SlideRole.STORY_SUCCESS_COMIC,
 }
+STORY_DROPRADAR_BRAND_TEXT = "Dropradar"
 
 
 def _scale_x(value: int, width: int) -> int:
@@ -488,8 +489,126 @@ class VideoRenderer:
             else self._cover_image(source_image, image_progress)
         )
         composed = canvas.convert("RGBA")
+        self._draw_story_screen_brand(composed, slide)
         self._draw_text(composed, slide, video_type)
         return np.asarray(composed.convert("RGB"))
+
+    def _draw_story_screen_brand(
+        self,
+        image: Image.Image,
+        slide: SlidePlan,
+    ) -> None:
+        if slide.role != SlideRole.STORY_DROPRADAR:
+            return
+        left, top, right, bottom = self._story_screen_header_box(image)
+        if right <= left or bottom <= top:
+            return
+
+        draw = ImageDraw.Draw(image)
+        box_height = bottom - top
+        radius = max(3, box_height // 6)
+        draw.rounded_rectangle(
+            (left, top, right, bottom),
+            radius=radius,
+            fill=(35, 133, 75, 255),
+        )
+
+        max_text_width = max(1, right - left - max(8, box_height // 3))
+        font_size = max(16, int(round(box_height * 0.56)))
+        font = self._load_font(size=font_size, bold=True)
+        text_width, text_height = self._text_size(
+            draw,
+            STORY_DROPRADAR_BRAND_TEXT,
+            font,
+            stroke_width=0,
+        )
+        while text_width > max_text_width and font_size > 12:
+            font_size -= 1
+            font = self._load_font(size=font_size, bold=True)
+            text_width, text_height = self._text_size(
+                draw,
+                STORY_DROPRADAR_BRAND_TEXT,
+                font,
+                stroke_width=0,
+            )
+        text_x = left + ((right - left) - text_width) // 2
+        text_y = top + ((bottom - top) - text_height) // 2
+        draw.text(
+            (text_x, text_y),
+            STORY_DROPRADAR_BRAND_TEXT,
+            font=font,
+            fill=(255, 255, 255, 255),
+        )
+
+    @staticmethod
+    def _story_screen_header_box(
+        image: Image.Image,
+    ) -> tuple[int, int, int, int]:
+        """Find the blank green header generated inside the laptop screen."""
+        rgb = np.asarray(image.convert("RGB"))
+        height, width = rgb.shape[:2]
+        roi_left = 0
+        roi_right = max(1, int(round(width * 0.62)))
+        roi_top = max(0, int(round(height * 0.45)))
+        roi_bottom = min(height, int(round(height * 0.84)))
+        roi = rgb[roi_top:roi_bottom, roi_left:roi_right]
+        if roi.size:
+            red = roi[:, :, 0].astype(np.int16)
+            green = roi[:, :, 1].astype(np.int16)
+            blue = roi[:, :, 2].astype(np.int16)
+            green_mask = (
+                (green >= 72)
+                & (green - red >= 18)
+                & (green - blue >= 10)
+                & (green * 100 >= red * 118)
+            ).astype(np.uint8)
+            kernel_width = max(3, int(round(width * 0.009)))
+            kernel_height = max(3, int(round(height * 0.004)))
+            kernel = cv2.getStructuringElement(
+                cv2.MORPH_RECT,
+                (kernel_width, kernel_height),
+            )
+            cleaned = cv2.morphologyEx(green_mask, cv2.MORPH_CLOSE, kernel)
+            count, _, stats, _ = cv2.connectedComponentsWithStats(
+                cleaned,
+                connectivity=8,
+            )
+            candidates: list[tuple[float, tuple[int, int, int, int]]] = []
+            for index in range(1, count):
+                x, y, component_width, component_height, area = (
+                    int(value) for value in stats[index]
+                )
+                if component_width < width * 0.11:
+                    continue
+                if not (height * 0.008 <= component_height <= height * 0.075):
+                    continue
+                if component_width / max(component_height, 1) < 2.2:
+                    continue
+                if area < component_width * component_height * 0.30:
+                    continue
+                absolute_top = roi_top + y
+                box = (
+                    x,
+                    absolute_top,
+                    x + component_width,
+                    absolute_top + component_height,
+                )
+                target_y = height * 0.60
+                score = component_width * 3.0 - abs(absolute_top - target_y) * 0.15
+                candidates.append((score, box))
+            if candidates:
+                _, box = max(candidates, key=lambda item: item[0])
+                return box
+
+        # The generation prompt locks the laptop to the lower-left. This fallback
+        # guarantees an exact brand label even if the green detector misses a
+        # stylized header shade.
+        return (
+            int(round(width * 0.09)),
+            int(round(height * 0.585)),
+            int(round(width * 0.43)),
+            int(round(height * 0.625)),
+        )
 
     def _prepare_slide_text_overlay(
         self,

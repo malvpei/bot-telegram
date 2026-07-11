@@ -846,6 +846,42 @@ def test_type_4_success_caption_also_uses_reserved_top_area():
     assert renderer._caption_preferred_centers(slide)[0] == 0.20
 
 
+def test_story_dropradar_brand_is_composited_inside_detected_green_screen_header():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"render-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "dropradar-scene.png"
+        source = Image.new("RGB", (360, 640), (226, 218, 205))
+        draw = ImageDraw.Draw(source)
+        draw.rectangle((35, 335, 190, 535), fill=(36, 43, 47))
+        draw.rectangle((48, 350, 177, 372), fill=(35, 133, 75))
+        source.save(image_path)
+        renderer = VideoRenderer(
+            replace(
+                get_settings(),
+                root_dir=root,
+                width=360,
+                height=640,
+                fonts_dir=root / "fonts",
+            )
+        )
+        slide = SlidePlan(
+            index=5,
+            role=SlideRole.STORY_DROPRADAR,
+            text="",
+            media=_candidate(image_path),
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_4)
+
+        assert renderer._story_screen_header_box(source) == (48, 350, 178, 373)
+        header = np.asarray(still)[350:373, 48:178]
+        white_text_pixels = np.all(header[:, :, :3] >= 240, axis=2)
+        assert int(white_text_pixels.sum()) >= 20
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_front_and_profile_faces_are_combined_for_multi_person_images():
     class StaticCascade:
         def __init__(self, boxes):

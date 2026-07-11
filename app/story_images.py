@@ -74,14 +74,21 @@ BEDROOM_CONTINUITY_DIRECTIVE = (
     "desk, never miniature and never separated from the laptop."
 )
 LAPTOP_COMPOSITION_DIRECTIVE = (
-    "Laptop composition for desk scenes: keep a believable side or three-quarter "
-    "desk view. The laptop sits on the desk in the left foreground, open at a "
-    "normal 100 to 110 degree angle. Its keyboard base is flat on the desk, its "
-    "hinge is one straight horizontal line and its screen is one upright rectangle "
-    "with parallel edges, facing both viewer and protagonist. The protagonist sits "
-    "to the right, looking at the screen, with hands aligned to the keyboard or "
-    "trackpad. The laptop must not be twisted, reversed, floating, detached, folded "
-    "the wrong way or standing vertically on its keyboard edge."
+    "MANDATORY CAMERA BLUEPRINT FOR EVERY DESK SCENE: copy the composition of a "
+    "clean three-quarter side-view ecommerce illustration. The protagonist occupies "
+    "the right half of the frame, seated in clear side profile and facing left toward "
+    "the laptop; never place him front-facing behind the laptop. The laptop occupies "
+    "the left foreground and is viewed diagonally from its right side, never straight "
+    "from the front. Show both the keyboard in perspective and the complete screen "
+    "clearly to the viewer. The screen plane must visibly recede sideways while still "
+    "being readable, like a three-quarter side angle, with its top and bottom edges "
+    "slightly diagonal. Keep a clear visual gap between the protagonist's face and "
+    "the screen. The laptop sits on the desk, open at a normal 100 to 110 degree "
+    "angle; its base is flat, hinge continuous and screen attached. Put one hand on "
+    "the keyboard and the other on a mouse or trackpad. Never use a centered frontal "
+    "laptop, a front-facing protagonist, an over-the-screen pose, or a laptop that is "
+    "twisted, reversed, floating, detached or folded the wrong way. Preserve this "
+    "same right-person/left-laptop side composition in every later laptop scene."
 )
 REFERENCE_IDENTITY_DIRECTIVE = (
     "Identity and continuity rule: preserve the same young male protagonist, hair "
@@ -135,7 +142,10 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "Scene 2: move the same protagonist and exact cartoon style into the "
             "small bedroom described below. He sits on the chair at the wooden desk, "
             "leaning forward and looking directly at the laptop, focused and "
-            "determined while building an online store. Replace every part of the "
+            "determined while building an online store. His expression is calm, "
+            "neutral and concentrated: relaxed level eyebrows, attentive eyes and a "
+            "closed neutral mouth, with no frown and no sadness, worry, fear or "
+            "anxiety. Replace every part of the "
             "restaurant uniform with a plain dark charcoal crew-neck t-shirt and "
             "dark casual trousers: no polo collar, no apron, no visor and no yellow "
             "arch icon. On the screen use only clean "
@@ -144,8 +154,10 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "desk lamp, piggy bank and sports-car poster."
         ),
         review_criteria=(
-            "Same recognizable protagonist in one small bedroom, naturally seated "
-            "at a physically correct laptop, focused on an online-store dashboard."
+            "Same recognizable protagonist seated on the right in side profile, calm "
+            "and concentrated rather than worried; laptop on the left in a clear "
+            "three-quarter side view with keyboard and complete screen visible, "
+            "showing an online-store dashboard."
         ),
     ),
     StoryScene(
@@ -160,8 +172,9 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "numbers. Keep both his sad face and the screen naturally visible."
         ),
         review_criteria=(
-            "Same room and protagonist as the prior bedroom scene; clear sadness, "
-            "correct seated pose, one valid laptop and an obviously failing dashboard."
+            "Same room and right-person/left-laptop three-quarter side composition as "
+            "the prior bedroom scene; clear sadness, correct seated pose, complete "
+            "screen visible and an obviously failing dashboard."
         ),
     ),
     StoryScene(
@@ -176,8 +189,9 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "no readable letters or numbers. One scene only."
         ),
         review_criteria=(
-            "Same bedroom continuity at night; one distressed protagonist with a "
-            "believable hand-to-face pose and a geometrically correct failing laptop."
+            "Same bedroom and right-person/left-laptop three-quarter side composition "
+            "at night; one distressed protagonist with a believable hand-to-face pose "
+            "and a geometrically correct failing laptop whose screen remains visible."
         ),
     ),
     StoryScene(
@@ -186,15 +200,21 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "Scene 5: preserve the same bedroom, desk, camera and protagonist for the "
             "turning point. He sits concentrated and serious, looking at the laptop. "
             "His posture is upright and hopeful, visibly different from the prior "
-            "failure scene. "
+            "failure scene. His face shows calm confident concentration with relaxed "
+            "level eyebrows, attentive eyes and a closed neutral mouth: no frown, "
+            "sadness, worry, fear or anxiety. "
             "The screen shows a polished white-and-green product-research dashboard "
-            "with blank product cards, clean data-row shapes, metric blocks, a small "
-            "radar-like green icon and one green rising chart. No brand name or other "
-            "readable text; the external compositor will add the exact brand name."
+            "with one wide solid dark-green blank header bar across the top, blank "
+            "product cards, clean data-row shapes, metric blocks, a small radar-like "
+            "green icon and one green rising chart. Leave the header bar empty. No "
+            "brand name or other readable text; the external compositor will add the "
+            "exact brand name inside that bar."
         ),
         review_criteria=(
-            "Same bedroom continuity; focused protagonist, valid laptop, and a clean "
-            "green product-research dashboard that clearly signals improvement."
+            "Same bedroom and right-person/left-laptop three-quarter side composition; "
+            "calm concentrated protagonist with no worried expression, complete screen "
+            "visible, and a clean green product-research dashboard with a wide blank "
+            "green header bar that clearly signals improvement."
         ),
     ),
     StoryScene(
@@ -457,7 +477,10 @@ class StoryCarouselImageGenerator:
                         )
                     )
                     retry_feedback = review.retry_instruction.strip() or last_issue
-                    if review.score > best_score:
+                    if (
+                        review.score > best_score
+                        and self._review_is_safe_fallback(scene, review)
+                    ):
                         shutil.copy2(attempt_path, best_candidate_path)
                         best_score = review.score
                         best_issue = issue_text
@@ -505,6 +528,45 @@ class StoryCarouselImageGenerator:
             f"La escena {scene.role.value} no alcanzo la calidad minima tras "
             f"{max_attempts} intentos con {self.effective_image_model()}: {last_issue}"
         )
+
+    @staticmethod
+    def _review_is_safe_fallback(
+        scene: StoryScene,
+        review: StoryImageReview,
+    ) -> bool:
+        issue_text = " ".join(review.issues).lower()
+        hard_markers = (
+            "wrong setting",
+            "wrong action",
+            "wrong emotion",
+            "missing main",
+            "not visible",
+            "screen hidden",
+            "screen is hidden",
+            "front-facing",
+            "front facing",
+            "frontal",
+            "camera angle",
+            "composition",
+            "laptop orientation",
+            "impossible laptop",
+            "malformed",
+            "collage",
+            "panel",
+            "duplicated",
+            "two protagonists",
+        )
+        if any(marker in issue_text for marker in hard_markers):
+            return False
+        if scene.role in {
+            SlideRole.STORY_BUILDING_STORE,
+            SlideRole.STORY_DROPRADAR,
+        } and any(
+            marker in issue_text
+            for marker in ("worried", "concerned", "anxious", "sad", "frown")
+        ):
+            return False
+        return True
 
     def effective_image_model(self) -> str:
         if self.settings.image_provider.lower() == "fal":
@@ -986,7 +1048,12 @@ class StoryCarouselImageGenerator:
             "not a reason to reject. Identity is blocking only if the candidate is "
             "obviously a completely different protagonist, not merely a simplified "
             "cartoon likeness. Small background people are allowed in the fast-food "
-            "scene. Score a clean image that tells the required story at least 8/10, "
+            "scene. In every laptop scene, the core requirement's right-person in "
+            "side-profile / left-laptop in three-quarter side-view camera composition "
+            "is mandatory: a frontal laptop or front-facing person is a blocking "
+            "failure. The requested emotion is also mandatory; specifically, worry, "
+            "sadness, a frown or anxious eyebrows are blocking in calm focused scenes. "
+            "Score a clean image that tells the required story at least 8/10, "
             "even when it has harmless cosmetic differences.\n\n"
             f"Core scene requirement: {scene.review_criteria}\n\n"
             "Set accepted=true only for a clean publishable result scoring at least "

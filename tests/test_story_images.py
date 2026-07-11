@@ -546,13 +546,23 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
     ]
     assert "yellow arch" not in prompts[STORY_SCENES[0].role]
     assert "Bedroom base" in prompts[STORY_SCENES[1].role]
-    assert "hinge is one straight horizontal line" in prompts[STORY_SCENES[1].role]
-    assert "must not be twisted" in prompts[STORY_SCENES[1].role]
+    assert "hinge continuous and screen attached" in prompts[STORY_SCENES[1].role]
+    assert "twisted, reversed, floating" in prompts[STORY_SCENES[1].role]
+    assert "protagonist occupies the right half" in prompts[STORY_SCENES[1].role]
+    assert "laptop occupies the left foreground" in prompts[STORY_SCENES[1].role]
+    assert "never straight from the front" in prompts[STORY_SCENES[1].role]
+    assert "no sadness, worry, fear or anxiety" in prompts[STORY_SCENES[1].role]
     assert "Bedroom continuity" in prompts[STORY_SCENES[2].role]
     assert "preserve the previous bedroom, camera and desk exactly" in prompts[
         STORY_SCENES[2].role
     ]
     assert "external compositor" in prompts[STORY_SCENES[4].role]
+    assert "wide solid dark-green blank header bar" in prompts[
+        STORY_SCENES[4].role
+    ]
+    assert "no frown, sadness, worry, fear or anxiety" in prompts[
+        STORY_SCENES[4].role
+    ]
     assert "Bedroom continuity" not in prompts[STORY_SCENES[0].role]
     assert "Bedroom continuity" not in prompts[STORY_SCENES[1].role]
     assert "Bedroom continuity" not in prompts[STORY_SCENES[5].role]
@@ -567,6 +577,7 @@ def test_reviewer_checks_core_story_without_requiring_cosmetic_brand_details():
     assert STORY_SCENES[0].review_criteria in prompt
     assert "Never require or request a logo" in prompt
     assert "Minor simplified cartoon hands are acceptable" in prompt
+    assert "frontal laptop or front-facing person is a blocking" in prompt
     assert "Full generation brief" not in prompt
 
 
@@ -694,6 +705,52 @@ def test_quality_gate_delivers_best_usable_fallback_instead_of_failing_job(
 
     assert output.exists()
     assert not list(tmp_path.glob("*.best_candidate.png"))
+
+
+def test_quality_gate_never_falls_back_to_frontal_worried_laptop_scene(
+    tmp_path,
+    monkeypatch,
+):
+    settings = replace(
+        get_settings(),
+        story_image_max_attempts=1,
+        story_review_enabled=True,
+        story_review_min_score=8,
+        openai_api_key="review-key",
+    )
+    generator = StoryCarouselImageGenerator(settings)
+    reference = tmp_path / "reference.jpg"
+    Image.new("RGB", (720, 1280), (30, 60, 90)).save(reference)
+    output = tmp_path / "rejected-frontal.png"
+
+    monkeypatch.setattr(
+        generator,
+        "_generate_scene",
+        lambda inputs, scene, attempt_path, **kwargs: _save_valid_story_image(
+            attempt_path,
+            1,
+        ),
+    )
+    monkeypatch.setattr(
+        generator,
+        "_review_generated_scene",
+        lambda *args, **kwargs: StoryImageReview(
+            False,
+            7,
+            ("Frontal laptop composition and worried expression",),
+            "Use the required side view and a calm focused expression.",
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match="no alcanzo la calidad minima"):
+        generator._generate_scene_with_quality_gate(
+            reference,
+            [reference],
+            STORY_SCENES[1],
+            output,
+        )
+
+    assert not output.exists()
 
 
 def test_local_quality_gate_rejects_wrong_aspect_ratio(tmp_path):
