@@ -297,6 +297,32 @@ class VideoCreationService:
             self.settings.max_posts_per_account,
             self.settings.account_cache_ttl_hours,
         )
+        if self.settings.story_review_enabled:
+            if self.settings.openai_api_key:
+                reviewer = f"openai:{self.settings.story_review_model}"
+            elif self.settings.fal_key:
+                reviewer = f"fal:{self.settings.story_review_fal_model}"
+            else:
+                reviewer = "unavailable:no-key"
+        else:
+            reviewer = "disabled"
+        LOGGER.info(
+            "Story AI settings: provider=%s, model=%s, size=%s, quality=%s, reviewer=%s, max_attempts=%d",
+            self.settings.image_provider,
+            self.story_image_generator.effective_image_model(),
+            (
+                self.settings.fal_image_size
+                if self.settings.image_provider.lower() == "fal"
+                else self.settings.openai_image_size
+            ),
+            (
+                self.settings.fal_image_quality
+                if self.settings.image_provider.lower() == "fal"
+                else self.settings.openai_image_quality
+            ),
+            reviewer,
+            self.settings.story_image_max_attempts,
+        )
         if marker.get("created_now"):
             warnings.append(
                 "Se ha creado un marker nuevo de memoria persistente en "
@@ -708,6 +734,12 @@ class VideoCreationService:
         selected = next(
             (image for image in ordered_images if image.key == selected_key),
             ordered_images[0],
+        )
+        LOGGER.info(
+            "Selected R2 story reference %r (configured_prefix=%r, effective_prefix=%r)",
+            selected.key,
+            prefix,
+            effective_prefix,
         )
         suffix = Path(selected.key).suffix.lower() or ".jpg"
         local_input = job_dir / "story_reference_input" / f"source{suffix}"

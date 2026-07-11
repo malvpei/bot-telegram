@@ -22,6 +22,7 @@ DEFAULT_UPLOAD_SITE_PASSWORD = "pon_una_password"
 DEFAULT_UPLOAD_SITE_MAX_IMAGE_MB = 20
 DEFAULT_IMAGE_PROVIDER = "fal"
 DEFAULT_FAL_MODEL = "openai/gpt-image-2/edit"
+DEFAULT_STORY_FAL_MODEL = "openai/gpt-image-2/edit"
 DEFAULT_FAL_IMAGE_ASPECT_RATIO = "9:16"
 DEFAULT_FAL_IMAGE_SIZE = "864x1536"
 DEFAULT_FAL_IMAGE_QUALITY = "medium"
@@ -171,6 +172,7 @@ class Settings:
     image_provider: str
     fal_key: str
     fal_model: str
+    story_fal_model: str
     fal_image_aspect_ratio: str
     fal_image_size: str
     fal_image_quality: str
@@ -327,6 +329,14 @@ def get_settings() -> Settings:
         fal_key=os.getenv("FAL_KEY", "").strip(),
         fal_model=os.getenv("FAL_MODEL", DEFAULT_FAL_MODEL).strip()
         or DEFAULT_FAL_MODEL,
+        # Keep story generation independent from the legacy FAL_MODEL value.
+        # Several deployments still pin Flux Kontext there; falling back to it
+        # would silently undo the quality upgrade for scripted stories.
+        story_fal_model=os.getenv(
+            "STORY_FAL_MODEL",
+            DEFAULT_STORY_FAL_MODEL,
+        ).strip()
+        or DEFAULT_STORY_FAL_MODEL,
         fal_image_aspect_ratio=os.getenv(
             "FAL_IMAGE_ASPECT_RATIO",
             DEFAULT_FAL_IMAGE_ASPECT_RATIO,

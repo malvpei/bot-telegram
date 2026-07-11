@@ -381,18 +381,20 @@ class StoryCarouselImageGenerator:
             return True
         if provider != "fal":
             return False
-        model = self.settings.fal_model.strip("/").lower()
+        model = self._fal_story_model().lower()
         return model in {
             "openai/gpt-image-2/edit",
             "fal-ai/qwen-image-2/edit",
             "fal-ai/qwen-image-2/pro/edit",
         }
 
+    def _fal_story_model(self) -> str:
+        return self.settings.story_fal_model.strip("/")
+
     def _is_fal_gpt_image_2(self) -> bool:
         return (
             self.settings.image_provider.lower() == "fal"
-            and self.settings.fal_model.strip("/").lower()
-            == "openai/gpt-image-2/edit"
+            and self._fal_story_model().lower() == "openai/gpt-image-2/edit"
         )
 
     def _generate_scene_with_quality_gate(
@@ -469,8 +471,13 @@ class StoryCarouselImageGenerator:
 
         raise RuntimeError(
             f"La escena {scene.role.value} no alcanzo la calidad minima tras "
-            f"{max_attempts} intentos: {last_issue}"
+            f"{max_attempts} intentos con {self.effective_image_model()}: {last_issue}"
         )
+
+    def effective_image_model(self) -> str:
+        if self.settings.image_provider.lower() == "fal":
+            return self._fal_story_model()
+        return self.settings.openai_image_model
 
     def _generate_scene(
         self,
@@ -569,7 +576,7 @@ class StoryCarouselImageGenerator:
                 "safety_tolerance": self.settings.fal_safety_tolerance,
                 "enhance_prompt": False,
             }
-        submit_url = f"{FAL_QUEUE_BASE_URL}/{self.settings.fal_model.strip('/')}"
+        submit_url = f"{FAL_QUEUE_BASE_URL}/{self._fal_story_model()}"
         response = requests.post(
             submit_url,
             headers=self._fal_headers(),

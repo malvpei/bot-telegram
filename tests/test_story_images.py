@@ -62,6 +62,7 @@ def test_story_generator_uses_fal_queue_and_downloads_result(tmp_path, monkeypat
         image_provider="fal",
         fal_key="fal-secret",
         fal_model="fal-ai/flux-pro/kontext",
+        story_fal_model="fal-ai/flux-pro/kontext",
         fal_image_aspect_ratio="9:16",
         fal_output_format="png",
         fal_poll_interval_seconds=0.1,
@@ -154,7 +155,10 @@ def test_fal_gpt_image_2_uses_multiple_references_and_medium_quality(
         get_settings(),
         image_provider="fal",
         fal_key="fal-secret",
-        fal_model="openai/gpt-image-2/edit",
+        # Simulate the legacy Coolify value that caused production to keep
+        # using Flux even after the story quality upgrade.
+        fal_model="fal-ai/flux-pro/kontext",
+        story_fal_model="openai/gpt-image-2/edit",
         fal_image_size="864x1536",
         fal_image_quality="medium",
         fal_output_format="png",
@@ -382,6 +386,7 @@ def test_story_scenes_are_generated_with_bounded_parallelism(tmp_path, monkeypat
         get_settings(),
         image_provider="fal",
         fal_model="fal-ai/flux-pro/kontext",
+        story_fal_model="fal-ai/flux-pro/kontext",
         story_image_workers=3,
         story_review_enabled=False,
     )
@@ -438,6 +443,7 @@ def test_multi_reference_story_reuses_one_bedroom_anchor(tmp_path, monkeypatch):
         get_settings(),
         image_provider="fal",
         fal_model="openai/gpt-image-2/edit",
+        story_fal_model="openai/gpt-image-2/edit",
         story_image_workers=2,
         story_review_enabled=False,
     )
@@ -482,6 +488,7 @@ def test_story_generator_waits_for_started_requests_after_an_error(tmp_path, mon
         get_settings(),
         image_provider="fal",
         fal_model="fal-ai/flux-pro/kontext",
+        story_fal_model="fal-ai/flux-pro/kontext",
         story_image_workers=2,
         story_review_enabled=False,
     )

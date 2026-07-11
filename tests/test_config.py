@@ -116,6 +116,7 @@ def test_fal_image_provider_defaults_are_loaded(monkeypatch):
         "IMAGE_PROVIDER",
         "FAL_KEY",
         "FAL_MODEL",
+        "STORY_FAL_MODEL",
         "FAL_IMAGE_ASPECT_RATIO",
         "FAL_IMAGE_SIZE",
         "FAL_IMAGE_QUALITY",
@@ -133,6 +134,7 @@ def test_fal_image_provider_defaults_are_loaded(monkeypatch):
         assert settings.image_provider == "fal"
         assert settings.fal_key == ""
         assert settings.fal_model == "openai/gpt-image-2/edit"
+        assert settings.story_fal_model == "openai/gpt-image-2/edit"
         assert settings.fal_image_aspect_ratio == "9:16"
         assert settings.fal_image_size == "864x1536"
         assert settings.fal_image_quality == "medium"
@@ -172,6 +174,19 @@ def test_fal_image_provider_env_is_loaded(monkeypatch):
         assert settings.fal_guidance_scale == 4.25
         assert settings.fal_poll_interval_seconds == 0.5
         assert settings.fal_request_timeout_seconds == 90.0
+    finally:
+        get_settings.cache_clear()
+
+
+def test_story_model_ignores_legacy_fal_model(monkeypatch):
+    monkeypatch.setenv("FAL_MODEL", "fal-ai/flux-pro/kontext")
+    monkeypatch.setenv("STORY_FAL_MODEL", "")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.fal_model == "fal-ai/flux-pro/kontext"
+        assert settings.story_fal_model == "openai/gpt-image-2/edit"
     finally:
         get_settings.cache_clear()
 

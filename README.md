@@ -292,6 +292,11 @@ Tras desplegar, ejecuta `/memory`: debe mostrar `DATA_DIR: /app/data` y
 no esta montado en esa app de Coolify y el siguiente redeploy puede borrar la
 memoria.
 
+Para el carrusel IA tipo 4, `STORY_FAL_MODEL` controla el generador de historias
+de forma independiente. Dejalo en `openai/gpt-image-2/edit`. Un `FAL_MODEL`
+antiguo (por ejemplo, Flux Kontext) ya no puede degradar estas escenas. Al
+arrancar, el log `Story AI settings` muestra el modelo que realmente se usara.
+
 ## Ejecutar
 
 ```bash
