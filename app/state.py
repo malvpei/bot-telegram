@@ -19,6 +19,7 @@ except ImportError:  # pragma: no cover - fallback when filelock not installed
     FileLockTimeout = Exception  # type: ignore[assignment]
     _HAS_FILELOCK = False
 
+from app.batches import BATCH_ROTATION_CYCLE_LENGTH
 from app.models import Language, VideoType
 
 
@@ -26,6 +27,9 @@ _LOCK_TIMEOUT_SECONDS = 30.0
 _ATOMIC_REPLACE_RETRIES = 5
 _ATOMIC_REPLACE_BACKOFF_SECONDS = 0.05
 _PERCEPTUAL_HASH_DISTANCE = 6
+BATCH_SCHEDULE_SCHEMA_VERSION = 2
+
+
 class StateStore:
     def __init__(self, state_dir: Path, history_max_per_bucket: int = 200) -> None:
         self.state_dir = state_dir
@@ -45,6 +49,7 @@ class StateStore:
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
         self._last_batch_run_path = self.state_dir / "last_batch_run.json"
+        self._scheduled_batch_slots_path = self.state_dir / "scheduled_batch_slots.json"
         self._image_analysis_cache_path = self.state_dir / "image_analysis_cache.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
         self._persistence_marker_path = self.state_dir / "persistence_marker.json"
@@ -424,6 +429,7 @@ class StateStore:
         timezone_name: str,
     ) -> dict[str, Any]:
         payload = {
+            "schema_version": BATCH_SCHEDULE_SCHEMA_VERSION,
             "enabled": bool(enabled),
             "chat_id": int(chat_id),
             "user_id": int(user_id),
@@ -446,7 +452,11 @@ class StateStore:
             self._write_json(self._batch_schedule_path, payload)
         return dict(payload)
 
-    def get_batch_rotation_phase(self, *, cycle_length: int = 7) -> int:
+    def get_batch_rotation_phase(
+        self,
+        *,
+        cycle_length: int = BATCH_ROTATION_CYCLE_LENGTH,
+    ) -> int:
         normalized_length = max(1, int(cycle_length))
         with self._exclusive():
             payload = self._read_json(self._batch_rotation_path, {})
@@ -458,7 +468,11 @@ class StateStore:
             phase = 0
         return max(0, phase) % normalized_length
 
-    def advance_batch_rotation(self, *, cycle_length: int = 7) -> int:
+    def advance_batch_rotation(
+        self,
+        *,
+        cycle_length: int = BATCH_ROTATION_CYCLE_LENGTH,
+    ) -> int:
         normalized_length = max(1, int(cycle_length))
         with self._exclusive():
             payload = self._read_json(self._batch_rotation_path, {})
@@ -498,6 +512,112 @@ class StateStore:
         with self._exclusive():
             payload = self._read_json(self._last_batch_run_path, {})
         return dict(payload) if isinstance(payload, dict) else {}
+
+    def claim_scheduled_batch_slot(
+        self,
+        slot_key: str,
+        batch_id: str,
+        *,
+        allow_reclaim_running: bool = False,
+    ) -> bool:
+        normalized_slot = str(slot_key or "").strip()
+        if not normalized_slot:
+            return False
+        with self._exclusive():
+            payload = self._read_json(self._scheduled_batch_slots_path, {})
+            if not isinstance(payload, dict):
+                payload = {}
+            slots = payload.get("slots")
+            if not isinstance(slots, dict):
+                slots = {}
+            existing = slots.get(normalized_slot)
+            if isinstance(existing, dict) and existing.get("status") in {
+                "completed",
+                "completed_with_errors",
+            }:
+                return False
+            if (
+                isinstance(existing, dict)
+                and existing.get("status") == "running"
+                and not allow_reclaim_running
+            ):
+                return False
+            # A lingering "running" entry is reclaimed. In a single bot
+            # instance the asyncio batch lock prevents a live duplicate; after
+            # a process crash this lets startup catch-up finish the missed slot.
+            slots[normalized_slot] = {
+                "status": "running",
+                "batch_id": str(batch_id),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            if len(slots) > 128:
+                ordered = sorted(
+                    slots.items(),
+                    key=lambda item: str(
+                        item[1].get("updated_at", "")
+                        if isinstance(item[1], dict)
+                        else ""
+                    ),
+                )
+                for stale_key, _value in ordered[: len(slots) - 128]:
+                    slots.pop(stale_key, None)
+            payload["slots"] = slots
+            self._write_json(self._scheduled_batch_slots_path, payload)
+        return True
+
+    def finish_scheduled_batch_slot(
+        self,
+        slot_key: str,
+        *,
+        batch_id: str,
+        status: str,
+    ) -> bool:
+        normalized_slot = str(slot_key or "").strip()
+        if not normalized_slot:
+            return False
+        normalized_status = (
+            status
+            if status in {"completed", "completed_with_errors"}
+            else "completed_with_errors"
+        )
+        with self._exclusive():
+            payload = self._read_json(self._scheduled_batch_slots_path, {})
+            if not isinstance(payload, dict):
+                payload = {}
+            slots = payload.get("slots")
+            if not isinstance(slots, dict):
+                slots = {}
+            existing = slots.get(normalized_slot)
+            if (
+                isinstance(existing, dict)
+                and str(existing.get("batch_id") or "") != str(batch_id)
+            ):
+                return False
+            slots[normalized_slot] = {
+                "status": normalized_status,
+                "batch_id": str(batch_id),
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+            }
+            payload["slots"] = slots
+            self._write_json(self._scheduled_batch_slots_path, payload)
+        return True
+
+    def scheduled_batch_slot_is_terminal(self, slot_key: str) -> bool:
+        normalized_slot = str(slot_key or "").strip()
+        if not normalized_slot:
+            return False
+        with self._exclusive():
+            payload = self._read_json(self._scheduled_batch_slots_path, {})
+        if not isinstance(payload, dict):
+            return False
+        slots = payload.get("slots")
+        if not isinstance(slots, dict):
+            return False
+        entry = slots.get(normalized_slot)
+        return isinstance(entry, dict) and entry.get("status") in {
+            "completed",
+            "completed_with_errors",
+        }
 
     def read_image_analysis_cache(self) -> dict[str, Any]:
         with self._exclusive():

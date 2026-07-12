@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import time
 from enum import Enum
+from math import lcm
 
 from app.models import Language, VideoGender, VideoType
 
@@ -11,15 +12,40 @@ DEFAULT_BATCH_SIZE = 6
 MAX_BATCH_SIZE = 24
 MAX_SCHEDULE_TIMES = 12
 TOOLS_TOKEN = "tools"
+AI_TOKEN = "ai"
+DEFAULT_BATCH_TIMES: tuple[str, str] = ("08:00", "17:00")
 
-# Dos vueltas completas por los tipos 1, 2 y 3; despues entra un video de
-# herramientas y la secuencia vuelve a empezar.
-ROTATION: tuple[str, ...] = ("1", "2", "3", "1", "2", "3", TOOLS_TOKEN)
+# Solo el carril masculino en espanol incluye la historia generada por IA.
+# Ingles conserva la rotacion anterior y mujer alterna estrictamente 1/2.
+SPANISH_MALE_ROTATION: tuple[str, ...] = (
+    "1",
+    "2",
+    "3",
+    TOOLS_TOKEN,
+    "1",
+    "2",
+    "3",
+    TOOLS_TOKEN,
+    AI_TOKEN,
+)
+ENGLISH_MALE_ROTATION: tuple[str, ...] = (
+    "1",
+    "2",
+    "3",
+    "1",
+    "2",
+    "3",
+    TOOLS_TOKEN,
+)
+FEMALE_ROTATION: tuple[str, ...] = ("1", "2")
+# Compatibilidad con integraciones que importaban la rotacion comun anterior.
+ROTATION: tuple[str, ...] = ENGLISH_MALE_ROTATION
 
 
 class BatchItemKind(str, Enum):
     GENERATED = "generated"
     TOOLS = "tools"
+    AI = "ai"
 
 
 @dataclass(frozen=True)
@@ -27,6 +53,7 @@ class BatchLane:
     language: Language
     gender: VideoGender
     initial_rotation_index: int
+    rotation: tuple[str, ...] = ROTATION
 
 
 @dataclass(frozen=True)
@@ -41,6 +68,8 @@ class BatchItem:
     def short_label(self) -> str:
         if self.kind == BatchItemKind.TOOLS:
             return f"herramientas {self.language.value.upper()}"
+        if self.kind == BatchItemKind.AI:
+            return "IA ES (hombre)"
         gender = "mujer" if self.gender == VideoGender.FEMALE else "hombre"
         return (
             f"tipo {self.video_type.value} {self.language.value.upper()} "
@@ -49,14 +78,17 @@ class BatchItem:
 
 
 # El primer lote reproduce exactamente el orden pedido. En los siguientes
-# lotes cada posicion avanza de forma independiente por ROTATION.
+# lotes cada posicion avanza de forma independiente por su propia rotacion.
 DEFAULT_LANES: tuple[BatchLane, ...] = (
-    BatchLane(Language.ES, VideoGender.MALE, 0),  # tipo 1 ES
-    BatchLane(Language.ES, VideoGender.MALE, 1),  # tipo 2 ES
-    BatchLane(Language.EN, VideoGender.MALE, 2),  # tipo 3 EN
-    BatchLane(Language.ES, VideoGender.MALE, 6),  # herramientas ES
-    BatchLane(Language.EN, VideoGender.MALE, 0),  # tipo 1 EN
-    BatchLane(Language.ES, VideoGender.FEMALE, 1),  # mujer tipo 2 ES
+    BatchLane(Language.ES, VideoGender.MALE, 0, SPANISH_MALE_ROTATION),
+    BatchLane(Language.ES, VideoGender.MALE, 1, SPANISH_MALE_ROTATION),
+    BatchLane(Language.EN, VideoGender.MALE, 2, ENGLISH_MALE_ROTATION),
+    BatchLane(Language.ES, VideoGender.MALE, 3, SPANISH_MALE_ROTATION),
+    BatchLane(Language.EN, VideoGender.MALE, 0, ENGLISH_MALE_ROTATION),
+    BatchLane(Language.ES, VideoGender.FEMALE, 1, FEMALE_ROTATION),
+)
+BATCH_ROTATION_CYCLE_LENGTH = lcm(
+    *(len(lane.rotation) for lane in DEFAULT_LANES)
 )
 
 
@@ -65,12 +97,12 @@ def build_batch_plan(count: int, phase: int) -> list[BatchItem]:
         raise ValueError(
             f"La cantidad debe estar entre 1 y {MAX_BATCH_SIZE} videos."
         )
-    normalized_phase = max(0, int(phase)) % len(ROTATION)
+    normalized_phase = max(0, int(phase)) % BATCH_ROTATION_CYCLE_LENGTH
     plan: list[BatchItem] = []
     for index in range(count):
         lane = DEFAULT_LANES[index % len(DEFAULT_LANES)]
-        token = ROTATION[
-            (lane.initial_rotation_index + normalized_phase) % len(ROTATION)
+        token = lane.rotation[
+            (lane.initial_rotation_index + normalized_phase) % len(lane.rotation)
         ]
         if token == TOOLS_TOKEN:
             plan.append(
@@ -79,6 +111,17 @@ def build_batch_plan(count: int, phase: int) -> list[BatchItem]:
                     kind=BatchItemKind.TOOLS,
                     language=lane.language,
                     gender=lane.gender,
+                )
+            )
+            continue
+        if token == AI_TOKEN:
+            plan.append(
+                BatchItem(
+                    position=index + 1,
+                    kind=BatchItemKind.AI,
+                    language=Language.ES,
+                    gender=VideoGender.MALE,
+                    video_type=VideoType.TYPE_4,
                 )
             )
             continue
@@ -121,7 +164,7 @@ def parse_schedule_values(
             f"La cantidad debe estar entre 1 y {MAX_BATCH_SIZE} videos."
         )
     if not values:
-        raise ValueError("Faltan las horas. Ejemplo: /schedule 6 08:00 18:00")
+        raise ValueError("Faltan las horas. Ejemplo: /schedule 6 08:00 17:00")
 
     normalized: list[str] = []
     for raw_value in values:
@@ -135,7 +178,13 @@ def parse_schedule_values(
     return count, sorted(normalized)
 
 
-def schedule_time_to_datetime_time(raw_value: str, tzinfo) -> time:
+def schedule_time_to_datetime_time(
+    raw_value: str,
+    tzinfo,
+    *,
+    minute_offset: int = 0,
+) -> time:
     normalized = normalize_schedule_time(raw_value)
     hour, minute = (int(piece) for piece in normalized.split(":"))
-    return time(hour=hour, minute=minute, tzinfo=tzinfo)
+    shifted = (hour * 60 + minute + int(minute_offset)) % (24 * 60)
+    return time(hour=shifted // 60, minute=shifted % 60, tzinfo=tzinfo)

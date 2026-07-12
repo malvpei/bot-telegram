@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 from contextlib import ExitStack
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
@@ -28,9 +29,10 @@ from app.accounts import (
     remove_account,
 )
 from app.batches import (
+    BATCH_ROTATION_CYCLE_LENGTH,
     DEFAULT_BATCH_SIZE,
+    DEFAULT_BATCH_TIMES,
     MAX_BATCH_SIZE,
-    ROTATION,
     BatchItem,
     BatchItemKind,
     build_batch_plan,
@@ -46,7 +48,7 @@ from app.models import (
     VideoType,
 )
 from app.service import VideoCreationService
-from app.state import StateStore
+from app.state import BATCH_SCHEDULE_SCHEMA_VERSION, StateStore
 
 
 (
@@ -187,6 +189,7 @@ async def _post_init(application: Application) -> None:
     application.bot_data["batch_lock"] = asyncio.Lock()
     try:
         _replace_scheduled_batch_jobs(application)
+        _queue_missed_scheduled_batch(application)
     except Exception:
         LOGGER.exception("Could not restore the saved batch schedule")
 
@@ -264,7 +267,7 @@ async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         _load_batch_timezone(settings.batch_timezone)
     except ValueError as error:
         await message.reply_text(
-            f"{error}\n\nUso: /schedule 6 08:00 18:00\n"
+            f"{error}\n\nUso: /schedule 6 08:00 17:00\n"
             "Para apagarla: /schedule off"
         )
         return
@@ -279,8 +282,10 @@ async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     )
     _replace_scheduled_batch_jobs(context.application)
     await message.reply_text(
-        f"Programacion activada: {count} videos a las {', '.join(times)}, "
-        f"todos los dias ({settings.batch_timezone}).\n"
+        f"Programacion activada: {count} videos listos para las "
+        f"{', '.join(times)}, todos los dias ({settings.batch_timezone}).\n"
+        f"La preparacion empezara {settings.batch_preparation_lead_minutes} "
+        "minutos antes de cada hora objetivo.\n"
         "Puedes crear el siguiente lote ahora con /batch."
     )
 
@@ -301,7 +306,8 @@ async def batch_reset_command(
     store.reset_batch_rotation()
     await update.effective_message.reply_text(
         "Rotacion reiniciada. El siguiente lote volvera al orden inicial: "
-        "1 ES, 2 ES, 3 EN, herramientas ES, 1 EN y mujer 2 ES."
+        "1 ES, 2 ES, 3 EN, herramientas ES, 1 EN y mujer 2 ES. "
+        "La IA solo aparecera en espanol y mujer alternara unicamente 1/2."
     )
 
 
@@ -310,12 +316,25 @@ async def _scheduled_batch_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     if not isinstance(data, dict):
         LOGGER.error("Scheduled batch has invalid job data: %r", data)
         return
+    timezone_name = str(data.get("timezone") or get_settings().batch_timezone)
+    timezone = _load_batch_timezone(timezone_name)
+    target = _scheduled_target_in_active_window(
+        str(data.get("time") or ""),
+        timezone,
+        lead_minutes=get_settings().batch_preparation_lead_minutes,
+    )
+    scheduled_slot = (
+        _scheduled_batch_slot(target, int(data["chat_id"]))
+        if target is not None
+        else None
+    )
     await _run_batch(
         context.application,
         chat_id=int(data["chat_id"]),
         user_id=int(data["user_id"]),
         count=int(data["count"]),
-        source=f"programado {data.get('time', '')}".strip(),
+        source=f"para las {data.get('time', '')}".strip(),
+        scheduled_slot=scheduled_slot,
     )
 
 
@@ -326,14 +345,25 @@ async def _run_batch(
     user_id: int,
     count: int,
     source: str,
+    scheduled_slot: str | None = None,
+    recover_running_slot: bool = False,
 ) -> None:
     lock = _batch_lock(application)
     async with lock:
         service: VideoCreationService = application.bot_data["service"]
         store = service.state
-        phase = store.get_batch_rotation_phase(cycle_length=len(ROTATION))
-        plan = build_batch_plan(count, phase)
         batch_id = uuid4().hex
+        if scheduled_slot and not store.claim_scheduled_batch_slot(
+            scheduled_slot,
+            batch_id,
+            allow_reclaim_running=recover_running_slot,
+        ):
+            LOGGER.info("Scheduled batch slot %s was already handled", scheduled_slot)
+            return
+        phase = store.get_batch_rotation_phase(
+            cycle_length=BATCH_ROTATION_CYCLE_LENGTH
+        )
+        plan = build_batch_plan(count, phase)
         accounts_by_gender = _load_accounts_by_gender(get_settings())
         plan_lines = "\n".join(
             f"{item.position}. {item.short_label}" for item in plan
@@ -343,7 +373,7 @@ async def _run_batch(
             chat_id,
             (
                 f"Lote {source} iniciado ({count} videos).\n"
-                f"Rotacion {phase + 1}/{len(ROTATION)}:\n{plan_lines}"
+                f"Rotacion {phase + 1}/{BATCH_ROTATION_CYCLE_LENGTH}:\n{plan_lines}"
             ),
         )
         store.write_last_batch_run(
@@ -354,10 +384,10 @@ async def _run_batch(
                 "chat_id": chat_id,
                 "count": count,
                 "phase": phase,
+                "scheduled_slot": scheduled_slot,
                 "plan": [item.short_label for item in plan],
             }
         )
-
         succeeded = 0
         failures: list[str] = []
         for item in plan:
@@ -373,6 +403,15 @@ async def _run_batch(
                         chat_id,
                         item,
                         count,
+                    )
+                elif item.kind == BatchItemKind.AI:
+                    await _create_and_send_batch_generated_video(
+                        application,
+                        chat_id=chat_id,
+                        user_id=user_id,
+                        item=item,
+                        count=count,
+                        accounts=[],
                     )
                 else:
                     accounts = accounts_by_gender.get(item.gender, [])
@@ -410,11 +449,24 @@ async def _run_batch(
                 except TelegramError:
                     LOGGER.exception("Could not report a batch item failure to Telegram")
 
+        final_status = "completed" if not failures else "completed_with_errors"
+        if scheduled_slot and not store.finish_scheduled_batch_slot(
+            scheduled_slot,
+            batch_id=batch_id,
+            status=final_status,
+        ):
+            LOGGER.warning(
+                "Batch %s lost ownership of scheduled slot %s; rotation not advanced",
+                batch_id,
+                scheduled_slot,
+            )
+            return
         if succeeded:
-            next_phase = store.advance_batch_rotation(cycle_length=len(ROTATION))
+            next_phase = store.advance_batch_rotation(
+                cycle_length=BATCH_ROTATION_CYCLE_LENGTH
+            )
         else:
             next_phase = phase
-        final_status = "completed" if not failures else "completed_with_errors"
         store.write_last_batch_run(
             {
                 "batch_id": batch_id,
@@ -424,6 +476,7 @@ async def _run_batch(
                 "count": count,
                 "phase": phase,
                 "next_phase": next_phase,
+                "scheduled_slot": scheduled_slot,
                 "succeeded": succeeded,
                 "failed": len(failures),
                 "failures": failures,
@@ -488,15 +541,18 @@ async def _create_and_send_batch_generated_video(
     )
     service: VideoCreationService = application.bot_data["service"]
     result = await asyncio.to_thread(service.create_video, request)
-    await _send_message(
-        application,
-        chat_id,
-        (
+    if result.video_type == VideoType.TYPE_4:
+        result_line = (
+            f"Lote {item.position}/{count}: historia generada por IA en espanol.\n"
+            f"Referencia elegida: {result.chosen_account}"
+        )
+    else:
+        result_line = (
             f"Lote {item.position}/{count}: tipo {result.video_type.value} "
             f"{result.language.value.upper()}, {_gender_label_plural(item.gender)}.\n"
             f"Cuenta elegida: @{result.chosen_account}"
-        ),
-    )
+        )
+    await _send_message(application, chat_id, result_line)
     for text in result.social_copy.messages:
         await _send_message(application, chat_id, text)
     await _send_slides_text_then_image(
@@ -539,7 +595,8 @@ def _replace_scheduled_batch_jobs(application: Application) -> None:
     for job in job_queue.jobs(rf"^{BATCH_JOB_NAME_PREFIX}"):
         job.schedule_removal()
 
-    schedule = _batch_store().read_batch_schedule()
+    store = _batch_store()
+    schedule = _migrate_legacy_batch_schedule(store)
     if not schedule.get("enabled"):
         return
     timezone_name = str(schedule.get("timezone") or get_settings().batch_timezone)
@@ -548,16 +605,27 @@ def _replace_scheduled_batch_jobs(application: Application) -> None:
     chat_id = int(schedule["chat_id"])
     user_id = int(schedule["user_id"])
     times = list(schedule.get("times") or [])
+    preparation_lead_minutes = max(
+        0,
+        get_settings().batch_preparation_lead_minutes,
+    )
     for raw_time in times:
         normalized_time = str(raw_time)
+        run_time = schedule_time_to_datetime_time(
+            normalized_time,
+            timezone,
+            minute_offset=-preparation_lead_minutes,
+        )
         job_queue.run_daily(
             _scheduled_batch_callback,
-            time=schedule_time_to_datetime_time(normalized_time, timezone),
+            time=run_time,
             data={
                 "chat_id": chat_id,
                 "user_id": user_id,
                 "count": count,
                 "time": normalized_time,
+                "preparation_time": run_time.strftime("%H:%M"),
+                "timezone": timezone_name,
             },
             name=f"{BATCH_JOB_NAME_PREFIX}{normalized_time}",
             chat_id=chat_id,
@@ -569,11 +637,114 @@ def _replace_scheduled_batch_jobs(application: Application) -> None:
             },
         )
     LOGGER.info(
-        "Scheduled %d-video batch at %s (%s)",
+        "Scheduled %d-video batch for %s, starting %d minutes early (%s)",
         count,
         ", ".join(str(value) for value in times),
+        preparation_lead_minutes,
         timezone_name,
     )
+
+
+def _migrate_legacy_batch_schedule(store: StateStore) -> dict[str, Any]:
+    schedule = store.read_batch_schedule()
+    if not schedule.get("enabled"):
+        return schedule
+    try:
+        schema_version = int(schedule.get("schema_version", 0))
+    except (TypeError, ValueError):
+        schema_version = 0
+    legacy_times = [str(value) for value in schedule.get("times") or []]
+    if schema_version >= BATCH_SCHEDULE_SCHEMA_VERSION or legacy_times != [
+        "08:00",
+        "18:00",
+    ]:
+        return schedule
+    LOGGER.info("Migrating legacy batch schedule from 08:00/18:00 to 08:00/17:00")
+    return store.write_batch_schedule(
+        enabled=True,
+        chat_id=int(schedule["chat_id"]),
+        user_id=int(schedule["user_id"]),
+        count=int(schedule.get("count", DEFAULT_BATCH_SIZE)),
+        times=list(DEFAULT_BATCH_TIMES),
+        timezone_name=str(
+            schedule.get("timezone") or get_settings().batch_timezone
+        ),
+    )
+
+
+def _scheduled_target_in_active_window(
+    raw_time: str,
+    timezone: ZoneInfo,
+    *,
+    lead_minutes: int,
+    now: datetime | None = None,
+) -> datetime | None:
+    target_time = schedule_time_to_datetime_time(raw_time, timezone)
+    local_now = (now or datetime.now(timezone)).astimezone(timezone)
+    lead = timedelta(minutes=max(0, int(lead_minutes)))
+    grace = timedelta(minutes=5)
+    for day_offset in (0, 1):
+        target = datetime.combine(
+            local_now.date() + timedelta(days=day_offset),
+            target_time,
+        )
+        if target - lead <= local_now <= target + grace:
+            return target
+    return None
+
+
+def _scheduled_batch_slot(target: datetime, chat_id: int) -> str:
+    timezone_name = str(target.tzinfo or get_settings().batch_timezone)
+    return (
+        f"{target.date().isoformat()}|{target.strftime('%H:%M')}|"
+        f"{timezone_name}|{int(chat_id)}"
+    )
+
+
+def _queue_missed_scheduled_batch(
+    application: Application,
+    *,
+    now: datetime | None = None,
+) -> bool:
+    store = _batch_store()
+    schedule = _migrate_legacy_batch_schedule(store)
+    if not schedule.get("enabled"):
+        return False
+    timezone_name = str(schedule.get("timezone") or get_settings().batch_timezone)
+    timezone = _load_batch_timezone(timezone_name)
+    lead_minutes = get_settings().batch_preparation_lead_minutes
+    chat_id = int(schedule["chat_id"])
+    queued = False
+    for raw_time in schedule.get("times") or []:
+        target = _scheduled_target_in_active_window(
+            str(raw_time),
+            timezone,
+            lead_minutes=lead_minutes,
+            now=now,
+        )
+        if target is None:
+            continue
+        slot = _scheduled_batch_slot(target, chat_id)
+        if store.scheduled_batch_slot_is_terminal(slot):
+            continue
+        LOGGER.warning(
+            "Catching up scheduled batch for %s after startup",
+            target.isoformat(),
+        )
+        application.create_task(
+            _run_batch(
+                application,
+                chat_id=chat_id,
+                user_id=int(schedule["user_id"]),
+                count=int(schedule.get("count", DEFAULT_BATCH_SIZE)),
+                source=f"recuperado para las {target.strftime('%H:%M')}",
+                scheduled_slot=slot,
+                recover_running_slot=True,
+            ),
+            name=f"scheduled-catchup-{target.strftime('%Y%m%d-%H%M')}",
+        )
+        queued = True
+    return queued
 
 
 def _load_batch_timezone(timezone_name: str) -> ZoneInfo:
@@ -587,8 +758,10 @@ def _load_batch_timezone(timezone_name: str) -> ZoneInfo:
 
 
 def _format_batch_schedule_status(store: StateStore) -> str:
-    schedule = store.read_batch_schedule()
-    phase = store.get_batch_rotation_phase(cycle_length=len(ROTATION))
+    schedule = _migrate_legacy_batch_schedule(store)
+    phase = store.get_batch_rotation_phase(
+        cycle_length=BATCH_ROTATION_CYCLE_LENGTH
+    )
     last_run = store.read_last_batch_run()
     next_plan = build_batch_plan(
         int(schedule.get("count", DEFAULT_BATCH_SIZE)),
@@ -597,7 +770,7 @@ def _format_batch_schedule_status(store: StateStore) -> str:
     plan_line = ", ".join(item.short_label for item in next_plan)
     if schedule.get("enabled"):
         schedule_line = (
-            f"Activa: {schedule.get('count', DEFAULT_BATCH_SIZE)} videos a las "
+            f"Activa: {schedule.get('count', DEFAULT_BATCH_SIZE)} videos para las "
             f"{', '.join(schedule.get('times') or [])} "
             f"({schedule.get('timezone') or get_settings().batch_timezone})"
         )
@@ -611,9 +784,10 @@ def _format_batch_schedule_status(store: StateStore) -> str:
         )
     return (
         f"Programacion de lotes\n{schedule_line}\n"
-        f"Siguiente rotacion: {phase + 1}/{len(ROTATION)}\n"
+        f"Preparacion: {get_settings().batch_preparation_lead_minutes} minutos antes\n"
+        f"Siguiente rotacion: {phase + 1}/{BATCH_ROTATION_CYCLE_LENGTH}\n"
         f"Siguiente lote: {plan_line}\n{last_line}\n\n"
-        "Configurar: /schedule 6 08:00 18:00\n"
+        "Configurar: /schedule 6 08:00 17:00\n"
         "Desactivar: /schedule off\n"
         "Crear ahora: /batch"
     )
@@ -645,7 +819,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
         "/story_carousel - crear una historia IA desde una foto enviada al bot\n"
         "/batch [cantidad] - crear ahora un lote rotativo (6 por defecto)\n"
-        "/schedule 6 08:00 18:00 - programar lotes diarios\n"
+        "/schedule 6 08:00 17:00 - programar lotes diarios\n"
         "/schedule off - desactivar la programacion\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
@@ -689,9 +863,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Usa /template_video [prefijo-r2] para coger un MP4 de R2 y "
         "aplicarle la plantilla fija de herramientas. El MP4 final sale sin audio.\n\n"
         "Usa /batch para crear el lote rotativo ahora. Por ejemplo, "
-        "/schedule 6 08:00 18:00 genera seis piezas todos los dias a esas "
-        "horas (Europe/Madrid por defecto). La rotacion hace dos vueltas "
-        "1-2-3, despues herramientas y vuelve al tipo 1.\n\n"
+        "/schedule 6 08:00 17:00 prepara seis piezas todos los dias con "
+        "antelacion para esas horas (Europe/Madrid por defecto). La IA rota "
+        "solo en espanol; ingles no usa IA y mujer alterna solo tipos 1 y 2.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
     )

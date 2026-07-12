@@ -253,18 +253,24 @@ def test_dynamic_pick_max_posts_env(monkeypatch):
 
 def test_batch_timezone_defaults_to_madrid(monkeypatch):
     monkeypatch.delenv("BATCH_TIMEZONE", raising=False)
+    monkeypatch.delenv("BATCH_PREPARATION_LEAD_MINUTES", raising=False)
     get_settings.cache_clear()
     try:
-        assert get_settings().batch_timezone == "Europe/Madrid"
+        settings = get_settings()
+        assert settings.batch_timezone == "Europe/Madrid"
+        assert settings.batch_preparation_lead_minutes == 120
     finally:
         get_settings.cache_clear()
 
 
 def test_batch_timezone_can_be_configured(monkeypatch):
     monkeypatch.setenv("BATCH_TIMEZONE", "America/New_York")
+    monkeypatch.setenv("BATCH_PREPARATION_LEAD_MINUTES", "90")
     get_settings.cache_clear()
     try:
-        assert get_settings().batch_timezone == "America/New_York"
+        settings = get_settings()
+        assert settings.batch_timezone == "America/New_York"
+        assert settings.batch_preparation_lead_minutes == 90
     finally:
         get_settings.cache_clear()
 

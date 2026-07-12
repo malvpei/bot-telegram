@@ -204,23 +204,31 @@ El primer lote de seis es:
 5. tipo 1 en ingles (hombre)
 6. tipo 2 en espanol (mujer)
 
-Cada posicion avanza por su propia secuencia
-`1 -> 2 -> 3 -> 1 -> 2 -> 3 -> herramientas -> 1`. El paso actual, los
-horarios y el ultimo resultado se guardan dentro de `DATA_DIR/state`, por lo
-que sobreviven a los reinicios y redeploys. Solo se procesa un lote a la vez
-para no reutilizar fotos ni compartir a la vez la sesion de Instagram.
+Cada posicion avanza por una secuencia adecuada a su idioma y genero. Los
+hombres en espanol rotan por
+`1 -> 2 -> 3 -> herramientas -> 1 -> 2 -> 3 -> herramientas -> IA`; los hombres en ingles
+mantienen `1 -> 2 -> 3 -> 1 -> 2 -> 3 -> herramientas`, sin IA; y las mujeres
+alternan exclusivamente `1 -> 2`. La historia IA usa una referencia de R2 y
+siempre se genera en espanol. El paso actual, los horarios y el ultimo
+resultado se guardan dentro de `DATA_DIR/state`, por lo que sobreviven a los
+reinicios y redeploys. Solo se procesa un lote a la vez para no reutilizar
+fotos ni compartir a la vez la sesion de Instagram.
 
-Ejemplo para crear seis piezas todos los dias a las 08:00 y a las 18:00:
+Ejemplo para tener seis piezas preparadas todos los dias para las 08:00 y las
+17:00:
 
 ```text
-/schedule 6 08:00 18:00
+/schedule 6 08:00 17:00
 ```
 
 Comandos relacionados: `/schedule` muestra el estado, `/schedule off`
 desactiva los horarios, `/batch 6` crea el siguiente lote ahora y
 `/batch_reset` reinicia la rotacion. La zona horaria predeterminada es
 `Europe/Madrid`, incluido el cambio de hora de verano; se puede cambiar con
-`BATCH_TIMEZONE`.
+`BATCH_TIMEZONE`. La preparacion empieza 120 minutos antes de cada objetivo
+por defecto; ajusta `BATCH_PREPARATION_LEAD_MINUTES` si el proveedor IA tarda
+mas o menos en tu despliegue. Si el bot arranca despues de la hora de inicio
+pero aun esta dentro de esa ventana, recupera automaticamente el lote pendiente.
 
 ### Web para subir imagenes a R2
 

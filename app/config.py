@@ -36,6 +36,7 @@ DEFAULT_OPENAI_IMAGE_SIZE = "864x1536"
 DEFAULT_OPENAI_IMAGE_QUALITY = "medium"
 DEFAULT_OPENAI_REQUEST_TIMEOUT_SECONDS = 180.0
 DEFAULT_BATCH_TIMEZONE = "Europe/Madrid"
+DEFAULT_BATCH_PREPARATION_LEAD_MINUTES = 120
 DEFAULT_FFMPEG_PRESET = "veryfast"
 DEFAULT_STORY_IMAGE_WORKERS = 2
 DEFAULT_STORY_REVIEW_ENABLED = True
@@ -187,6 +188,7 @@ class Settings:
     openai_image_quality: str
     openai_request_timeout_seconds: float
     batch_timezone: str
+    batch_preparation_lead_minutes: int
     story_image_workers: int
     story_review_enabled: bool
     story_review_model: str
@@ -392,6 +394,16 @@ def get_settings() -> Settings:
             DEFAULT_BATCH_TIMEZONE,
         ).strip()
         or DEFAULT_BATCH_TIMEZONE,
+        batch_preparation_lead_minutes=max(
+            0,
+            min(
+                12 * 60,
+                _env_int(
+                    "BATCH_PREPARATION_LEAD_MINUTES",
+                    DEFAULT_BATCH_PREPARATION_LEAD_MINUTES,
+                ),
+            ),
+        ),
         story_image_workers=_env_int(
             "STORY_IMAGE_WORKERS",
             DEFAULT_STORY_IMAGE_WORKERS,

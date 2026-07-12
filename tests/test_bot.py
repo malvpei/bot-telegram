@@ -22,6 +22,7 @@ from app.bot import (
     TEMPLATE_VIDEO_CREATE_EN,
     _ask_for_another_same_account,
     _clear_wizard_state,
+    _create_and_send_batch_generated_video,
     _format_account_audit,
     _format_pool_refill_summary,
     _format_pool_status,
@@ -37,7 +38,9 @@ from app.bot import (
     wizard_type,
 )
 from app.config import get_settings
+from app.batches import BatchItem, BatchItemKind
 from app.models import (
+    GenerationResult,
     ImageMetrics,
     MediaCandidate,
     SlidePlan,
@@ -119,6 +122,7 @@ class FakeChat:
 class FakeApplication:
     def __init__(self, service) -> None:
         self.bot_data = {"service": service}
+        self.bot = FakeTelegramBot()
 
 
 class FakeTemplateContext(FakeContext):
@@ -332,6 +336,85 @@ def test_type_4_sends_all_story_images_as_one_album():
         assert context.bot.events == [
             ("album", "slide_01.jpg,slide_02.jpg,slide_03.jpg")
         ]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_scheduled_ai_batch_needs_no_instagram_accounts():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        slides = []
+        for index in range(1, 3):
+            image_path = root / f"ai_{index}.jpg"
+            Image.new("RGB", (10, 16), (index, 20, 30)).save(image_path)
+            slides.append(
+                SlidePlan(
+                    index=index,
+                    role=SlideRole.STORY_MCDONALD,
+                    text="",
+                    media=MediaCandidate(
+                        source_account="ai_story",
+                        source_id=f"ai:{index}",
+                        local_path=image_path,
+                        permalink="",
+                        caption="",
+                        width=10,
+                        height=16,
+                        created_at="",
+                    ),
+                )
+            )
+
+        class FakeAIService:
+            def __init__(self):
+                self.request = None
+
+            def create_video(self, request):
+                self.request = request
+                return GenerationResult(
+                    video_path=None,
+                    script_path=root / "script.txt",
+                    preview_text="",
+                    social_copy=SocialCopy(title="", description="", hashtags=[]),
+                    chosen_account="r2:imagenes/reference.jpg",
+                    video_type=VideoType.TYPE_4,
+                    language=Language.ES,
+                    fallback_accounts=[],
+                    slides=slides,
+                    pool_remaining=0,
+                    pool_low_stock=False,
+                )
+
+        service = FakeAIService()
+        application = FakeApplication(service)
+        item = BatchItem(
+            position=4,
+            kind=BatchItemKind.AI,
+            language=Language.ES,
+            gender=VideoGender.MALE,
+            video_type=VideoType.TYPE_4,
+        )
+
+        asyncio.run(
+            _create_and_send_batch_generated_video(
+                application,
+                chat_id=123,
+                user_id=456,
+                item=item,
+                count=6,
+                accounts=[],
+            )
+        )
+
+        assert service.request is not None
+        assert service.request.account_inputs == []
+        assert service.request.language == Language.ES
+        assert service.request.video_type == VideoType.TYPE_4
+        assert service.request.gender == VideoGender.MALE
+        assert application.bot.events[0][0] == "message"
+        assert "generada por IA en espanol" in application.bot.events[0][1]
+        assert application.bot.events[1] == ("album", "ai_1.jpg,ai_2.jpg")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

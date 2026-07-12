@@ -4,8 +4,9 @@ from uuid import uuid4
 
 import pytest
 
+from app.batches import BATCH_ROTATION_CYCLE_LENGTH
 from app.models import Language, VideoType
-from app.state import StateStore
+from app.state import BATCH_SCHEDULE_SCHEMA_VERSION, StateStore
 
 
 @pytest.fixture()
@@ -183,7 +184,7 @@ def test_batch_schedule_and_rotation_survive_new_store_instance(state_dir):
         chat_id=100,
         user_id=10,
         count=6,
-        times=["08:00", "18:00"],
+        times=["08:00", "17:00"],
         timezone_name="Europe/Madrid",
     )
     assert store.get_batch_rotation_phase() == 0
@@ -194,17 +195,18 @@ def test_batch_schedule_and_rotation_survive_new_store_instance(state_dir):
     assert schedule["enabled"] is True
     assert schedule["chat_id"] == 100
     assert schedule["count"] == 6
-    assert schedule["times"] == ["08:00", "18:00"]
+    assert schedule["times"] == ["08:00", "17:00"]
+    assert schedule["schema_version"] == BATCH_SCHEDULE_SCHEMA_VERSION
     assert restored.get_batch_rotation_phase() == 1
 
 
 def test_batch_rotation_wraps_and_can_be_reset(state_dir):
     store = StateStore(state_dir)
-    for _ in range(7):
-        store.advance_batch_rotation(cycle_length=7)
-    assert store.get_batch_rotation_phase(cycle_length=7) == 0
+    for _ in range(BATCH_ROTATION_CYCLE_LENGTH):
+        store.advance_batch_rotation()
+    assert store.get_batch_rotation_phase() == 0
 
-    store.advance_batch_rotation(cycle_length=7)
+    store.advance_batch_rotation()
     store.reset_batch_rotation()
     assert store.get_batch_rotation_phase(cycle_length=7) == 0
 
@@ -225,3 +227,44 @@ def test_disabling_batch_schedule_keeps_its_configuration(state_dir):
     assert disabled["enabled"] is False
     assert disabled["count"] == 4
     assert disabled["times"] == ["09:30"]
+
+
+def test_scheduled_batch_slots_survive_manual_runs_and_restarts(state_dir):
+    store = StateStore(state_dir)
+    slot = "2026-07-12|08:00|Europe/Madrid|100"
+
+    assert store.claim_scheduled_batch_slot(slot, "batch-a")
+    assert store.finish_scheduled_batch_slot(
+        slot,
+        batch_id="batch-a",
+        status="completed",
+    )
+    store.write_last_batch_run({"status": "completed", "source": "manual"})
+
+    restored = StateStore(state_dir)
+    assert restored.scheduled_batch_slot_is_terminal(slot)
+    assert not restored.claim_scheduled_batch_slot(slot, "batch-b")
+
+
+def test_interrupted_running_schedule_slot_can_be_reclaimed(state_dir):
+    store = StateStore(state_dir)
+    slot = "2026-07-12|17:00|Europe/Madrid|100"
+
+    assert store.claim_scheduled_batch_slot(slot, "crashed-batch")
+    assert not store.scheduled_batch_slot_is_terminal(slot)
+    assert not store.claim_scheduled_batch_slot(slot, "duplicate-batch")
+    assert store.claim_scheduled_batch_slot(
+        slot,
+        "recovery-batch",
+        allow_reclaim_running=True,
+    )
+    assert not store.finish_scheduled_batch_slot(
+        slot,
+        batch_id="crashed-batch",
+        status="completed",
+    )
+    assert store.finish_scheduled_batch_slot(
+        slot,
+        batch_id="recovery-batch",
+        status="completed",
+    )
