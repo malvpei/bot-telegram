@@ -23,6 +23,7 @@ from app.bot import (
     _ask_for_another_same_account,
     _clear_wizard_state,
     _create_and_send_batch_generated_video,
+    _ensure_allowed,
     _execute_job,
     _format_account_audit,
     _format_pool_refill_summary,
@@ -40,6 +41,7 @@ from app.bot import (
 )
 from app.config import get_settings
 from app.batches import BatchItem, BatchItemKind
+from app.state import StateStore
 from app.models import (
     GenerationResult,
     ImageMetrics,
@@ -136,13 +138,20 @@ class FakeTemplateUpdate:
     def __init__(self) -> None:
         self.effective_message = FakeTemplateMessage()
         self.effective_chat = FakeChat()
+        self.effective_user = FakeUser()
 
 
 class FakeTemplateService:
     def __init__(self, video_path: Path) -> None:
         self.video_path = video_path
 
-    def create_template_video(self, source=None, language=None):
+    def create_template_video(
+        self,
+        source=None,
+        language=None,
+        user_id=None,
+        chat_id=None,
+    ):
         return TemplateVideoResult(
             video_path=self.video_path,
             social_copy=SocialCopy(
@@ -881,7 +890,10 @@ def test_skip_account_button_removes_account_file_entry_and_uses_next_account(tm
     with patch("app.bot._ensure_allowed", allow), patch(
         "app.bot.get_settings",
         return_value=settings,
-    ), patch("app.bot._execute_job", capture_execute_job):
+    ), patch("app.bot._is_owner", return_value=True), patch(
+        "app.bot._execute_job",
+        capture_execute_job,
+    ):
         asyncio.run(regenerate_choice(update, context))
 
     assert query.answered is True
@@ -895,6 +907,79 @@ def test_skip_account_button_removes_account_file_entry_and_uses_next_account(tm
     assert captured["request"].skip_accounts == ["alpha"]
     assert context.user_data["accounts_snapshot"] == ["https://www.instagram.com/beta/"]
     assert "repeat_request" not in context.user_data
+
+
+def test_authorized_telegram_users_share_access_without_sharing_identity(tmp_path):
+    settings = replace(get_settings(), state_dir=tmp_path / "state")
+
+    class AccessUpdate:
+        def __init__(self, user_id: int, chat_type: str = "private") -> None:
+            self.effective_user = FakeUser()
+            self.effective_user.id = user_id
+            self.effective_user.username = f"user{user_id}"
+            self.effective_chat = FakeChat()
+            self.effective_chat.id = user_id * 10
+            self.effective_chat.type = chat_type
+            self.effective_message = FakeReplyMessage()
+
+    owner_update = AccessUpdate(1)
+    with patch("app.bot.get_settings", return_value=settings):
+        assert asyncio.run(_ensure_allowed(owner_update))
+
+        store = StateStore(settings.state_dir)
+        store.authorize_telegram_user(user_id=2, added_by=1)
+        assert asyncio.run(_ensure_allowed(AccessUpdate(2)))
+
+        denied = AccessUpdate(3)
+        assert not asyncio.run(_ensure_allowed(denied))
+        assert "Tu ID es 3" in denied.effective_message.text
+
+        group = AccessUpdate(2, chat_type="group")
+        assert not asyncio.run(_ensure_allowed(group))
+        assert "chat privado" in group.effective_message.text
+
+
+def test_non_owner_skip_does_not_mutate_shared_accounts_or_pool(tmp_path):
+    async def allow(update):
+        return True
+
+    captured = {}
+
+    async def capture_execute_job(update, context, request):
+        captured["request"] = request
+
+    accounts_path = tmp_path / "accounts.txt"
+    accounts_path.write_text("@alpha\n@beta\n", encoding="utf-8")
+    settings = replace(
+        get_settings(),
+        accounts_file=accounts_path,
+        women_accounts_file=tmp_path / "accounts_women.txt",
+    )
+    service = FakeRegenerateService()
+    context = FakeContext()
+    context.application = FakeApplication(service)
+    context.user_data["repeat_request"] = {
+        "chosen_account": "alpha",
+        "requested_accounts": ["alpha", "beta"],
+        "video_type": "1",
+        "language": "es",
+        "video_gender": "male",
+    }
+    update = FakeRegenerateUpdate(FakeRegenerateQuery(REGENERATE_SKIP_ACCOUNT))
+
+    with patch("app.bot._ensure_allowed", allow), patch(
+        "app.bot.get_settings",
+        return_value=settings,
+    ), patch("app.bot._is_owner", return_value=False), patch(
+        "app.bot._execute_job",
+        capture_execute_job,
+    ):
+        asyncio.run(regenerate_choice(update, context))
+
+    assert accounts_path.read_text(encoding="utf-8") == "@alpha\n@beta\n"
+    assert service.excluded_accounts == []
+    assert captured["request"].skip_accounts == ["alpha"]
+    assert "pool compartido no se modifica" in update.callback_query.edited_text
 
 
 def test_main_menu_has_template_video_button():

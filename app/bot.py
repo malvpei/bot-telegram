@@ -156,6 +156,10 @@ def run_bot() -> None:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("my_id", my_id_command))
+    application.add_handler(CommandHandler("users", users_command))
+    application.add_handler(CommandHandler("add_user", add_user_command))
+    application.add_handler(CommandHandler("remove_user", remove_user_command))
     application.add_handler(CommandHandler("accounts", accounts_command))
     application.add_handler(CommandHandler("accounts_women", accounts_women_command))
     application.add_handler(CommandHandler("sync", sync_command))
@@ -235,7 +239,7 @@ async def batch_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await _ensure_allowed(update):
+    if not await _ensure_admin(update):
         return
     message = update.effective_message
     chat = update.effective_chat
@@ -294,7 +298,7 @@ async def batch_reset_command(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
 ) -> None:
-    if not await _ensure_allowed(update):
+    if not await _ensure_admin(update):
         return
     lock = _batch_lock(context.application)
     if lock.locked():
@@ -401,6 +405,7 @@ async def _run_batch(
                     await _create_and_send_batch_tools_video(
                         application,
                         chat_id,
+                        user_id,
                         item,
                         count,
                     )
@@ -495,6 +500,7 @@ async def _run_batch(
 async def _create_and_send_batch_tools_video(
     application: Application,
     chat_id: int,
+    user_id: int,
     item: BatchItem,
     count: int,
 ) -> None:
@@ -503,6 +509,8 @@ async def _create_and_send_batch_tools_video(
         service.create_template_video,
         None,
         item.language,
+        user_id,
+        chat_id,
     )
     await _send_message(
         application,
@@ -808,6 +816,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "Este bot genera videos verticales desde las cuentas de Instagram que "
         "hayas dejado en accounts.txt o accounts_women.txt.\n\n"
         "Comandos:\n"
+        "/my_id - ver tu ID de Telegram\n"
+        "/users, /add_user ID, /remove_user ID - accesos (propietario)\n"
         "/memory - ver si la memoria persiste tras redeploy\n"
         "/sync - descargar la biblioteca local de cuentas de hombres\n"
         "/sync_women - descargar la biblioteca local de cuentas de mujeres\n"
@@ -830,6 +840,81 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         message,
         reply_markup=_main_menu_markup(),
     )
+
+
+async def my_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    user = update.effective_user
+    chat = update.effective_chat
+    if user is None or update.effective_message is None:
+        return
+    await update.effective_message.reply_text(
+        f"Tu ID de usuario es {user.id}. Chat ID: {chat.id if chat else '-'}"
+    )
+
+
+async def users_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_admin(update):
+        return
+    users = _telegram_state_store().list_telegram_users()
+    lines = ["Usuarios autorizados:"]
+    for record in users:
+        username = str(record.get("username") or "").strip()
+        label = f"@{username}" if username else "sin username"
+        lines.append(
+            f"- {record['user_id']} · {label} · {record.get('role', 'user')}"
+        )
+    lines.extend(["", "Añadir: /add_user ID", "Eliminar: /remove_user ID"])
+    await update.effective_message.reply_text("\n".join(lines))
+
+
+async def add_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not await _ensure_admin(update):
+        return
+    try:
+        values = list(context.args or [])
+        if len(values) != 1:
+            raise ValueError
+        user_id = int(values[0])
+        if user_id <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        await update.effective_message.reply_text("Uso: /add_user ID_DE_TELEGRAM")
+        return
+    _telegram_state_store().authorize_telegram_user(
+        user_id=user_id,
+        added_by=update.effective_user.id,
+    )
+    await update.effective_message.reply_text(
+        f"Usuario {user_id} autorizado. Ya puede abrir el bot en un chat privado."
+    )
+
+
+async def remove_user_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    if not await _ensure_admin(update):
+        return
+    try:
+        values = list(context.args or [])
+        if len(values) != 1:
+            raise ValueError
+        user_id = int(values[0])
+    except (TypeError, ValueError):
+        await update.effective_message.reply_text("Uso: /remove_user ID_DE_TELEGRAM")
+        return
+    store = _telegram_state_store()
+    if user_id == store.get_owner_user_id():
+        await update.effective_message.reply_text(
+            "No se puede eliminar al propietario del bot."
+        )
+        return
+    if not store.revoke_telegram_user(user_id):
+        await update.effective_message.reply_text(
+            f"El usuario {user_id} no estaba autorizado."
+        )
+        return
+    await update.effective_message.reply_text(f"Usuario {user_id} eliminado.")
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -925,7 +1010,7 @@ async def _sync_command_for_gender(
     context: ContextTypes.DEFAULT_TYPE,
     gender: VideoGender,
 ) -> None:
-    if not await _ensure_allowed(update):
+    if not await _ensure_admin(update):
         return
 
     settings = get_settings()
@@ -990,7 +1075,7 @@ async def _download_pool_command_for_gender(
     context: ContextTypes.DEFAULT_TYPE,
     gender: VideoGender,
 ) -> None:
-    if not await _ensure_allowed(update):
+    if not await _ensure_admin(update):
         return
 
     settings = get_settings()
@@ -1110,8 +1195,9 @@ async def _execute_template_video(
     language: Language = Language.ES,
 ) -> None:
     chat = update.effective_chat
+    user = update.effective_user
     message = update.effective_message
-    if message is None or chat is None:
+    if message is None or chat is None or user is None:
         return
 
     status_message = await message.reply_text(
@@ -1123,6 +1209,8 @@ async def _execute_template_video(
             service.create_template_video,
             source,
             language,
+            user.id,
+            chat.id,
         )
     except Exception as error:
         LOGGER.exception("Template video generation failed")
@@ -1157,7 +1245,10 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         history_max_per_bucket=settings.history_max_per_bucket,
     )
     marker = store.ensure_persistence_marker()
-    snapshot = store.memory_snapshot(recent_limit=10)
+    snapshot = store.memory_snapshot(
+        recent_limit=10,
+        user_id=update.effective_user.id,
+    )
     accounts_line = _accounts_status_line(settings, VideoGender.MALE)
     women_accounts_line = _accounts_status_line(settings, VideoGender.FEMALE)
 
@@ -1197,7 +1288,7 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"Posts con foto por cuenta: {settings.max_posts_per_account}\n"
         f"Cache de cuentas: {cache_line}\n"
         f"Fotos bloqueadas: {snapshot['used_media_count']}\n"
-        f"Jobs guardados: {snapshot['jobs_count']}\n"
+        f"Tus jobs guardados: {snapshot['jobs_count']}\n"
         f"Cuentas usadas distintas: {snapshot['unique_chosen_accounts']}\n"
         f"Ultimas cuentas: {recent_line}\n"
         f"Mas repetidas: {top_line}\n\n"
@@ -1598,7 +1689,8 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         )
         removed_from_file = 0
         accounts_path = _accounts_path_for_gender(get_settings(), gender)
-        if query.data == REGENERATE_SKIP_ACCOUNT:
+        owner_is_requesting = _is_owner(update)
+        if query.data == REGENERATE_SKIP_ACCOUNT and owner_is_requesting:
             removed_from_file = await asyncio.to_thread(
                 remove_account,
                 accounts_path,
@@ -1638,6 +1730,15 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return
 
     if query.data == REGENERATE_SKIP_ACCOUNT:
+        if not owner_is_requesting:
+            context.user_data.pop("repeat_request", None)
+            context.user_data["accounts_snapshot"] = list(request.account_inputs)
+            await query.edit_message_text(
+                f"Descarto @{chosen_account} solo para tu repetición y busco "
+                "otra cuenta. El pool compartido no se modifica."
+            )
+            await _execute_job(update, context, request)
+            return
         service: VideoCreationService = context.application.bot_data["service"]
         removed = await asyncio.to_thread(
             service.exclude_account,
@@ -2055,7 +2156,9 @@ async def _download_story_reference_photo(
         raise ValueError("Mandame una foto o un documento de imagen.")
 
     settings = get_settings()
-    target_dir = settings.downloads_dir / "_story_references"
+    user = update.effective_user
+    user_scope = str(user.id) if user is not None else "unknown"
+    target_dir = settings.downloads_dir / "_story_references" / user_scope
     target_dir.mkdir(parents=True, exist_ok=True)
     target_path = target_dir / f"story_reference_{uuid4().hex}{suffix.lower()}"
     await telegram_file.download_to_drive(custom_path=str(target_path))
@@ -2370,45 +2473,105 @@ def _fit_telegram_text(text: str) -> str:
 
 async def _ensure_allowed(update: Update) -> bool:
     settings = get_settings()
-    chat_allowed = (
-        not settings.allowed_chat_ids
-        or bool(
-            update.effective_chat
-            and update.effective_chat.id in settings.allowed_chat_ids
+    user = update.effective_user
+    chat = update.effective_chat
+    message = update.effective_message
+    if user is None:
+        if message:
+            await message.reply_text("No pude identificar tu cuenta de Telegram.")
+        return False
+
+    chat_type = getattr(chat, "type", None)
+    if chat_type is not None and str(chat_type).lower() != "private":
+        if message:
+            await message.reply_text(
+                "Por privacidad, usa el bot desde un chat privado. "
+                "No genero ni envío fotos en grupos o canales."
+            )
+        return False
+
+    store = _telegram_state_store()
+    username = user.username or user.full_name or ""
+    chat_id = chat.id if chat else None
+    owner_id = store.get_owner_user_id()
+
+    if owner_id is None:
+        if settings.allowed_chat_ids and chat_id not in settings.allowed_chat_ids:
+            if message:
+                await message.reply_text(
+                    f"Este usuario no está autorizado. Tu ID es {user.id}."
+                )
+            return False
+        if store.claim_or_check_owner(
+            user_id=user.id,
+            chat_id=chat_id,
+            username=username,
+        ):
+            store.touch_telegram_user(
+                user_id=user.id,
+                chat_id=chat_id,
+                username=username,
+            )
+            return True
+
+    if store.is_telegram_user_authorized(user.id):
+        store.touch_telegram_user(
+            user_id=user.id,
+            chat_id=chat_id,
+            username=username,
         )
-    )
-    if not chat_allowed:
-        if update.effective_message:
-            await update.effective_message.reply_text(
-                "Este chat no está autorizado para usar el bot."
-            )
-        return False
+        return True
 
-    if update.effective_user is None:
-        if update.effective_message:
-            await update.effective_message.reply_text(
-                "No pude identificar tu cuenta de Telegram."
-            )
-        return False
+    # Existing comma-separated chat IDs remain a bootstrap allow-list.
+    if chat_id is not None and chat_id in settings.allowed_chat_ids:
+        store.authorize_telegram_user(
+            user_id=user.id,
+            added_by=owner_id or user.id,
+            username=username,
+            chat_id=chat_id,
+        )
+        store.touch_telegram_user(
+            user_id=user.id,
+            chat_id=chat_id,
+            username=username,
+        )
+        return True
 
-    store = StateStore(
+    if message:
+        await message.reply_text(
+            f"Este usuario no está autorizado. Tu ID es {user.id}. "
+            "Pide al propietario que use /add_user con ese ID."
+        )
+    return False
+
+
+async def _ensure_admin(update: Update) -> bool:
+    if not await _ensure_allowed(update):
+        return False
+    user = update.effective_user
+    if user is not None and _telegram_state_store().get_owner_user_id() == user.id:
+        return True
+    if update.effective_message:
+        await update.effective_message.reply_text(
+            "Este comando solo puede usarlo el propietario del bot."
+        )
+    return False
+
+
+def _telegram_state_store() -> StateStore:
+    settings = get_settings()
+    return StateStore(
         settings.state_dir,
         history_max_per_bucket=settings.history_max_per_bucket,
     )
-    username = update.effective_user.username or update.effective_user.full_name or ""
-    if store.claim_or_check_owner(
-        user_id=update.effective_user.id,
-        chat_id=update.effective_chat.id if update.effective_chat else None,
-        username=username,
-    ):
-        return True
 
-    if update.effective_message:
-        await update.effective_message.reply_text(
-            "Este bot ya está vinculado a otra cuenta de Telegram. Usa la misma "
-            "cuenta/número en tus dos móviles."
-        )
-    return False
+
+def _is_owner(update: Update) -> bool:
+    user = update.effective_user
+    return bool(
+        user is not None
+        and _telegram_state_store().get_owner_user_id() == user.id
+    )
 
 
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -52,6 +52,7 @@ class StateStore:
         self._scheduled_batch_slots_path = self.state_dir / "scheduled_batch_slots.json"
         self._image_analysis_cache_path = self.state_dir / "image_analysis_cache.json"
         self._owner_path = self.state_dir / "telegram_owner.json"
+        self._telegram_users_path = self.state_dir / "telegram_users.json"
         self._persistence_marker_path = self.state_dir / "persistence_marker.json"
         self._lock_path = self.state_dir / ".state.lock"
         self._thread_lock = Lock()
@@ -171,18 +172,56 @@ class StateStore:
             self._write_json(self._used_media_path, used)
         return []
 
-    def release_media(self, media_ids: list[str]) -> None:
+    def release_media(self, media_ids: list[str], job_id: str | None = None) -> None:
         if not media_ids:
             return
         with self._exclusive():
             used = self._read_json(self._used_media_path, {})
             mutated = False
             for media_id in media_ids:
-                if media_id in used:
+                reservation = used.get(media_id)
+                reservation_job_id = (
+                    str(reservation.get("job_id") or "")
+                    if isinstance(reservation, dict)
+                    else ""
+                )
+                if media_id in used and (
+                    job_id is None or reservation_job_id == job_id
+                ):
                     used.pop(media_id, None)
                     mutated = True
             if mutated:
                 self._write_json(self._used_media_path, used)
+
+    def backfill_story_reference_reservations(self) -> int:
+        """Migrate successful R2 type-4 jobs from before global reservations."""
+        with self._exclusive():
+            jobs = self._read_json(self._jobs_log_path, [])
+            used = self._read_json(self._used_media_path, {})
+            if not isinstance(jobs, list):
+                jobs = []
+            if not isinstance(used, dict):
+                used = {}
+            added = 0
+            for job in jobs:
+                if not isinstance(job, dict) or job.get("video_type") != "4":
+                    continue
+                source = str(job.get("chosen_account") or "")
+                if not source.startswith("r2:"):
+                    continue
+                reservation_key = f"r2-story:{source[3:]}"
+                if reservation_key in used:
+                    continue
+                used[reservation_key] = {
+                    "job_id": str(job.get("job_id") or "migrated-story-job"),
+                    "used_at": job.get("created_at")
+                    or datetime.now(timezone.utc).isoformat(),
+                    "migrated_from_jobs_log": True,
+                }
+                added += 1
+            if added:
+                self._write_json(self._used_media_path, used)
+            return added
 
     def get_last_signature(self, video_type: VideoType, language: Language) -> str | None:
         with self._exclusive():
@@ -705,11 +744,17 @@ class StateStore:
             snapshot["created_now"] = created_now
             return snapshot
 
-    def memory_snapshot(self, *, recent_limit: int = 20) -> dict[str, Any]:
+    def memory_snapshot(
+        self,
+        *,
+        recent_limit: int = 20,
+        user_id: int | None = None,
+    ) -> dict[str, Any]:
         with self._exclusive():
             used = self._read_json(self._used_media_path, {})
             jobs = self._read_json(self._jobs_log_path, [])
             marker = self._read_json(self._persistence_marker_path, {})
+            owner = self._read_json(self._owner_path, {})
 
         if not isinstance(used, dict):
             used = {}
@@ -717,6 +762,28 @@ class StateStore:
             jobs = []
         if not isinstance(marker, dict):
             marker = {}
+        if not isinstance(owner, dict):
+            owner = {}
+
+        all_jobs_count = len(jobs)
+        if user_id is not None:
+            try:
+                owner_id = int(owner.get("user_id"))
+            except (TypeError, ValueError):
+                owner_id = None
+            jobs = [
+                job
+                for job in jobs
+                if isinstance(job, dict)
+                and (
+                    job.get("user_id") == user_id
+                    or (
+                        job.get("user_id") is None
+                        and owner_id is not None
+                        and user_id == owner_id
+                    )
+                )
+            ]
 
         account_counts: dict[str, int] = {}
         recent_accounts: list[str] = []
@@ -738,6 +805,7 @@ class StateStore:
             "state_dir": str(self.state_dir),
             "used_media_count": len(used),
             "jobs_count": len(jobs),
+            "global_jobs_count": all_jobs_count,
             "unique_chosen_accounts": len(account_counts),
             "recent_accounts": recent_accounts,
             "top_accounts": sorted(
@@ -783,15 +851,28 @@ class StateStore:
             owner = self._read_json(self._owner_path, {})
             owner_id = owner.get("user_id")
             if owner_id is None:
+                timestamp = datetime.now(timezone.utc).isoformat()
                 self._write_json(
                     self._owner_path,
                     {
                         "user_id": user_id,
                         "chat_id": chat_id,
                         "username": username,
-                        "claimed_at": datetime.now(timezone.utc).isoformat(),
+                        "claimed_at": timestamp,
                     },
                 )
+                users = self._read_telegram_users_unlocked()
+                users[str(user_id)] = {
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "username": username,
+                    "role": "owner",
+                    "enabled": True,
+                    "added_by": user_id,
+                    "added_at": timestamp,
+                    "last_seen_at": timestamp,
+                }
+                self._write_telegram_users_unlocked(users)
                 return True
             return int(owner_id) == user_id
 
@@ -806,6 +887,164 @@ class StateStore:
         except (TypeError, ValueError):
             return None
 
+    def authorize_telegram_user(
+        self,
+        *,
+        user_id: int,
+        added_by: int,
+        username: str = "",
+        chat_id: int | None = None,
+    ) -> dict[str, Any]:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self._exclusive():
+            owner = self._read_json(self._owner_path, {})
+            try:
+                owner_id = int(owner.get("user_id"))
+            except (AttributeError, TypeError, ValueError):
+                owner_id = None
+            users = self._read_telegram_users_unlocked()
+            previous = users.get(str(user_id), {})
+            record = {
+                "user_id": user_id,
+                "chat_id": chat_id if chat_id is not None else previous.get("chat_id"),
+                "username": username or str(previous.get("username") or ""),
+                "role": "owner" if user_id == owner_id else "user",
+                "enabled": True,
+                "added_by": added_by,
+                "added_at": previous.get("added_at") or timestamp,
+                "last_seen_at": previous.get("last_seen_at"),
+            }
+            users[str(user_id)] = record
+            self._write_telegram_users_unlocked(users)
+        return dict(record)
+
+    def revoke_telegram_user(self, user_id: int) -> bool:
+        with self._exclusive():
+            owner = self._read_json(self._owner_path, {})
+            try:
+                owner_id = int(owner.get("user_id"))
+            except (AttributeError, TypeError, ValueError):
+                owner_id = None
+            if user_id == owner_id:
+                return False
+            users = self._read_telegram_users_unlocked()
+            record = users.get(str(user_id))
+            if not isinstance(record, dict) or not record.get("enabled"):
+                return False
+            record["enabled"] = False
+            record["revoked_at"] = datetime.now(timezone.utc).isoformat()
+            users[str(user_id)] = record
+            self._write_telegram_users_unlocked(users)
+            return True
+
+    def is_telegram_user_authorized(self, user_id: int) -> bool:
+        with self._exclusive():
+            owner = self._read_json(self._owner_path, {})
+            try:
+                if int(owner.get("user_id")) == user_id:
+                    return True
+            except (AttributeError, TypeError, ValueError):
+                pass
+            users = self._read_telegram_users_unlocked()
+            record = users.get(str(user_id), {})
+            return isinstance(record, dict) and bool(record.get("enabled"))
+
+    def touch_telegram_user(
+        self,
+        *,
+        user_id: int,
+        chat_id: int | None,
+        username: str,
+    ) -> None:
+        timestamp = datetime.now(timezone.utc).isoformat()
+        with self._exclusive():
+            owner = self._read_json(self._owner_path, {})
+            try:
+                is_owner = int(owner.get("user_id")) == user_id
+            except (AttributeError, TypeError, ValueError):
+                is_owner = False
+            users = self._read_telegram_users_unlocked()
+            record = users.get(str(user_id), {})
+            if not is_owner and (
+                not isinstance(record, dict) or not record.get("enabled")
+            ):
+                return
+            if not isinstance(record, dict):
+                record = {}
+            record.update(
+                {
+                    "user_id": user_id,
+                    "chat_id": chat_id,
+                    "username": username or str(record.get("username") or ""),
+                    "role": "owner" if is_owner else "user",
+                    "enabled": True,
+                    "last_seen_at": timestamp,
+                }
+            )
+            record.setdefault("added_by", user_id if is_owner else None)
+            record.setdefault("added_at", timestamp)
+            users[str(user_id)] = record
+            self._write_telegram_users_unlocked(users)
+
+    def list_telegram_users(self) -> list[dict[str, Any]]:
+        with self._exclusive():
+            owner = self._read_json(self._owner_path, {})
+            users = self._read_telegram_users_unlocked()
+        try:
+            owner_id = int(owner.get("user_id"))
+        except (AttributeError, TypeError, ValueError):
+            owner_id = None
+        records: list[dict[str, Any]] = []
+        for key, raw_record in users.items():
+            if not isinstance(raw_record, dict) or not raw_record.get("enabled"):
+                continue
+            record = dict(raw_record)
+            try:
+                record["user_id"] = int(record.get("user_id", key))
+            except (TypeError, ValueError):
+                continue
+            record["role"] = "owner" if record["user_id"] == owner_id else "user"
+            records.append(record)
+        if owner_id is not None and not any(
+            record["user_id"] == owner_id for record in records
+        ):
+            records.append(
+                {
+                    "user_id": owner_id,
+                    "chat_id": owner.get("chat_id"),
+                    "username": owner.get("username") or "",
+                    "role": "owner",
+                    "enabled": True,
+                    "added_at": owner.get("claimed_at"),
+                    "last_seen_at": None,
+                }
+            )
+        return sorted(
+            records,
+            key=lambda record: (record.get("role") != "owner", record["user_id"]),
+        )
+
+    def _read_telegram_users_unlocked(self) -> dict[str, dict[str, Any]]:
+        payload = self._read_json(self._telegram_users_path, {})
+        if isinstance(payload, dict) and isinstance(payload.get("users"), dict):
+            payload = payload["users"]
+        if not isinstance(payload, dict):
+            return {}
+        return {
+            str(key): dict(value)
+            for key, value in payload.items()
+            if isinstance(value, dict)
+        }
+
+    def _write_telegram_users_unlocked(
+        self,
+        users: dict[str, dict[str, Any]],
+    ) -> None:
+        self._write_json(
+            self._telegram_users_path,
+            {"schema_version": 1, "users": users},
+        )
+
     def build_job_record(
         self,
         *,
@@ -818,6 +1057,8 @@ class StateStore:
         video_path: str | None,
         script_path: str,
         gender: str | None = None,
+        user_id: int | None = None,
+        chat_id: int | None = None,
     ) -> dict[str, Any]:
         record = {
             "job_id": job_id,
@@ -832,6 +1073,10 @@ class StateStore:
         }
         if gender:
             record["gender"] = gender
+        if user_id is not None:
+            record["user_id"] = user_id
+        if chat_id is not None:
+            record["chat_id"] = chat_id
         return record
 
     @staticmethod

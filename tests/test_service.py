@@ -9,6 +9,7 @@ from threading import Lock
 from uuid import uuid4
 
 from PIL import Image
+import pytest
 
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoRequest, VideoType
@@ -500,6 +501,7 @@ def test_type_4_generates_six_ai_slides_and_normalizes_original_reference():
         assert renderer.render_slide_still_calls == [VideoType.TYPE_4] * 7
         assert result.slides[-1].role == SlideRole.STORY_ORIGINAL_REFERENCE
         assert result.slides[-1].media.local_path.name == "slide_07.jpg"
+        assert root / "outputs" / "users" / "1" in result.slides[-1].media.local_path.parents
         assert Image.open(result.slides[-1].media.local_path).size == (72, 128)
         assert result.slides[-1].media.local_path.read_bytes() != reference.read_bytes()
         assert renderer.written_plan is not None
@@ -551,6 +553,53 @@ def test_type_4_downloads_reference_from_r2_when_no_photo_is_passed():
         assert story_generator.reference_image_path.exists()
         assert result.chosen_account == "r2:videos/imagenes/reference.jpg"
         assert result.slides[-1].media.local_path.name == "slide_07.jpg"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_4_r2_reference_is_globally_consumed_across_users():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            r2_image_prefix="videos/imagenes",
+            width=72,
+            height=128,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.script_generator = ScriptGenerator(service.state)
+        service.renderer = FakeRenderer()
+        service.story_image_generator = FakeStoryImageGenerator()
+        service.r2_storage = FakeR2Storage()
+
+        first_request = VideoRequest(
+            chat_id=101,
+            user_id=1,
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            account_inputs=[],
+        )
+        second_request = VideoRequest(
+            chat_id=202,
+            user_id=2,
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        service._create_story_carousel_locked(first_request)
+        with pytest.raises(ValueError, match="No quedan imagenes de referencia sin usar"):
+            service._create_story_carousel_locked(second_request)
+
+        used = service.state.read_used_media()
+        assert "r2-story:videos/imagenes/reference.jpg" in used
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

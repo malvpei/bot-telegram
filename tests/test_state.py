@@ -43,6 +43,17 @@ def test_release_media_frees_ids(state_dir):
     assert not store.is_media_used("y")
 
 
+def test_release_media_cannot_release_another_jobs_reservation(state_dir):
+    store = StateStore(state_dir)
+    store.reserve_media(["shared-photo"], job_id="user-1-job")
+
+    store.release_media(["shared-photo"], job_id="user-2-job")
+    assert store.is_media_used("shared-photo")
+
+    store.release_media(["shared-photo"], job_id="user-1-job")
+    assert not store.is_media_used("shared-photo")
+
+
 def test_media_memory_is_exact_not_near_duplicate(state_dir):
     store = StateStore(state_dir)
     store.reserve_media(["ahash:0000000000000000"], job_id="job-1")
@@ -175,6 +186,79 @@ def test_claim_or_check_owner_allows_only_first_telegram_user(state_dir):
         username="other",
     )
     assert store.get_owner_user_id() == 10
+
+
+def test_owner_can_authorize_and_revoke_multiple_telegram_users(state_dir):
+    store = StateStore(state_dir)
+    store.claim_or_check_owner(user_id=10, chat_id=100, username="owner")
+
+    store.authorize_telegram_user(user_id=11, added_by=10)
+    store.authorize_telegram_user(user_id=12, added_by=10, username="second")
+
+    assert store.is_telegram_user_authorized(10)
+    assert store.is_telegram_user_authorized(11)
+    assert store.is_telegram_user_authorized(12)
+    assert [item["user_id"] for item in store.list_telegram_users()] == [10, 11, 12]
+    assert not store.revoke_telegram_user(10)
+    assert store.revoke_telegram_user(11)
+    assert not store.is_telegram_user_authorized(11)
+    assert [item["user_id"] for item in store.list_telegram_users()] == [10, 12]
+
+
+def test_memory_snapshot_only_exposes_requesting_users_jobs(state_dir):
+    store = StateStore(state_dir)
+    store.claim_or_check_owner(user_id=10, chat_id=100, username="owner")
+    store.authorize_telegram_user(user_id=11, added_by=10)
+    store.reserve_media(["globally-used"], job_id="job-1")
+    for job_id, account, user_id in [
+        ("job-1", "alpha", 10),
+        ("job-2", "secret-account", 11),
+    ]:
+        store.log_job(
+            store.build_job_record(
+                job_id=job_id,
+                chosen_account=account,
+                requested_accounts=[account],
+                fallback_accounts=[],
+                video_type=VideoType.TYPE_1,
+                language=Language.ES,
+                video_path=None,
+                script_path=f"{job_id}.txt",
+                user_id=user_id,
+                chat_id=user_id * 10,
+            )
+        )
+
+    owner_snapshot = store.memory_snapshot(user_id=10)
+    user_snapshot = store.memory_snapshot(user_id=11)
+
+    assert owner_snapshot["jobs_count"] == 1
+    assert owner_snapshot["recent_accounts"] == ["alpha"]
+    assert user_snapshot["jobs_count"] == 1
+    assert user_snapshot["recent_accounts"] == ["secret-account"]
+    assert user_snapshot["global_jobs_count"] == 2
+    assert user_snapshot["used_media_count"] == 1
+
+
+def test_historical_r2_story_jobs_are_migrated_to_global_reservations(state_dir):
+    store = StateStore(state_dir)
+    store.log_job(
+        store.build_job_record(
+            job_id="old-story",
+            chosen_account="r2:imagenes/already-used.jpg",
+            requested_accounts=["r2:imagenes/already-used.jpg"],
+            fallback_accounts=[],
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            video_path=None,
+            script_path="old-story.txt",
+            user_id=10,
+        )
+    )
+
+    assert store.backfill_story_reference_reservations() == 1
+    assert store.backfill_story_reference_reservations() == 0
+    assert store.is_media_used("r2-story:imagenes/already-used.jpg")
 
 
 def test_batch_schedule_and_rotation_survive_new_store_instance(state_dir):

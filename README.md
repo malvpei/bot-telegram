@@ -64,7 +64,7 @@ assets/
   fonts/*.ttf            — opcional, fuentes preferidas para el render
 data/
   downloads/             — cache de imágenes por cuenta
-  outputs/<job_id>/      — .mp4 y script.txt por job
+  outputs/users/<telegram_user_id>/<job_id>/ — salidas aisladas por usuario
   state/                 — JSON de used_media, pool, cooldowns, jobs, sesión IG
 ```
 
@@ -269,7 +269,8 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `.mp4` enviado al chat (si supera 50MB, se avisa y se deja en disco)
 - preview de texto en el chat
 - `script.txt` enviado como documento
-- archivos persistidos en `data/downloads/`, `data/outputs/<job_id>/` y
+- archivos persistidos en `data/downloads/`,
+  `data/outputs/users/<telegram_user_id>/<job_id>/` y
   `data/state/`
 
 ## Estado persistente
@@ -280,7 +281,27 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `data/state/recent_scripts.json` — última firma generada por (tipo, idioma)
 - `data/state/script_history.json` — historial acotado de firmas
 - `data/state/jobs_log.json` — histórico de jobs
+- `data/state/telegram_users.json` — usuarios autorizados y último acceso
 - `data/state/.state.lock` — lock de `filelock` cross-proceso
+
+## Varios usuarios de Telegram
+
+El bot funciona en chats privados para evitar que una entrega quede visible en
+un grupo. El primer usuario autorizado queda como propietario. Los demás pueden
+consultar su ID con `/my_id`; el propietario gestiona el acceso con:
+
+```text
+/add_user 123456789
+/remove_user 123456789
+/users
+```
+
+Todos consumen el mismo pool global: una foto reservada por cualquier usuario
+desaparece para los demás y no vuelve a utilizarse. Las referencias de R2 del
+tipo 4 siguen la misma regla. Los jobs, rutas de salida e historial mostrado por
+`/memory` quedan separados por usuario. `/sync`, `/download_pool`, `/schedule`
+y `/batch_reset` son comandos exclusivos del propietario porque modifican el
+estado compartido.
 
 ## Docker / Coolify / Hetzner
 
@@ -297,7 +318,8 @@ Mount path: /app/data
 ```
 
 Todo lo que debe sobrevivir vive ahi: `state/used_media.json`,
-`state/telegram_owner.json`, `state/jobs_log.json`, `downloads/` y `outputs/`.
+`state/telegram_owner.json`, `state/telegram_users.json`, `state/jobs_log.json`,
+`downloads/` y `outputs/`.
 Tras desplegar, ejecuta `/memory`: debe mostrar `DATA_DIR: /app/data` y
 `Persistent Storage: OK (/app/data montado)`. Si aparece `ERROR`, el storage
 no esta montado en esa app de Coolify y el siguiente redeploy puede borrar la

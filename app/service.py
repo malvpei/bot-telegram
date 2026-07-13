@@ -422,11 +422,13 @@ class VideoCreationService:
         self,
         source: str | None = None,
         language: Language = Language.ES,
+        user_id: int | None = None,
+        chat_id: int | None = None,
     ) -> TemplateVideoResult:
         with self._job_lock:
             template_language = self._template_video_language(language)
             job_id = self._build_job_id()
-            job_dir = self.settings.outputs_dir / job_id
+            job_dir = self._job_output_dir(job_id, user_id)
             if getattr(self, "r2_storage", None) is not None and self.r2_storage.is_configured:
                 source_video, queue_restarted = self._download_template_video_from_r2(
                     source,
@@ -521,7 +523,7 @@ class VideoCreationService:
             for slide in plan.slides:
                 slide.text = script_package.slides_by_role[slide.role]
 
-            job_dir = self.settings.outputs_dir / job_id
+            job_dir = self._job_output_dir(job_id, request.user_id)
             video_path, script_path = self._render_outputs(
                 plan,
                 job_dir,
@@ -559,6 +561,8 @@ class VideoCreationService:
                     video_path=str(video_path) if video_path is not None else None,
                     script_path=str(script_path),
                     gender=request.gender.value,
+                    user_id=request.user_id,
+                    chat_id=request.chat_id,
                 )
             )
             if plan.type_3_background_id and plan.type_3_background_candidates:
@@ -569,7 +573,7 @@ class VideoCreationService:
         except Exception:
             # If anything blew up after reservation, release the IDs so they
             # remain available for future runs.
-            self.state.release_media(plan.used_media_ids)
+            self.state.release_media(plan.used_media_ids, job_id)
             raise
 
         self._cleanup_old_outputs()
@@ -604,75 +608,91 @@ class VideoCreationService:
 
     def _create_story_carousel_locked(self, request: VideoRequest) -> GenerationResult:
         job_id = self._build_job_id()
-        job_dir = self.settings.outputs_dir / job_id
+        job_dir = self._job_output_dir(job_id, request.user_id)
         reference_image_path = request.reference_image_path
         reference_source = "foto de referencia"
+        reserved_media_ids: list[str] = []
         if reference_image_path is None:
-            reference_image_path, reference_source, queue_restarted = (
-                self._download_story_reference_from_r2(job_dir)
+            (
+                reference_image_path,
+                reference_source,
+                queue_restarted,
+                reserved_media_id,
+            ) = (
+                self._download_story_reference_from_r2(job_dir, job_id)
             )
+            reserved_media_ids.append(reserved_media_id)
             if queue_restarted:
                 LOGGER.info("R2 story reference image queue restarted for type 4")
-        if not reference_image_path.exists():
-            raise FileNotFoundError(
-                f"No encuentro la foto de referencia: {reference_image_path}"
+        try:
+            if not reference_image_path.exists():
+                raise FileNotFoundError(
+                    f"No encuentro la foto de referencia: {reference_image_path}"
+                )
+
+            script_package = self.script_generator.generate(
+                VideoType.TYPE_4,
+                Language.ES,
+                gender=request.gender,
+                lowercase_text=False,
             )
-
-        script_package = self.script_generator.generate(
-            VideoType.TYPE_4,
-            Language.ES,
-            gender=request.gender,
-            lowercase_text=False,
-        )
-        generated_media = self.story_image_generator.generate_slides(
-            reference_image_path,
-            job_dir,
-        )
-        if len(generated_media) != len(TYPE_4_ROLES) - 1:
-            raise RuntimeError(
-                "El generador IA no devolvio las 6 imagenes esperadas para el tipo 4."
+            generated_media = self.story_image_generator.generate_slides(
+                reference_image_path,
+                job_dir,
             )
+            if len(generated_media) != len(TYPE_4_ROLES) - 1:
+                raise RuntimeError(
+                    "El generador IA no devolvio las 6 imagenes esperadas para el tipo 4."
+                )
 
-        reference_media = self._copy_story_reference_image(reference_image_path, job_dir)
-        media_by_role = {
-            role: media
-            for role, media in zip(TYPE_4_ROLES[:-1], generated_media, strict=True)
-        }
-        media_by_role[SlideRole.STORY_ORIGINAL_REFERENCE] = reference_media
-
-        slides = [
-            SlidePlan(
-                index=index,
-                role=role,
-                text=script_package.slides_by_role[role],
-                media=media_by_role[role],
-                fixed_asset=role == SlideRole.STORY_ORIGINAL_REFERENCE,
+            reference_media = self._copy_story_reference_image(
+                reference_image_path,
+                job_dir,
             )
-            for index, role in enumerate(TYPE_4_ROLES, start=1)
-        ]
-        plan = VideoPlan(
-            chosen_account=reference_source,
-            video_type=VideoType.TYPE_4,
-            language=Language.ES,
-            slides=slides,
-            used_media_ids=[],
-            fallback_accounts=[],
-        )
-        video_path, script_path = self._render_outputs(plan, job_dir)
+            media_by_role = {
+                role: media
+                for role, media in zip(TYPE_4_ROLES[:-1], generated_media, strict=True)
+            }
+            media_by_role[SlideRole.STORY_ORIGINAL_REFERENCE] = reference_media
 
-        self.state.log_job(
-            self.state.build_job_record(
-                job_id=job_id,
-                chosen_account=plan.chosen_account,
-                requested_accounts=[reference_source],
-                fallback_accounts=[],
+            slides = [
+                SlidePlan(
+                    index=index,
+                    role=role,
+                    text=script_package.slides_by_role[role],
+                    media=media_by_role[role],
+                    fixed_asset=role == SlideRole.STORY_ORIGINAL_REFERENCE,
+                )
+                for index, role in enumerate(TYPE_4_ROLES, start=1)
+            ]
+            plan = VideoPlan(
+                chosen_account=reference_source,
                 video_type=VideoType.TYPE_4,
                 language=Language.ES,
-                video_path=str(video_path) if video_path is not None else None,
-                script_path=str(script_path),
-                gender=request.gender.value,
+                slides=slides,
+                used_media_ids=list(reserved_media_ids),
+                fallback_accounts=[],
             )
-        )
+            video_path, script_path = self._render_outputs(plan, job_dir)
+
+            self.state.log_job(
+                self.state.build_job_record(
+                    job_id=job_id,
+                    chosen_account=plan.chosen_account,
+                    requested_accounts=[reference_source],
+                    fallback_accounts=[],
+                    video_type=VideoType.TYPE_4,
+                    language=Language.ES,
+                    video_path=str(video_path) if video_path is not None else None,
+                    script_path=str(script_path),
+                    gender=request.gender.value,
+                    user_id=request.user_id,
+                    chat_id=request.chat_id,
+                )
+            )
+        except Exception:
+            self.state.release_media(reserved_media_ids, job_id)
+            raise
         self._cleanup_old_outputs()
         return GenerationResult(
             video_path=video_path,
@@ -692,7 +712,8 @@ class VideoCreationService:
     def _download_story_reference_from_r2(
         self,
         job_dir: Path,
-    ) -> tuple[Path, str, bool]:
+        job_id: str,
+    ) -> tuple[Path, str, bool, str]:
         if getattr(self, "r2_storage", None) is None or not self.r2_storage.is_configured:
             raise ValueError(
                 "El tipo 4 necesita una imagen en R2. Configura R2 y sube imagenes "
@@ -727,14 +748,51 @@ class VideoCreationService:
                 + visible_line
             )
         ordered_images = sorted(images, key=lambda item: item.key)
-        selected_key, queue_restarted = self.state.get_next_story_reference_image_id(
-            f"r2:{effective_prefix}" if effective_prefix else "r2:*",
-            [image.key for image in ordered_images],
+        reservation_by_key = {
+            image.key: f"r2-story:{image.key}" for image in ordered_images
+        }
+        migrated_count = self.state.backfill_story_reference_reservations()
+        if migrated_count:
+            LOGGER.info(
+                "Migrated %d historical R2 story reference reservation(s)",
+                migrated_count,
+            )
+        unused_reservations = set(
+            self.state.filter_unused(list(reservation_by_key.values()))
         )
-        selected = next(
-            (image for image in ordered_images if image.key == selected_key),
-            ordered_images[0],
-        )
+        available_images = [
+            image
+            for image in ordered_images
+            if reservation_by_key[image.key] in unused_reservations
+        ]
+        if not available_images:
+            raise ValueError(
+                "No quedan imagenes de referencia sin usar en R2. "
+                "Todas las fotos del pool global ya fueron consumidas por algun usuario."
+            )
+
+        queue_restarted = False
+        selected = available_images[0]
+        reservation_key = reservation_by_key[selected.key]
+        while available_images:
+            selected_key, restarted = self.state.get_next_story_reference_image_id(
+                f"r2:{effective_prefix}" if effective_prefix else "r2:*",
+                [image.key for image in available_images],
+            )
+            queue_restarted = queue_restarted or restarted
+            selected = next(
+                image for image in available_images if image.key == selected_key
+            )
+            reservation_key = reservation_by_key[selected.key]
+            if not self.state.reserve_media([reservation_key], job_id):
+                break
+            available_images = [
+                image for image in available_images if image.key != selected.key
+            ]
+        else:
+            raise RuntimeError(
+                "Otro proceso reservo las ultimas imagenes de referencia disponibles."
+            )
         LOGGER.info(
             "Selected R2 story reference %r (configured_prefix=%r, effective_prefix=%r)",
             selected.key,
@@ -743,11 +801,12 @@ class VideoCreationService:
         )
         suffix = Path(selected.key).suffix.lower() or ".jpg"
         local_input = job_dir / "story_reference_input" / f"source{suffix}"
-        return (
-            self.r2_storage.download(selected.key, local_input),
-            f"r2:{selected.key}",
-            queue_restarted,
-        )
+        try:
+            downloaded = self.r2_storage.download(selected.key, local_input)
+        except Exception:
+            self.state.release_media([reservation_key], job_id)
+            raise
+        return downloaded, f"r2:{selected.key}", queue_restarted, reservation_key
 
     def _list_r2_keys_for_error(self, prefix: str) -> list[str]:
         try:
@@ -803,7 +862,7 @@ class VideoCreationService:
             )
 
         try:
-            job_dir = self.settings.outputs_dir / job_id
+            job_dir = self._job_output_dir(job_id, request.user_id)
             normalized = self._normalize_extra_image(media, job_dir)
             self.state.log_job(
                 self.state.build_job_record(
@@ -816,10 +875,12 @@ class VideoCreationService:
                     video_path=None,
                     script_path=str(normalized.local_path),
                     gender=request.gender.value,
+                    user_id=request.user_id,
+                    chat_id=request.chat_id,
                 )
             )
         except Exception:
-            self.state.release_media(media_ids)
+            self.state.release_media(media_ids, job_id)
             raise
 
         self._cleanup_old_outputs()
@@ -1361,6 +1422,11 @@ class VideoCreationService:
         timestamp = datetime.now().strftime("%Y%m%d-%H%M%S")
         return f"{timestamp}-{uuid4().hex[:8]}"
 
+    def _job_output_dir(self, job_id: str, user_id: int | None) -> Path:
+        if user_id is None:
+            return self.settings.outputs_dir / job_id
+        return self.settings.outputs_dir / "users" / str(user_id) / job_id
+
     def _cleanup_old_outputs(self) -> None:
         retention_days = self.settings.output_retention_days
         if retention_days <= 0:
@@ -1374,9 +1440,21 @@ class VideoCreationService:
         outputs_dir = self.settings.outputs_dir
         if not outputs_dir.exists():
             return
-        for child in outputs_dir.iterdir():
-            if not child.is_dir():
-                continue
+        candidates = [
+            child
+            for child in outputs_dir.iterdir()
+            if child.is_dir() and child.name != "users"
+        ]
+        users_dir = outputs_dir / "users"
+        if users_dir.is_dir():
+            candidates.extend(
+                job_dir
+                for user_dir in users_dir.iterdir()
+                if user_dir.is_dir()
+                for job_dir in user_dir.iterdir()
+                if job_dir.is_dir()
+            )
+        for child in candidates:
             try:
                 mtime = datetime.fromtimestamp(child.stat().st_mtime, tz=timezone.utc)
             except OSError:
