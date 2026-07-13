@@ -116,8 +116,10 @@ TYPE_3_TITLE_FONT_SIZE = 66
 TYPE_3_BODY_FONT_SIZE = 58
 TYPE_3_TOOL_VERTICAL_NUDGE_RATIO = 0.015
 TYPE_4_TARGET_SECONDS = 7.5
-TYPE_4_TITLE_STROKE_WIDTH = 4
+TYPE_4_TITLE_STROKE_WIDTH = 3
 TYPE_4_TEXT_STROKE_WIDTH = 3
+TYPE_4_TOOL_NAME_FAUX_BOLD_PIXELS = 2
+TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.25
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TEXT_CARD_FILL = (255, 255, 255, 246)
@@ -1300,7 +1302,9 @@ class VideoRenderer:
         height: int,
         language: Language,
     ) -> None:
-        font = self._load_font(size=_scale_y(60, height), bold=True)
+        # The reference style uses a lighter title than the tool names. Keep
+        # the black outline for contrast over video, but use the regular face.
+        font = self._load_font(size=_scale_y(60, height), bold=False)
         line_gap = _scale_y(4, height)
         first_line, second_line = TYPE_4_TITLE_LINES[self._type_4_language(language)]
         first_width, first_height = self._text_size(
@@ -1429,12 +1433,25 @@ class VideoRenderer:
             stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
             stroke_fill=(0, 0, 0),
         )
-        draw.text(
-            (_scale_x(name_x, width) + 1, _scale_y(name_y, height)),
-            name,
-            font=name_font,
-            fill=(255, 255, 255),
+        # Slightly fill the regular glyphs in both axes. This produces the
+        # medium weight from the reference without jumping to a heavy bold font.
+        faux_bold = max(
+            1,
+            _scale_x(TYPE_4_TOOL_NAME_FAUX_BOLD_PIXELS, width),
         )
+        base_x = _scale_x(name_x, width)
+        base_y = _scale_y(name_y, height)
+        for offset_x, offset_y in (
+            (faux_bold, 0),
+            (0, faux_bold),
+            (faux_bold, faux_bold),
+        ):
+            draw.text(
+                (base_x + offset_x, base_y + offset_y),
+                name,
+                font=name_font,
+                fill=(255, 255, 255),
+            )
 
     def _draw_centered_lines_in_box(
         self,
@@ -1704,7 +1721,7 @@ class VideoRenderer:
                 (
                     (
                         int(width * 0.08),
-                        int(height * 0.42),
+                        int(height * 0.46),
                         int(width * 0.92),
                         int(height * 0.94),
                     ),
@@ -1713,7 +1730,7 @@ class VideoRenderer:
                 (
                     (
                         int(width * 0.10),
-                        int(height * 0.28),
+                        int(height * 0.34),
                         int(width * 0.90),
                         int(height * 0.70),
                     ),
@@ -2141,7 +2158,15 @@ class VideoRenderer:
         slide: SlidePlan | None,
     ) -> tuple[float, ...]:
         if slide is not None and slide.role in TYPE_4_STORY_CAPTION_ROLES:
-            return (0.20, 0.24, 0.16, 0.28, 0.32)
+            return (
+                TYPE_4_STORY_CAPTION_PRIMARY_CENTER,
+                0.27,
+                0.23,
+                0.29,
+                0.21,
+                0.31,
+                0.19,
+            )
         if (
             slide is not None and slide.fixed_asset and slide.role == SlideRole.TIP3
         ):

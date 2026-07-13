@@ -35,8 +35,12 @@ from app.render import (
     TEXT_AVOID_CLEARANCE_MARGIN,
     TEXT_FACE_AVOID_WEIGHT,
     TEXT_FALLBACK_HEAD_AVOID_WEIGHT,
+    TEXT_HEAD_AVOID_WEIGHT,
     TYPE_1_HOOK_SIDE_MARGIN,
     TYPE_3_TITLE_FONT_SIZE,
+    TYPE_4_TITLE_STROKE_WIDTH,
+    TYPE_4_STORY_CAPTION_PRIMARY_CENTER,
+    TYPE_4_TOOL_NAME_FAUX_BOLD_PIXELS,
     VideoRenderer,
 )
 
@@ -822,7 +826,7 @@ def test_fixed_february_caption_sits_lower_but_above_screen():
     assert y > 200
 
 
-def test_type_4_story_caption_prefers_top_area():
+def test_type_4_story_caption_prefers_lower_part_of_reserved_top_area():
     renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
     slide = SlidePlan(
         index=1,
@@ -831,7 +835,8 @@ def test_type_4_story_caption_prefers_top_area():
         media=_candidate(Path("source.jpg")),
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.20
+    assert renderer._caption_preferred_centers(slide)[0] == 0.25
+    assert TYPE_4_STORY_CAPTION_PRIMARY_CENTER == 0.25
 
 
 def test_type_4_success_caption_also_uses_reserved_top_area():
@@ -843,7 +848,31 @@ def test_type_4_success_caption_also_uses_reserved_top_area():
         media=_candidate(Path("source.jpg")),
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.20
+    assert renderer._caption_preferred_centers(slide)[0] == 0.25
+
+
+def test_lower_story_caption_still_clears_detected_head_region():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    slide = SlidePlan(
+        index=2,
+        role=SlideRole.STORY_BUILDING_STORE,
+        text="Historia generada con IA",
+        media=_candidate(Path("source.jpg")),
+    )
+    head_region = (65, 220, 315, 500)
+    block_height = 80
+
+    y = renderer._safe_text_start_y(
+        Image.new("RGB", (360, 640), (220, 220, 220)),
+        block_width=310,
+        block_height=block_height,
+        preferred_centers=renderer._caption_preferred_centers(slide),
+        expect_person=True,
+        avoid_regions=[(head_region, TEXT_HEAD_AVOID_WEIGHT)],
+    )
+
+    clearance = max(1, int(round(TEXT_AVOID_CLEARANCE_MARGIN * 640 / 1920)))
+    assert y + block_height <= head_region[1] - clearance
 
 
 def test_story_dropradar_browser_tab_is_projected_inside_detected_screen():
@@ -1582,6 +1611,26 @@ def test_type_4_template_overlay_draws_fixed_labels_icons_and_text():
     assert label_opaque.mean() > 0.70
     assert label_region[..., :3][label_opaque].mean() > 210
     assert icon_region.mean() > 60
+
+
+def test_type_4_tool_template_uses_lighter_title_and_medium_weight_names(
+    monkeypatch,
+):
+    settings = replace(get_settings(), width=360, height=640)
+    renderer = VideoRenderer(settings)
+    captured_title_weights: list[bool] = []
+    original_load_font = renderer._load_font
+
+    def capture_font(*, size: int, bold: bool):
+        captured_title_weights.append(bold)
+        return original_load_font(size=size, bold=bold)
+
+    monkeypatch.setattr(renderer, "_load_font", capture_font)
+    renderer.build_type_4_template_overlay()
+
+    assert captured_title_weights[0] is False
+    assert TYPE_4_TITLE_STROKE_WIDTH == 3
+    assert TYPE_4_TOOL_NAME_FAUX_BOLD_PIXELS == 2
 
 
 def test_template_video_render_forces_output_without_audio(monkeypatch):
