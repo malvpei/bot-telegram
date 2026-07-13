@@ -299,6 +299,35 @@ def test_type_2_balanced_spanish_hook_stays_large(monkeypatch):
     assert abs(widths[0] - widths[1]) <= 40
 
 
+def test_type_2_hook_uses_thinner_regular_face_without_changing_layout(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    image = Image.new("RGB", (1080, 1920), (0, 0, 0))
+    regular_font_calls: list[tuple[int, bool]] = []
+    original_load_font = renderer._load_font
+
+    def capture_regular_font(*, size: int, bold: bool):
+        regular_font_calls.append((size, bold))
+        return original_load_font(size=size, bold=bold)
+
+    def reject_bold_overlay(*args, **kwargs):
+        raise AssertionError("Type 2 hook must not use the heavy overlay font")
+
+    monkeypatch.setattr(renderer, "_load_font", capture_regular_font)
+    monkeypatch.setattr(renderer, "_load_overlay_font", reject_bold_overlay)
+    monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 100)
+    monkeypatch.setattr(renderer, "_draw_lines", lambda *args, **kwargs: None)
+
+    renderer._draw_hook_text(
+        image,
+        "Errores que cuestan dinero\nal empezar en Dropshipping",
+        video_type=VideoType.TYPE_2,
+    )
+
+    assert regular_font_calls
+    assert all(bold is False for _size, bold in regular_font_calls)
+
+
 def test_type_1_two_line_hook_reflows_to_larger_balanced_text(monkeypatch):
     settings = replace(get_settings(), width=1080, height=1920)
     renderer = VideoRenderer(settings)

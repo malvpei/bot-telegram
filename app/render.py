@@ -1762,6 +1762,11 @@ class VideoRenderer:
         max_height = int(height * 0.40)
         base_size = self._scaled_text_size(HOOK_BASE_FONT_SIZE, minimum=38)
         min_size = self._scaled_text_size(HOOK_MIN_FONT_SIZE, minimum=20)
+        font_loader = (
+            self._load_type_2_hook_font
+            if video_type == VideoType.TYPE_2
+            else self._load_overlay_font
+        )
         manual_lines = [line.strip() for line in text.splitlines() if line.strip()]
         if len(manual_lines) > 2 or (
             len(manual_lines) > 1 and video_type != VideoType.TYPE_1
@@ -1776,7 +1781,7 @@ class VideoRenderer:
                 min_size=min_size,
                 bold=True,
                 stroke_width=stroke_width,
-                font_loader=self._load_overlay_font,
+                font_loader=font_loader,
             )
         else:
             fitted_text = " ".join(manual_lines) if manual_lines else text
@@ -1788,7 +1793,7 @@ class VideoRenderer:
                 base_size=base_size,
                 min_size=min_size,
                 stroke_width=stroke_width,
-                font_loader=self._load_overlay_font,
+                font_loader=font_loader,
             )
         text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
         block_width = min(
@@ -3403,6 +3408,17 @@ class VideoRenderer:
         font = self._load_overlay_font_uncached(size, bold)
         self._remember_font(cache_key, font)
         return font
+
+    def _load_type_2_hook_font(
+        self,
+        size: int,
+        _bold: bool,
+    ) -> ImageFont.ImageFont:
+        # Type 2 keeps the same fitting box and maximum size, but uses the
+        # regular face so the glyphs have less visual fill than other hooks.
+        # The fitter can choose a slightly larger regular font when needed,
+        # preserving the occupied width and line distribution.
+        return self._load_font(size=size, bold=False)
 
     def _load_overlay_font_uncached(
         self,
