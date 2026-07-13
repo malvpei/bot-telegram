@@ -21,7 +21,7 @@ def test_first_batch_matches_requested_six_video_layout():
         BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
-        BatchItemKind.TOOLS,
+        BatchItemKind.AI,
         BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
     ]
@@ -29,7 +29,7 @@ def test_first_batch_matches_requested_six_video_layout():
         VideoType.TYPE_1,
         VideoType.TYPE_2,
         VideoType.TYPE_3,
-        None,
+        VideoType.TYPE_4,
         VideoType.TYPE_1,
         VideoType.TYPE_2,
     ]
@@ -44,21 +44,23 @@ def test_first_batch_matches_requested_six_video_layout():
     assert plan[-1].gender == VideoGender.FEMALE
 
 
-def test_spanish_male_lane_runs_tools_after_each_cycle_then_ai():
+def test_spanish_male_lane_runs_ai_after_each_type_cycle_then_tools():
     first_lane = [build_batch_plan(1, phase)[0] for phase in range(9)]
 
     assert [item.video_type.value if item.video_type else "tools" for item in first_lane] == [
         "1",
         "2",
         "3",
-        "tools",
+        "4",
         "1",
         "2",
         "3",
-        "tools",
         "4",
+        "tools",
     ]
-    assert first_lane[-1].kind == BatchItemKind.AI
+    assert first_lane[3].kind == BatchItemKind.AI
+    assert first_lane[7].kind == BatchItemKind.AI
+    assert first_lane[-1].kind == BatchItemKind.TOOLS
 
 
 def test_second_batch_advances_each_lane_without_early_ai():

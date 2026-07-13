@@ -200,13 +200,13 @@ El primer lote de seis es:
 1. tipo 1 en espanol (hombre)
 2. tipo 2 en espanol (hombre)
 3. tipo 3 en ingles (hombre)
-4. video de herramientas en espanol
+4. carrusel IA en espanol (hombre)
 5. tipo 1 en ingles (hombre)
 6. tipo 2 en espanol (mujer)
 
 Cada posicion avanza por una secuencia adecuada a su idioma y genero. Los
 hombres en espanol rotan por
-`1 -> 2 -> 3 -> herramientas -> 1 -> 2 -> 3 -> herramientas -> IA`; los hombres en ingles
+`1 -> 2 -> 3 -> IA -> 1 -> 2 -> 3 -> IA -> herramientas`; los hombres en ingles
 mantienen `1 -> 2 -> 3 -> 1 -> 2 -> 3 -> herramientas`, sin IA; y las mujeres
 alternan exclusivamente `1 -> 2`. La historia IA usa una referencia de R2 y
 siempre se genera en espanol. El paso actual, los horarios y el ultimo
@@ -229,6 +229,9 @@ desactiva los horarios, `/batch 6` crea el siguiente lote ahora y
 por defecto; ajusta `BATCH_PREPARATION_LEAD_MINUTES` si el proveedor IA tarda
 mas o menos en tu despliegue. Si el bot arranca despues de la hora de inicio
 pero aun esta dentro de esa ventana, recupera automaticamente el lote pendiente.
+
+Los carruseles se entregan como un unico album de Telegram con todas sus
+imagenes, tanto al ejecutar `/create` manualmente como en los lotes programados.
 
 ### Web para subir imagenes a R2
 

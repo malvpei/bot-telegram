@@ -21,12 +21,12 @@ SPANISH_MALE_ROTATION: tuple[str, ...] = (
     "1",
     "2",
     "3",
-    TOOLS_TOKEN,
+    AI_TOKEN,
     "1",
     "2",
     "3",
-    TOOLS_TOKEN,
     AI_TOKEN,
+    TOOLS_TOKEN,
 )
 ENGLISH_MALE_ROTATION: tuple[str, ...] = (
     "1",

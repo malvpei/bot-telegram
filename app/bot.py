@@ -306,7 +306,7 @@ async def batch_reset_command(
     store.reset_batch_rotation()
     await update.effective_message.reply_text(
         "Rotacion reiniciada. El siguiente lote volvera al orden inicial: "
-        "1 ES, 2 ES, 3 EN, herramientas ES, 1 EN y mujer 2 ES. "
+        "1 ES, 2 ES, 3 EN, IA ES, 1 EN y mujer 2 ES. "
         "La IA solo aparecera en espanol y mujer alternara unicamente 1/2."
     )
 
@@ -1927,29 +1927,26 @@ async def _send_slides_text_then_image(
     separate_slide_text: bool = False,
 ) -> None:
     slides = list(slides)
+    paths = []
 
-    if video_type == VideoType.TYPE_4 and not separate_slide_text:
-        paths = [
-            slide.media.local_path
-            for slide in slides
-            if slide.media.local_path.exists()
-        ]
-        if paths:
-            await _send_photo_album(context, chat_id, paths)
-        return
-
-    # Slide copy is embedded in generated images except the Type 3 hook,
-    # which is sent as Telegram text so the hook image stays clean.
+    # Keep any deliberately separate copy before the album. Slide copy is
+    # otherwise embedded in the rendered images, except for the Type 3 hook,
+    # which stays clean and is delivered as Telegram text.
     for slide in slides:
         path = slide.media.local_path
         if not path.exists():
             continue
+        paths.append(path)
         if separate_slide_text and slide.text:
             for message in _separate_slide_text_messages(slide, video_type):
                 await _send_message(context, chat_id, message)
         elif video_type == VideoType.TYPE_3 and slide.role == SlideRole.HOOK and slide.text:
             await _send_message(context, chat_id, slide.text)
-        await _send_photo(context, chat_id, path)
+
+    # Every carousel is delivered as one Telegram media group. The helper
+    # falls back to send_photo when only one valid slide exists.
+    if paths:
+        await _send_photo_album(context, chat_id, paths)
 
 
 def _separate_slide_text_messages(
