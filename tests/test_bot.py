@@ -454,7 +454,7 @@ def test_scheduled_ai_batch_needs_no_instagram_accounts():
                 chat_id=123,
                 user_id=456,
                 item=item,
-                count=6,
+                count=5,
                 accounts=[],
             )
         )
@@ -526,7 +526,7 @@ def test_scheduled_regular_batch_sends_carousel_as_one_album():
                 chat_id=123,
                 user_id=456,
                 item=item,
-                count=6,
+                count=5,
                 accounts=["regular"],
             )
         )

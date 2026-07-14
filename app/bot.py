@@ -271,7 +271,7 @@ async def schedule_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -
         _load_batch_timezone(settings.batch_timezone)
     except ValueError as error:
         await message.reply_text(
-            f"{error}\n\nUso: /schedule 6 08:00 17:00\n"
+            f"{error}\n\nUso: /schedule 5 08:00 17:00\n"
             "Para apagarla: /schedule off"
         )
         return
@@ -310,8 +310,8 @@ async def batch_reset_command(
     store.reset_batch_rotation()
     await update.effective_message.reply_text(
         "Rotacion reiniciada. El siguiente lote volvera al orden inicial: "
-        "1 ES, 2 ES, 3 EN, IA ES, 1 EN y mujer 2 ES. "
-        "La IA solo aparecera en espanol y mujer alternara unicamente 1/2."
+        "1 ES, 2 ES, 3 EN, IA ES y 1 EN. "
+        "La IA solo aparecera en espanol; el video de mujer queda fuera del lote."
     )
 
 
@@ -661,19 +661,25 @@ def _migrate_legacy_batch_schedule(store: StateStore) -> dict[str, Any]:
         schema_version = int(schedule.get("schema_version", 0))
     except (TypeError, ValueError):
         schema_version = 0
-    legacy_times = [str(value) for value in schedule.get("times") or []]
-    if schema_version >= BATCH_SCHEDULE_SCHEMA_VERSION or legacy_times != [
-        "08:00",
-        "18:00",
-    ]:
+    if schema_version >= BATCH_SCHEDULE_SCHEMA_VERSION:
         return schedule
-    LOGGER.info("Migrating legacy batch schedule from 08:00/18:00 to 08:00/17:00")
+
+    times = [str(value) for value in schedule.get("times") or []]
+    if schema_version < 2 and times == ["08:00", "18:00"]:
+        LOGGER.info("Migrating legacy batch schedule from 08:00/18:00 to 08:00/17:00")
+        times = list(DEFAULT_BATCH_TIMES)
+
+    count = int(schedule.get("count", DEFAULT_BATCH_SIZE))
+    if schema_version < 3 and count == 6:
+        LOGGER.info("Migrating scheduled batch size from 6 videos to 5")
+        count = DEFAULT_BATCH_SIZE
+
     return store.write_batch_schedule(
         enabled=True,
         chat_id=int(schedule["chat_id"]),
         user_id=int(schedule["user_id"]),
-        count=int(schedule.get("count", DEFAULT_BATCH_SIZE)),
-        times=list(DEFAULT_BATCH_TIMES),
+        count=count,
+        times=times,
         timezone_name=str(
             schedule.get("timezone") or get_settings().batch_timezone
         ),
@@ -795,7 +801,7 @@ def _format_batch_schedule_status(store: StateStore) -> str:
         f"Preparacion: {get_settings().batch_preparation_lead_minutes} minutos antes\n"
         f"Siguiente rotacion: {phase + 1}/{BATCH_ROTATION_CYCLE_LENGTH}\n"
         f"Siguiente lote: {plan_line}\n{last_line}\n\n"
-        "Configurar: /schedule 6 08:00 17:00\n"
+        "Configurar: /schedule 5 08:00 17:00\n"
         "Desactivar: /schedule off\n"
         "Crear ahora: /batch"
     )
@@ -828,8 +834,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
         "/story_carousel - crear una historia IA desde una foto enviada al bot\n"
-        "/batch [cantidad] - crear ahora un lote rotativo (6 por defecto)\n"
-        "/schedule 6 08:00 17:00 - programar lotes diarios\n"
+        "/batch [cantidad] - crear ahora un lote rotativo (5 por defecto)\n"
+        "/schedule 5 08:00 17:00 - programar lotes diarios\n"
         "/schedule off - desactivar la programacion\n"
         "/create — elegir tipo e idioma y generar el video\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
@@ -948,9 +954,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Usa /template_video [prefijo-r2] para coger un MP4 de R2 y "
         "aplicarle la plantilla fija de herramientas. El MP4 final sale sin audio.\n\n"
         "Usa /batch para crear el lote rotativo ahora. Por ejemplo, "
-        "/schedule 6 08:00 17:00 prepara seis piezas todos los dias con "
+        "/schedule 5 08:00 17:00 prepara cinco piezas todos los dias con "
         "antelacion para esas horas (Europe/Madrid por defecto). La IA rota "
-        "solo en espanol; ingles no usa IA y mujer alterna solo tipos 1 y 2.\n\n"
+        "solo en espanol; ingles no usa IA y el video de mujer queda fuera del lote.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
     )

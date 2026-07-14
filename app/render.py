@@ -52,6 +52,7 @@ TIKTOK_OVERLAY_FONT_CANDIDATES = (
 )
 HOOK_TEXT_STROKE_FILL = (12, 12, 12)
 HOOK_TEXT_STROKE_WIDTH = 4
+TYPE_2_HOOK_INNER_STROKE_WIDTH = 1
 FIXED_SCREEN_TEXT_MARGIN = 78
 FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 30
 FEBRUARY_TITLE_MIN_BOX_WIDTH = 380
@@ -117,8 +118,8 @@ TYPE_3_BODY_FONT_SIZE = 58
 TYPE_3_TOOL_VERTICAL_NUDGE_RATIO = 0.015
 TYPE_4_TARGET_SECONDS = 7.5
 TYPE_4_TITLE_STROKE_WIDTH = 3
-TYPE_4_TEXT_STROKE_WIDTH = 3
-TYPE_4_TOOL_NAME_FAUX_BOLD_PIXELS = 2
+TYPE_4_TEXT_STROKE_WIDTH = 6
+TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH = 1
 TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.25
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
@@ -131,12 +132,13 @@ TEXT_BODY_AVOID_WEIGHT = 2.5
 TEXT_FALLBACK_HEAD_AVOID_WEIGHT = 150.0
 TEXT_FALLBACK_BODY_AVOID_WEIGHT = 3.5
 TEXT_CARD_EDGE_MARGIN = 84
-TEXT_CARD_PADDING_X = 46
-TEXT_CARD_PADDING_Y = 16
-TEXT_CARD_TITLE_PADDING_Y = 22
+TEXT_CARD_PADDING_X = 30
+TEXT_CARD_PADDING_Y = 10
+TEXT_CARD_TITLE_PADDING_Y = 13
 TEXT_CARD_LINE_OVERLAP = 12
 TEXT_CARD_GROUP_GAP = 20
 TEXT_CARD_FAUX_BOLD_PIXELS = 1
+TEXT_CARD_CORNER_RADIUS = 18
 TEXT_AVOID_CLEARANCE_MARGIN = 58
 TEXT_DETECTION_MAX_DIMENSION = 720
 TEXT_OVERLAY_CACHE_MAX_ITEMS = 8
@@ -1416,6 +1418,10 @@ class VideoRenderer:
                 tool_key,
             )
 
+        name_stroke_width = max(
+            2,
+            _scale_x(TYPE_4_TEXT_STROKE_WIDTH, width),
+        )
         name_font = self._fit_single_line_text(
             name,
             draw,
@@ -1423,35 +1429,31 @@ class VideoRenderer:
             base_size=_scale_y(name_size, height),
             min_size=_scale_y(32, height),
             bold=False,
-            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_width=name_stroke_width,
         )
         draw.text(
             (_scale_x(name_x, width), _scale_y(name_y, height)),
             name,
             font=name_font,
             fill=(255, 255, 255),
-            stroke_width=TYPE_4_TEXT_STROKE_WIDTH,
+            stroke_width=name_stroke_width,
             stroke_fill=(0, 0, 0),
         )
-        # Slightly fill the regular glyphs in both axes. This produces the
-        # medium weight from the reference without jumping to a heavy bold font.
-        faux_bold = max(
-            1,
-            _scale_x(TYPE_4_TOOL_NAME_FAUX_BOLD_PIXELS, width),
-        )
+        # Add a small, symmetric white inner stroke. It keeps the regular face
+        # at a medium weight while leaving a much clearer black outer border.
         base_x = _scale_x(name_x, width)
         base_y = _scale_y(name_y, height)
-        for offset_x, offset_y in (
-            (faux_bold, 0),
-            (0, faux_bold),
-            (faux_bold, faux_bold),
-        ):
-            draw.text(
-                (base_x + offset_x, base_y + offset_y),
-                name,
-                font=name_font,
-                fill=(255, 255, 255),
-            )
+        draw.text(
+            (base_x, base_y),
+            name,
+            font=name_font,
+            fill=(255, 255, 255),
+            stroke_width=max(
+                1,
+                _scale_x(TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH, width),
+            ),
+            stroke_fill=(255, 255, 255),
+        )
 
     def _draw_centered_lines_in_box(
         self,
@@ -1823,6 +1825,11 @@ class VideoRenderer:
             fill=(255, 255, 255),
             stroke_width=stroke_width,
             stroke_fill=HOOK_TEXT_STROKE_FILL,
+            inner_stroke_width=(
+                max(1, _scale_x(TYPE_2_HOOK_INNER_STROKE_WIDTH, width))
+                if video_type == VideoType.TYPE_2
+                else 0
+            ),
         )
 
     def _draw_hook_paragraph_text(
@@ -2272,7 +2279,7 @@ class VideoRenderer:
         min_box_width: int = 0,
     ) -> int:
         y = start_y
-        radius = max(6, _scale_x(12, canvas_width))
+        radius = max(6, _scale_x(TEXT_CARD_CORNER_RADIUS, canvas_width))
         for line in lines:
             bbox = draw.textbbox((0, 0), line or "A", font=font, stroke_width=0)
             line_width = bbox[2] - bbox[0]
@@ -2372,10 +2379,11 @@ class VideoRenderer:
         mask_height = max(box[3] for box, _text_pos, _line in boxes) + _scale_x(8, canvas_width)
         mask = Image.new("L", (canvas_width, mask_height), 0)
         mask_draw = ImageDraw.Draw(mask)
+        radius = max(6, _scale_x(TEXT_CARD_CORNER_RADIUS, canvas_width))
         for box, _text_pos, _line in boxes:
-            mask_draw.rectangle(box, fill=255)
+            mask_draw.rounded_rectangle(box, radius=radius, fill=255)
 
-        smooth_radius = max(2, _scale_x(3, canvas_width))
+        smooth_radius = max(1, _scale_x(2, canvas_width))
         mask = mask.filter(ImageFilter.GaussianBlur(smooth_radius))
         mask = mask.point(lambda value: 255 if value >= 128 else 0)
         draw.bitmap((0, 0), mask, fill=TEXT_CARD_FILL)
@@ -3138,6 +3146,7 @@ class VideoRenderer:
         stroke_width: int,
         line_gap: int = 16,
         stroke_fill: tuple[int, int, int] = (0, 0, 0),
+        inner_stroke_width: int = 0,
     ) -> None:
         y = start_y
         for line in lines:
@@ -3153,6 +3162,15 @@ class VideoRenderer:
                 stroke_width=stroke_width,
                 stroke_fill=stroke_fill,
             )
+            if inner_stroke_width > 0:
+                draw.text(
+                    (x, y),
+                    line,
+                    font=font,
+                    fill=fill,
+                    stroke_width=inner_stroke_width,
+                    stroke_fill=fill,
+                )
             y += line_height + line_gap
 
     def _wrap_text(

@@ -193,36 +193,35 @@ router visual de fal.ai con la misma `FAL_KEY`.
 
 `/batch [cantidad]` mete varias creaciones en una cola y mantiene el bot
 disponible mientras se procesan. Se admiten entre 1 y 24 piezas; si se piden
-mas de seis, se repite el perfil de las seis posiciones.
+mas de cinco, se repite el perfil de las cinco posiciones masculinas.
 
-El primer lote de seis es:
+El primer lote de cinco es:
 
 1. tipo 1 en espanol (hombre)
 2. tipo 2 en espanol (hombre)
 3. tipo 3 en ingles (hombre)
 4. carrusel IA en espanol (hombre)
 5. tipo 1 en ingles (hombre)
-6. tipo 2 en espanol (mujer)
 
 Cada posicion avanza por una secuencia adecuada a su idioma y genero. Los
 hombres en espanol rotan por
 `1 -> 2 -> 3 -> IA -> 1 -> 2 -> 3 -> IA -> herramientas`; los hombres en ingles
-mantienen `1 -> 2 -> 3 -> 1 -> 2 -> 3 -> herramientas`, sin IA; y las mujeres
-alternan exclusivamente `1 -> 2`. La historia IA usa una referencia de R2 y
-siempre se genera en espanol. El paso actual, los horarios y el ultimo
+mantienen `1 -> 2 -> 3 -> 1 -> 2 -> 3 -> herramientas`, sin IA. El carril de
+mujeres queda temporalmente fuera de los lotes. La historia IA usa una referencia
+de R2 y siempre se genera en espanol. El paso actual, los horarios y el ultimo
 resultado se guardan dentro de `DATA_DIR/state`, por lo que sobreviven a los
 reinicios y redeploys. Solo se procesa un lote a la vez para no reutilizar
 fotos ni compartir a la vez la sesion de Instagram.
 
-Ejemplo para tener seis piezas preparadas todos los dias para las 08:00 y las
+Ejemplo para tener cinco piezas preparadas todos los dias para las 08:00 y las
 17:00:
 
 ```text
-/schedule 6 08:00 17:00
+/schedule 5 08:00 17:00
 ```
 
 Comandos relacionados: `/schedule` muestra el estado, `/schedule off`
-desactiva los horarios, `/batch 6` crea el siguiente lote ahora y
+desactiva los horarios, `/batch 5` crea el siguiente lote ahora y
 `/batch_reset` reinicia la rotacion. La zona horaria predeterminada es
 `Europe/Madrid`, incluido el cambio de hora de verano; se puede cambiar con
 `BATCH_TIMEZONE`. La preparacion empieza 120 minutos antes de cada objetivo

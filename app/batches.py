@@ -8,7 +8,7 @@ from math import lcm
 from app.models import Language, VideoGender, VideoType
 
 
-DEFAULT_BATCH_SIZE = 6
+DEFAULT_BATCH_SIZE = 5
 MAX_BATCH_SIZE = 24
 MAX_SCHEDULE_TIMES = 12
 TOOLS_TOKEN = "tools"
@@ -16,7 +16,8 @@ AI_TOKEN = "ai"
 DEFAULT_BATCH_TIMES: tuple[str, str] = ("08:00", "17:00")
 
 # Solo el carril masculino en espanol incluye la historia generada por IA.
-# Ingles conserva la rotacion anterior y mujer alterna estrictamente 1/2.
+# Ingles conserva su rotacion sin IA. El carril femenino queda fuera de los
+# lotes temporalmente, aunque se mantiene su rotacion para compatibilidad.
 SPANISH_MALE_ROTATION: tuple[str, ...] = (
     "1",
     "2",
@@ -85,7 +86,6 @@ DEFAULT_LANES: tuple[BatchLane, ...] = (
     BatchLane(Language.EN, VideoGender.MALE, 2, ENGLISH_MALE_ROTATION),
     BatchLane(Language.ES, VideoGender.MALE, 3, SPANISH_MALE_ROTATION),
     BatchLane(Language.EN, VideoGender.MALE, 0, ENGLISH_MALE_ROTATION),
-    BatchLane(Language.ES, VideoGender.FEMALE, 1, FEMALE_ROTATION),
 )
 BATCH_ROTATION_CYCLE_LENGTH = lcm(
     *(len(lane.rotation) for lane in DEFAULT_LANES)
@@ -164,7 +164,7 @@ def parse_schedule_values(
             f"La cantidad debe estar entre 1 y {MAX_BATCH_SIZE} videos."
         )
     if not values:
-        raise ValueError("Faltan las horas. Ejemplo: /schedule 6 08:00 17:00")
+        raise ValueError("Faltan las horas. Ejemplo: /schedule 5 08:00 17:00")
 
     normalized: list[str] = []
     for raw_value in values:

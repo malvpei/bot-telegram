@@ -267,7 +267,7 @@ def test_batch_schedule_and_rotation_survive_new_store_instance(state_dir):
         enabled=True,
         chat_id=100,
         user_id=10,
-        count=6,
+        count=5,
         times=["08:00", "17:00"],
         timezone_name="Europe/Madrid",
     )
@@ -278,7 +278,7 @@ def test_batch_schedule_and_rotation_survive_new_store_instance(state_dir):
     schedule = restored.read_batch_schedule()
     assert schedule["enabled"] is True
     assert schedule["chat_id"] == 100
-    assert schedule["count"] == 6
+    assert schedule["count"] == 5
     assert schedule["times"] == ["08:00", "17:00"]
     assert schedule["schema_version"] == BATCH_SCHEDULE_SCHEMA_VERSION
     assert restored.get_batch_rotation_phase() == 1

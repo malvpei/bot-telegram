@@ -14,15 +14,14 @@ from app.batches import (
 from app.models import Language, VideoGender, VideoType
 
 
-def test_first_batch_matches_requested_six_video_layout():
-    plan = build_batch_plan(6, phase=0)
+def test_first_batch_has_five_videos_and_no_female_lane():
+    plan = build_batch_plan(5, phase=0)
 
     assert [item.kind for item in plan] == [
         BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
         BatchItemKind.AI,
-        BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
     ]
     assert [item.video_type for item in plan] == [
@@ -31,7 +30,6 @@ def test_first_batch_matches_requested_six_video_layout():
         VideoType.TYPE_3,
         VideoType.TYPE_4,
         VideoType.TYPE_1,
-        VideoType.TYPE_2,
     ]
     assert [item.language for item in plan] == [
         Language.ES,
@@ -39,9 +37,8 @@ def test_first_batch_matches_requested_six_video_layout():
         Language.EN,
         Language.ES,
         Language.EN,
-        Language.ES,
     ]
-    assert plan[-1].gender == VideoGender.FEMALE
+    assert all(item.gender == VideoGender.MALE for item in plan)
 
 
 def test_spanish_male_lane_runs_ai_after_each_type_cycle_then_tools():
@@ -64,7 +61,7 @@ def test_spanish_male_lane_runs_ai_after_each_type_cycle_then_tools():
 
 
 def test_second_batch_advances_each_lane_without_early_ai():
-    plan = build_batch_plan(6, phase=1)
+    plan = build_batch_plan(5, phase=1)
 
     assert [item.video_type.value if item.video_type else "tools" for item in plan] == [
         "2",
@@ -72,21 +69,20 @@ def test_second_batch_advances_each_lane_without_early_ai():
         "1",
         "1",
         "2",
-        "1",
     ]
     assert plan[3].kind == BatchItemKind.GENERATED
     assert plan[3].video_type == VideoType.TYPE_1
-    assert plan[-1].gender == VideoGender.FEMALE
+    assert all(item.gender == VideoGender.MALE for item in plan)
 
 
-def test_batch_size_can_repeat_the_six_lane_profile():
-    plan = build_batch_plan(8, phase=0)
+def test_batch_size_can_repeat_the_five_lane_profile():
+    plan = build_batch_plan(7, phase=0)
 
-    assert len(plan) == 8
-    assert plan[6].language == plan[0].language
-    assert plan[6].video_type == plan[0].video_type
-    assert plan[7].language == plan[1].language
-    assert plan[7].video_type == plan[1].video_type
+    assert len(plan) == 7
+    assert plan[5].language == plan[0].language
+    assert plan[5].video_type == plan[0].video_type
+    assert plan[6].language == plan[1].language
+    assert plan[6].video_type == plan[1].video_type
 
 
 def test_legacy_batch_lane_constructor_and_rotation_alias_stay_compatible():
@@ -96,17 +92,13 @@ def test_legacy_batch_lane_constructor_and_rotation_alias_stay_compatible():
     assert ROTATION == ("1", "2", "3", "1", "2", "3", "tools")
 
 
-def test_ai_never_enters_english_or_women_and_women_only_alternate_1_2():
-    assert BATCH_ROTATION_CYCLE_LENGTH == 126
-    female_types = []
+def test_ai_never_enters_english_and_no_women_enter_batches():
+    assert BATCH_ROTATION_CYCLE_LENGTH == 63
     ai_items = []
     for phase in range(BATCH_ROTATION_CYCLE_LENGTH):
-        plan = build_batch_plan(6, phase=phase)
-        female = plan[-1]
-        female_types.append(female.video_type)
-        assert female.kind == BatchItemKind.GENERATED
-        assert female.video_type in {VideoType.TYPE_1, VideoType.TYPE_2}
+        plan = build_batch_plan(5, phase=phase)
         for item in plan:
+            assert item.gender == VideoGender.MALE
             if item.language == Language.EN:
                 assert item.kind != BatchItemKind.AI
                 assert item.video_type != VideoType.TYPE_4
@@ -117,17 +109,9 @@ def test_ai_never_enters_english_or_women_and_women_only_alternate_1_2():
                 assert item.video_type == VideoType.TYPE_4
 
     assert ai_items
-    assert female_types[:6] == [
-        VideoType.TYPE_2,
-        VideoType.TYPE_1,
-        VideoType.TYPE_2,
-        VideoType.TYPE_1,
-        VideoType.TYPE_2,
-        VideoType.TYPE_1,
-    ]
-    assert [item.short_label for item in build_batch_plan(6, 0)] == [
+    assert [item.short_label for item in build_batch_plan(5, 0)] == [
         item.short_label
-        for item in build_batch_plan(6, BATCH_ROTATION_CYCLE_LENGTH)
+        for item in build_batch_plan(5, BATCH_ROTATION_CYCLE_LENGTH)
     ]
 
 
@@ -138,10 +122,10 @@ def test_schedule_parser_accepts_count_deduplicates_and_sorts_times():
     assert times == ["08:00", "17:00"]
 
 
-def test_schedule_parser_uses_six_as_default_count():
+def test_schedule_parser_uses_five_as_default_count():
     count, times = parse_schedule_values(["08:00", "17:00"])
 
-    assert count == 6
+    assert count == 5
     assert times == ["08:00", "17:00"]
 
 

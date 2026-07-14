@@ -32,7 +32,7 @@ def test_saved_daily_schedule_is_registered_with_madrid_timezone(monkeypatch):
             enabled=True,
             chat_id=100,
             user_id=10,
-            count=6,
+            count=5,
             times=["08:00", "17:00"],
             timezone_name="Europe/Madrid",
         )
@@ -45,7 +45,7 @@ def test_saved_daily_schedule_is_registered_with_madrid_timezone(monkeypatch):
             f"{BATCH_JOB_NAME_PREFIX}08:00",
             f"{BATCH_JOB_NAME_PREFIX}17:00",
         ]
-        assert all(job.data["count"] == 6 for job in jobs)
+        assert all(job.data["count"] == 5 for job in jobs)
         assert [job.data["preparation_time"] for job in jobs] == [
             "06:00",
             "15:00",
@@ -94,6 +94,7 @@ def test_legacy_08_18_schedule_is_migrated_once_to_08_17(monkeypatch):
 
         schedule = StateStore(state_dir).read_batch_schedule()
         assert schedule["times"] == ["08:00", "17:00"]
+        assert schedule["count"] == 5
         assert schedule["schema_version"] == BATCH_SCHEDULE_SCHEMA_VERSION
         assert [
             job.name
@@ -126,7 +127,7 @@ def test_startup_inside_preparation_window_queues_the_missed_batch(monkeypatch):
             enabled=True,
             chat_id=100,
             user_id=10,
-            count=6,
+            count=5,
             times=["08:00", "17:00"],
             timezone_name="Europe/Madrid",
         )
@@ -166,7 +167,7 @@ def test_startup_does_not_repeat_an_already_handled_schedule_slot(monkeypatch):
             enabled=True,
             chat_id=100,
             user_id=10,
-            count=6,
+            count=5,
             times=["08:00", "17:00"],
             timezone_name="Europe/Madrid",
         )
@@ -223,7 +224,7 @@ def test_startup_queues_every_missed_slot_when_windows_overlap(monkeypatch):
             enabled=True,
             chat_id=100,
             user_id=10,
-            count=6,
+            count=5,
             times=["08:00", "09:00"],
             timezone_name="Europe/Madrid",
         )

@@ -32,15 +32,21 @@ from app.render import (
     HOOK_TEXT_STROKE_WIDTH,
     SAFE_TEXT_BOTTOM_MARGIN,
     SAFE_TEXT_TOP_MARGIN,
+    TEXT_CARD_CORNER_RADIUS,
+    TEXT_CARD_PADDING_X,
+    TEXT_CARD_PADDING_Y,
+    TEXT_CARD_TITLE_PADDING_Y,
     TEXT_AVOID_CLEARANCE_MARGIN,
     TEXT_FACE_AVOID_WEIGHT,
     TEXT_FALLBACK_HEAD_AVOID_WEIGHT,
     TEXT_HEAD_AVOID_WEIGHT,
     TYPE_1_HOOK_SIDE_MARGIN,
+    TYPE_2_HOOK_INNER_STROKE_WIDTH,
     TYPE_3_TITLE_FONT_SIZE,
     TYPE_4_TITLE_STROKE_WIDTH,
     TYPE_4_STORY_CAPTION_PRIMARY_CENTER,
-    TYPE_4_TOOL_NAME_FAUX_BOLD_PIXELS,
+    TYPE_4_TEXT_STROKE_WIDTH,
+    TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH,
     VideoRenderer,
 )
 
@@ -249,6 +255,7 @@ def test_hook_text_manual_lines_fit_inside_side_margins(monkeypatch):
         captured["lines"] = list(lines)
         captured["font"] = font
         captured["stroke_width"] = kwargs["stroke_width"]
+        captured["inner_stroke_width"] = kwargs["inner_stroke_width"]
 
     monkeypatch.setattr(renderer, "_draw_lines", capture_lines)
 
@@ -281,6 +288,7 @@ def test_type_2_balanced_spanish_hook_stays_large(monkeypatch):
         captured["lines"] = list(lines)
         captured["font"] = font
         captured["stroke_width"] = kwargs["stroke_width"]
+        captured["inner_stroke_width"] = kwargs["inner_stroke_width"]
 
     monkeypatch.setattr(renderer, "_draw_lines", capture_lines)
 
@@ -297,6 +305,7 @@ def test_type_2_balanced_spanish_hook_stays_large(monkeypatch):
     assert captured["lines"] == text.splitlines()
     assert getattr(font, "size", 0) >= 68
     assert abs(widths[0] - widths[1]) <= 40
+    assert captured["inner_stroke_width"] == TYPE_2_HOOK_INNER_STROKE_WIDTH
 
 
 def test_type_2_hook_uses_thinner_regular_face_without_changing_layout(monkeypatch):
@@ -711,6 +720,13 @@ def test_connected_caption_background_keeps_stepped_line_widths(monkeypatch):
 
     widths = [box[0][2] - box[0][0] for box in captured["boxes"]]
     assert len(set(widths)) == 2
+
+
+def test_caption_cards_use_tighter_padding_and_rounder_tiktok_corners():
+    assert TEXT_CARD_PADDING_X == 30
+    assert TEXT_CARD_PADDING_Y == 10
+    assert TEXT_CARD_TITLE_PADDING_Y == 13
+    assert TEXT_CARD_CORNER_RADIUS == 18
 
 
 def test_type_1_title_is_only_slightly_larger_than_body():
@@ -1659,7 +1675,8 @@ def test_type_4_tool_template_uses_lighter_title_and_medium_weight_names(
 
     assert captured_title_weights[0] is False
     assert TYPE_4_TITLE_STROKE_WIDTH == 3
-    assert TYPE_4_TOOL_NAME_FAUX_BOLD_PIXELS == 2
+    assert TYPE_4_TEXT_STROKE_WIDTH == 6
+    assert TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH == 1
 
 
 def test_template_video_render_forces_output_without_audio(monkeypatch):
