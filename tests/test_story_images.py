@@ -12,6 +12,7 @@ from PIL import Image, ImageDraw
 
 from app.config import get_settings
 from app.story_images import (
+    STORY_ENVIRONMENT_VARIANTS,
     STORY_SCENES,
     StoryCarouselImageGenerator,
     StoryImageReview,
@@ -538,6 +539,8 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
         assert "Do not create panels" in prompt
         assert "no horizontal separators" in prompt
         assert "Do not add any readable text" in prompt
+        assert "Keep the upper 36 percent calm" in prompt
+        assert "IMMUTABLE STORY CORE" in prompt
         assert "Dropradar" not in prompt
     assert "fast-food restaurant kitchen" in prompts[STORY_SCENES[0].role]
     assert "No luxury shirt" in prompts[STORY_SCENES[0].role]
@@ -553,7 +556,11 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
     assert "never straight from the front" in prompts[STORY_SCENES[1].role]
     assert "no sadness, worry, fear or anxiety" in prompts[STORY_SCENES[1].role]
     assert "Bedroom continuity" in prompts[STORY_SCENES[2].role]
-    assert "preserve the previous bedroom, camera and desk exactly" in prompts[
+    assert "preserve the exact approved bedroom variant" in prompts[
+        STORY_SCENES[2].role
+    ]
+    assert "same dark-graphite laptop" in prompts[STORY_SCENES[2].role]
+    assert "never mirror, swap or relocate the core layout" in prompts[
         STORY_SCENES[2].role
     ]
     assert "external compositor" in prompts[STORY_SCENES[4].role]
@@ -569,6 +576,83 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
     assert "Do not show a bedroom" in prompts[STORY_SCENES[5].role]
 
 
+def test_story_environment_changes_between_videos_but_stays_fixed_within_each(
+    tmp_path,
+    monkeypatch,
+):
+    generator = StoryCarouselImageGenerator(get_settings())
+    selected_profiles: list[tuple[str, str, str]] = []
+
+    monkeypatch.setattr(
+        "app.story_images.random.choice",
+        lambda available: available[0],
+    )
+
+    def fake_generate_slides_locked(reference_image_path, job_dir):
+        active = generator._active_environment_variant
+        assert active is not None
+        selected_profiles.append(
+            (
+                active.key,
+                generator._environment_directive(STORY_SCENES[0]),
+                generator._environment_directive(STORY_SCENES[2]),
+            )
+        )
+        return []
+
+    monkeypatch.setattr(
+        generator,
+        "_generate_slides_locked",
+        fake_generate_slides_locked,
+    )
+
+    generator.generate_slides(tmp_path / "reference.jpg", tmp_path / "job-1")
+    generator.generate_slides(tmp_path / "reference.jpg", tmp_path / "job-2")
+
+    assert selected_profiles[0][0] != selected_profiles[1][0]
+    assert STORY_ENVIRONMENT_VARIANTS[0].restaurant in selected_profiles[0][1]
+    assert STORY_ENVIRONMENT_VARIANTS[0].bedroom in selected_profiles[0][2]
+    assert generator._active_environment_variant is None
+
+
+def test_selected_environment_is_injected_only_into_matching_story_scenes():
+    generator = StoryCarouselImageGenerator(get_settings())
+    variant = STORY_ENVIRONMENT_VARIANTS[1]
+    generator._active_environment_variant = variant
+
+    restaurant_prompt = generator._build_prompt(STORY_SCENES[0])
+    bedroom_prompts = [
+        generator._build_prompt(scene)
+        for scene in STORY_SCENES[1:5]
+    ]
+    success_prompt = generator._build_prompt(STORY_SCENES[5])
+
+    assert variant.restaurant in restaurant_prompt
+    assert variant.bedroom not in restaurant_prompt
+    assert all(variant.bedroom in prompt for prompt in bedroom_prompts)
+    assert all(variant.restaurant not in prompt for prompt in bedroom_prompts)
+    assert variant.restaurant not in success_prompt
+    assert variant.bedroom not in success_prompt
+
+
+def test_story_environment_is_cleared_when_generation_fails(tmp_path, monkeypatch):
+    generator = StoryCarouselImageGenerator(get_settings())
+
+    def fail_generation(reference_image_path, job_dir):
+        assert generator._active_environment_variant is not None
+        raise RuntimeError("image provider failed")
+
+    monkeypatch.setattr(generator, "_generate_slides_locked", fail_generation)
+
+    with pytest.raises(RuntimeError, match="image provider failed"):
+        generator.generate_slides(
+            tmp_path / "reference.jpg",
+            tmp_path / "failed-job",
+        )
+
+    assert generator._active_environment_variant is None
+
+
 def test_reviewer_checks_core_story_without_requiring_cosmetic_brand_details():
     generator = StoryCarouselImageGenerator(get_settings())
 
@@ -578,6 +662,7 @@ def test_reviewer_checks_core_story_without_requiring_cosmetic_brand_details():
     assert "Never require or request a logo" in prompt
     assert "Minor simplified cartoon hands are acceptable" in prompt
     assert "frontal laptop or front-facing person is a blocking" in prompt
+    assert "missing or visibly replaced physical laptop" in prompt
     assert "Full generation brief" not in prompt
 
 

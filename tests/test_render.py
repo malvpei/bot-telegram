@@ -43,6 +43,7 @@ from app.render import (
     TYPE_1_HOOK_SIDE_MARGIN,
     TYPE_2_HOOK_INNER_STROKE_WIDTH,
     TYPE_3_TITLE_FONT_SIZE,
+    TYPE_4_TITLE_INNER_STROKE_WIDTH,
     TYPE_4_TITLE_STROKE_WIDTH,
     TYPE_4_STORY_CAPTION_PRIMARY_CENTER,
     TYPE_4_TEXT_STROKE_WIDTH,
@@ -726,7 +727,7 @@ def test_caption_cards_use_tighter_padding_and_rounder_tiktok_corners():
     assert TEXT_CARD_PADDING_X == 30
     assert TEXT_CARD_PADDING_Y == 10
     assert TEXT_CARD_TITLE_PADDING_Y == 13
-    assert TEXT_CARD_CORNER_RADIUS == 18
+    assert TEXT_CARD_CORNER_RADIUS == 20
 
 
 def test_type_1_title_is_only_slightly_larger_than_body():
@@ -880,8 +881,8 @@ def test_type_4_story_caption_prefers_lower_part_of_reserved_top_area():
         media=_candidate(Path("source.jpg")),
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.25
-    assert TYPE_4_STORY_CAPTION_PRIMARY_CENTER == 0.25
+    assert renderer._caption_preferred_centers(slide)[0] == 0.28
+    assert TYPE_4_STORY_CAPTION_PRIMARY_CENTER == 0.28
 
 
 def test_type_4_success_caption_also_uses_reserved_top_area():
@@ -893,7 +894,7 @@ def test_type_4_success_caption_also_uses_reserved_top_area():
         media=_candidate(Path("source.jpg")),
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.25
+    assert renderer._caption_preferred_centers(slide)[0] == 0.28
 
 
 def test_lower_story_caption_still_clears_detected_head_region():
@@ -1658,7 +1659,7 @@ def test_type_4_template_overlay_draws_fixed_labels_icons_and_text():
     assert icon_region.mean() > 60
 
 
-def test_type_4_tool_template_uses_lighter_title_and_medium_weight_names(
+def test_type_4_tool_template_uses_medium_title_and_regular_weight_names(
     monkeypatch,
 ):
     settings = replace(get_settings(), width=360, height=640)
@@ -1675,8 +1676,9 @@ def test_type_4_tool_template_uses_lighter_title_and_medium_weight_names(
 
     assert captured_title_weights[0] is False
     assert TYPE_4_TITLE_STROKE_WIDTH == 3
-    assert TYPE_4_TEXT_STROKE_WIDTH == 6
-    assert TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH == 1
+    assert TYPE_4_TITLE_INNER_STROKE_WIDTH == 1
+    assert TYPE_4_TEXT_STROKE_WIDTH == 4
+    assert TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH == 0
 
 
 def test_template_video_render_forces_output_without_audio(monkeypatch):

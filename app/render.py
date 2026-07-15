@@ -118,9 +118,10 @@ TYPE_3_BODY_FONT_SIZE = 58
 TYPE_3_TOOL_VERTICAL_NUDGE_RATIO = 0.015
 TYPE_4_TARGET_SECONDS = 7.5
 TYPE_4_TITLE_STROKE_WIDTH = 3
-TYPE_4_TEXT_STROKE_WIDTH = 6
-TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH = 1
-TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.25
+TYPE_4_TITLE_INNER_STROKE_WIDTH = 1
+TYPE_4_TEXT_STROKE_WIDTH = 4
+TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH = 0
+TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.28
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TEXT_CARD_FILL = (255, 255, 255, 246)
@@ -138,7 +139,7 @@ TEXT_CARD_TITLE_PADDING_Y = 13
 TEXT_CARD_LINE_OVERLAP = 12
 TEXT_CARD_GROUP_GAP = 20
 TEXT_CARD_FAUX_BOLD_PIXELS = 1
-TEXT_CARD_CORNER_RADIUS = 18
+TEXT_CARD_CORNER_RADIUS = 20
 TEXT_AVOID_CLEARANCE_MARGIN = 58
 TEXT_DETECTION_MAX_DIMENSION = 720
 TEXT_OVERLAY_CACHE_MAX_ITEMS = 8
@@ -1304,8 +1305,8 @@ class VideoRenderer:
         height: int,
         language: Language,
     ) -> None:
-        # The reference style uses a lighter title than the tool names. Keep
-        # the black outline for contrast over video, but use the regular face.
+        # The reference uses a medium title: regular face plus a minimal white
+        # inner stroke, keeping the black outline readable over moving video.
         font = self._load_font(size=_scale_y(60, height), bold=False)
         line_gap = _scale_y(4, height)
         first_line, second_line = TYPE_4_TITLE_LINES[self._type_4_language(language)]
@@ -1322,13 +1323,22 @@ class VideoRenderer:
             stroke_width=TYPE_4_TITLE_STROKE_WIDTH,
         )
         y = _scale_y(244, height)
+        first_x = (width - first_width) // 2
         draw.text(
-            ((width - first_width) // 2, y),
+            (first_x, y),
             first_line,
             font=font,
             fill=(255, 255, 255),
             stroke_width=TYPE_4_TITLE_STROKE_WIDTH,
             stroke_fill=(0, 0, 0),
+        )
+        draw.text(
+            (first_x, y),
+            first_line,
+            font=font,
+            fill=(255, 255, 255),
+            stroke_width=TYPE_4_TITLE_INNER_STROKE_WIDTH,
+            stroke_fill=(255, 255, 255),
         )
         second_y = y + first_height + line_gap
         badge_size = _scale_x(58, width)
@@ -1342,6 +1352,14 @@ class VideoRenderer:
             fill=(255, 255, 255),
             stroke_width=TYPE_4_TITLE_STROKE_WIDTH,
             stroke_fill=(0, 0, 0),
+        )
+        draw.text(
+            (second_x, second_y),
+            second_line,
+            font=font,
+            fill=(255, 255, 255),
+            stroke_width=TYPE_4_TITLE_INNER_STROKE_WIDTH,
+            stroke_fill=(255, 255, 255),
         )
         badge_x = second_x + second_width + badge_gap
         badge_y = second_y + max(0, (second_height - badge_size) // 2) + _scale_y(2, height)
@@ -1439,21 +1457,22 @@ class VideoRenderer:
             stroke_width=name_stroke_width,
             stroke_fill=(0, 0, 0),
         )
-        # Add a small, symmetric white inner stroke. It keeps the regular face
-        # at a medium weight while leaving a much clearer black outer border.
-        base_x = _scale_x(name_x, width)
-        base_y = _scale_y(name_y, height)
-        draw.text(
-            (base_x, base_y),
-            name,
-            font=name_font,
-            fill=(255, 255, 255),
-            stroke_width=max(
-                1,
-                _scale_x(TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH, width),
-            ),
-            stroke_fill=(255, 255, 255),
-        )
+        # Keep the tool names regular like the reference. A configurable inner
+        # stroke remains available, but zero deliberately avoids faux bold.
+        if TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH > 0:
+            base_x = _scale_x(name_x, width)
+            base_y = _scale_y(name_y, height)
+            draw.text(
+                (base_x, base_y),
+                name,
+                font=name_font,
+                fill=(255, 255, 255),
+                stroke_width=max(
+                    1,
+                    _scale_x(TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH, width),
+                ),
+                stroke_fill=(255, 255, 255),
+            )
 
     def _draw_centered_lines_in_box(
         self,
@@ -2172,12 +2191,12 @@ class VideoRenderer:
         if slide is not None and slide.role in TYPE_4_STORY_CAPTION_ROLES:
             return (
                 TYPE_4_STORY_CAPTION_PRIMARY_CENTER,
-                0.27,
-                0.23,
-                0.29,
-                0.21,
-                0.31,
-                0.19,
+                0.30,
+                0.26,
+                0.32,
+                0.24,
+                0.34,
+                0.22,
             )
         if (
             slide is not None and slide.fixed_asset and slide.role == SlideRole.TIP3

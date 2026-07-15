@@ -5,6 +5,7 @@ import json
 import logging
 import mimetypes
 import os
+import random
 import shutil
 import time
 from concurrent.futures import Future, ThreadPoolExecutor
@@ -12,6 +13,7 @@ from contextlib import ExitStack
 from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
+from threading import Lock
 from typing import Any, Sequence
 
 import requests
@@ -46,7 +48,7 @@ NO_OVERLAY_TEXT_DIRECTIVE = (
     "subtitles, labels, brand names, watermarks or social-media UI anywhere in "
     "the illustration. Do not add unrelated company logos to clothes or devices. "
     "Use simple abstract interface shapes instead. An external "
-    "compositor will add all exact wording later. Keep the upper 32 percent calm "
+    "compositor will add all exact wording later. Keep the upper 36 percent calm "
     "and uncluttered for that external caption, without putting the protagonist's "
     "face, hands or important objects there."
 )
@@ -59,19 +61,20 @@ SINGLE_SCENE_DIRECTIVE = (
     "that explicitly request one; all other scenes must contain no laptop."
 )
 BEDROOM_BASE_DIRECTIVE = (
-    "Bedroom base: establish one small believable bedroom with a wooden desk, "
-    "chair, desk lamp, small book shelf, sports-car poster without readable text, "
-    "plain light-gray walls, piggy bank without a label, notebook and pen. Keep "
-    "the room simple and make these positions the canonical layout for later scenes."
+    "Bedroom base: establish one small believable bedroom using the selected "
+    "per-video environment profile below. Include a real desk, chair, laptop, "
+    "desk lamp, notebook and a few simple decorations without readable text. "
+    "Make this exact room layout and decoration the canonical version for every "
+    "later bedroom scene in this video."
 )
 BEDROOM_CONTINUITY_DIRECTIVE = (
-    "Bedroom continuity: preserve the exact same small bedroom, camera side, "
-    "wooden desk, chair, desk lamp, small book shelf, sports-car poster without "
-    "readable text, plain light-gray walls, piggy bank without a label, notebook, "
-    "pen and object positions from the previous bedroom scene. This is the same "
-    "real room at a later moment, not a new interpretation. The protagonist is "
-    "normal human size, seated on the chair at the desk, never standing on the "
-    "desk, never miniature and never separated from the laptop."
+    "Bedroom continuity: preserve the exact approved bedroom variant, camera "
+    "side, desk, chair, lamp, wall treatment, decorations and object positions "
+    "from the previous bedroom scene. This is the same real room at a later "
+    "moment, not a new interpretation and not the default room from another "
+    "video. The protagonist is normal human size, seated on the chair at the "
+    "desk, never standing on the desk, never miniature and never separated from "
+    "the laptop."
 )
 LAPTOP_COMPOSITION_DIRECTIVE = (
     "MANDATORY CAMERA BLUEPRINT FOR EVERY DESK SCENE: copy the composition of a "
@@ -83,8 +86,10 @@ LAPTOP_COMPOSITION_DIRECTIVE = (
     "clearly to the viewer. The screen plane must visibly recede sideways while still "
     "being readable, like a three-quarter side angle, with its top and bottom edges "
     "slightly diagonal. Keep a clear visual gap between the protagonist's face and "
-    "the screen. The laptop sits on the desk, open at a normal 100 to 110 degree "
-    "angle; its base is flat, hinge continuous and screen attached. Put one hand on "
+    "the screen. Always use the same plain dark-graphite laptop with the same thin "
+    "body, black keyboard, medium screen bezel and no visible logo. The laptop "
+    "sits on the desk, open at a normal 100 to 110 degree angle; its base is flat, "
+    "hinge continuous and screen attached. Put one hand on "
     "the keyboard and the other on a mouse or trackpad. Never use a centered frontal "
     "laptop, a front-facing protagonist, an over-the-screen pose, or a laptop that is "
     "twisted, reversed, floating, detached or folded the wrong way. Preserve this "
@@ -98,6 +103,17 @@ REFERENCE_IDENTITY_DIRECTIVE = (
     "Keep the identity from input 1 and the drawing style, room geometry, clothing "
     "design and camera logic from input 2. No sunglasses indoors; eyes must be "
     "visible. Do not add a second foreground version of him."
+)
+IMMUTABLE_STORY_CORE_DIRECTIVE = (
+    "IMMUTABLE STORY CORE: environment variation may change only the restaurant "
+    "or bedroom background. Never change the young male protagonist's recognizable "
+    "identity, face, hair, age or build, and never replace or redesign the physical "
+    "laptop. In every desk scene never mirror, swap or relocate the core layout: "
+    "keep the protagonist on the right in side profile facing left and the same "
+    "dark-graphite laptop on the left in three-quarter side view, with its keyboard "
+    "and complete screen visible. The pose and emotion may change only as explicitly "
+    "required by the scene. This subject-and-camera blueprint has priority over "
+    "every environment description."
 )
 
 
@@ -114,6 +130,66 @@ class StoryImageReview:
     score: int
     issues: tuple[str, ...]
     retry_instruction: str
+
+
+@dataclass(frozen=True)
+class StoryEnvironmentVariant:
+    key: str
+    restaurant: str
+    bedroom: str
+
+
+STORY_ENVIRONMENT_VARIANTS: tuple[StoryEnvironmentVariant, ...] = (
+    StoryEnvironmentVariant(
+        key="cream_walnut",
+        restaurant=(
+            "cream subway tiles with a narrow muted-red trim, brushed-steel prep "
+            "counters, warm ceiling lights and compact black menu-board shapes "
+            "without readable text"
+        ),
+        bedroom=(
+            "warm beige walls, a walnut desk, an olive-green desk lamp, navy "
+            "curtains, two short floating shelves and one simple car print without "
+            "readable text"
+        ),
+    ),
+    StoryEnvironmentVariant(
+        key="charcoal_sage",
+        restaurant=(
+            "light-gray wall tiles with charcoal lower panels, red pendant lights, "
+            "a stainless central prep bench and a compact open fry station"
+        ),
+        bedroom=(
+            "muted sage walls, a light-oak desk, a matte-black desk lamp, a cream "
+            "roller blind, one tall narrow bookcase and two small geometric wall "
+            "prints without readable text"
+        ),
+    ),
+    StoryEnvironmentVariant(
+        key="tan_blue",
+        restaurant=(
+            "warm tan ceramic tiles, dark-red cabinet fronts, silver extraction "
+            "hoods, a side grill and stacked plain paper food boxes"
+        ),
+        bedroom=(
+            "a dusty-blue accent wall with the other walls off-white, a medium-oak "
+            "desk, a small white articulated lamp, gray curtains, a low cube shelf "
+            "and one minimalist road print without readable text"
+        ),
+    ),
+    StoryEnvironmentVariant(
+        key="white_rust",
+        restaurant=(
+            "clean off-white square tiles, dark graphite worktops, slim red accent "
+            "strips, a wall-mounted utensil rail and a bright side preparation area"
+        ),
+        bedroom=(
+            "warm light-gray walls, a dark-oak desk, a compact brass lamp, rust-"
+            "colored curtains, one asymmetrical wall shelf and a small abstract "
+            "sports-car poster without readable text"
+        ),
+    ),
+)
 
 
 STORY_SCENES: tuple[StoryScene, ...] = (
@@ -151,7 +227,7 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "arch icon. On the screen use only clean "
             "abstract product-card rectangles, a small green progress chart shape "
             "and simple order widgets with no readable characters. Include notebook, "
-            "desk lamp, piggy bank and sports-car poster."
+            "desk lamp and the simple decorations from the selected room profile."
         ),
         review_criteria=(
             "Same recognizable protagonist seated on the right in side profile, calm "
@@ -243,8 +319,29 @@ STORY_SCENES: tuple[StoryScene, ...] = (
 class StoryCarouselImageGenerator:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
+        self._generation_lock = Lock()
+        self._active_environment_variant: StoryEnvironmentVariant | None = None
+        self._last_environment_variant_key: str | None = None
 
     def generate_slides(
+        self,
+        reference_image_path: Path,
+        job_dir: Path,
+    ) -> list[MediaCandidate]:
+        # Prompt construction also runs inside worker threads. Keep one active
+        # profile on the generator for the complete carousel, and serialize calls
+        # so two simultaneous videos can never leak their environments into each
+        # other.
+        with self._generation_lock:
+            variant = self._choose_environment_variant()
+            self._active_environment_variant = variant
+            LOGGER.info("Story environment variant selected: %s", variant.key)
+            try:
+                return self._generate_slides_locked(reference_image_path, job_dir)
+            finally:
+                self._active_environment_variant = None
+
+    def _generate_slides_locked(
         self,
         reference_image_path: Path,
         job_dir: Path,
@@ -345,6 +442,18 @@ class StoryCarouselImageGenerator:
                 )
             )
         return generated
+
+    def _choose_environment_variant(self) -> StoryEnvironmentVariant:
+        available = [
+            variant
+            for variant in STORY_ENVIRONMENT_VARIANTS
+            if variant.key != self._last_environment_variant_key
+        ]
+        if not available:
+            available = list(STORY_ENVIRONMENT_VARIANTS)
+        selected = random.choice(available)
+        self._last_environment_variant_key = selected.key
+        return selected
 
     def _generation_inputs(
         self,
@@ -1061,7 +1170,10 @@ class StoryCarouselImageGenerator:
             "scene. In every laptop scene, the core requirement's right-person in "
             "side-profile / left-laptop in three-quarter side-view camera composition "
             "is mandatory: a frontal laptop or front-facing person is a blocking "
-            "failure. The requested emotion is also mandatory; specifically, worry, "
+            "failure. A missing or visibly replaced physical laptop, a hidden full "
+            "screen, or a mirrored/reversed right-person/left-laptop composition is "
+            "also blocking. The requested emotion is also mandatory; specifically, "
+            "worry, "
             "sadness, a frown or anxious eyebrows are blocking in calm focused scenes. "
             "Score a clean image that tells the required story at least 8/10, "
             "even when it has harmless cosmetic differences.\n\n"
@@ -1161,6 +1273,37 @@ class StoryCarouselImageGenerator:
             return str(error)
         return response.text[:400]
 
+    def _environment_directive(
+        self,
+        scene: StoryScene,
+        variant: StoryEnvironmentVariant | None = None,
+    ) -> str:
+        selected = variant or self._active_environment_variant
+        if selected is None:
+            return ""
+        if scene.role == SlideRole.STORY_MCDONALD:
+            return (
+                "PER-VIDEO RESTAURANT ENVIRONMENT: use "
+                f"{selected.restaurant}. Change only the restaurant decoration, "
+                "finishes and background layout. Do not change the protagonist's "
+                "identity, uniform, burger action, camera logic or caption-safe "
+                "upper area."
+            )
+        if scene.role in {
+            SlideRole.STORY_BUILDING_STORE,
+            SlideRole.STORY_FIRST_FAILURE,
+            SlideRole.STORY_DEEP_FAILURE,
+            SlideRole.STORY_DROPRADAR,
+        }:
+            return (
+                "PER-VIDEO BEDROOM ENVIRONMENT: use "
+                f"{selected.bedroom}. This exact profile applies to every bedroom "
+                "scene in this video. Later moments must preserve it exactly. Vary "
+                "the environment only; never alter the protagonist, physical laptop "
+                "or mandatory right-person/left-laptop camera blueprint."
+            )
+        return ""
+
     def _build_prompt(
         self,
         scene: StoryScene,
@@ -1171,6 +1314,7 @@ class StoryCarouselImageGenerator:
         directives = [
             STORY_STYLE,
             REFERENCE_IDENTITY_DIRECTIVE,
+            IMMUTABLE_STORY_CORE_DIRECTIVE,
             SINGLE_SCENE_DIRECTIVE,
             NO_OVERLAY_TEXT_DIRECTIVE,
         ]
@@ -1198,6 +1342,9 @@ class StoryCarouselImageGenerator:
                     LAPTOP_COMPOSITION_DIRECTIVE,
                 )
             )
+        environment_directive = self._environment_directive(scene)
+        if environment_directive:
+            directives.append(environment_directive)
         directives.append(scene.prompt)
         if retry_feedback:
             directives.append(
