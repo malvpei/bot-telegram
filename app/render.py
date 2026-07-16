@@ -52,7 +52,9 @@ TIKTOK_OVERLAY_FONT_CANDIDATES = (
 )
 HOOK_TEXT_STROKE_FILL = (12, 12, 12)
 HOOK_TEXT_STROKE_WIDTH = 4
+TYPE_2_HOOK_STROKE_WIDTH = 5
 TYPE_2_HOOK_INNER_STROKE_WIDTH = 1
+TYPE_2_HOOK_FONT_SCALE = 0.99
 FIXED_SCREEN_TEXT_MARGIN = 78
 FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 30
 FEBRUARY_TITLE_MIN_BOX_WIDTH = 380
@@ -136,6 +138,10 @@ TEXT_CARD_EDGE_MARGIN = 84
 TEXT_CARD_PADDING_X = 30
 TEXT_CARD_PADDING_Y = 10
 TEXT_CARD_TITLE_PADDING_Y = 13
+TEXT_CARD_TITLE_FONT_SIZE = 40
+TEXT_CARD_TITLE_MIN_FONT_SIZE = 31
+TEXT_CARD_BODY_FONT_SIZE = 38
+TEXT_CARD_BODY_MIN_FONT_SIZE = 29
 TEXT_CARD_LINE_OVERLAP = 12
 TEXT_CARD_GROUP_GAP = 20
 TEXT_CARD_FAUX_BOLD_PIXELS = 1
@@ -1774,7 +1780,12 @@ class VideoRenderer:
         width, height = image.size
         layout_source = layout_image or image
 
-        stroke_width = max(2, _scale_x(HOOK_TEXT_STROKE_WIDTH, width))
+        hook_stroke_width = (
+            TYPE_2_HOOK_STROKE_WIDTH
+            if video_type == VideoType.TYPE_2
+            else HOOK_TEXT_STROKE_WIDTH
+        )
+        stroke_width = max(2, _scale_x(hook_stroke_width, width))
         side_margin = _scale_x(
             TYPE_1_HOOK_SIDE_MARGIN if video_type == VideoType.TYPE_1 else HOOK_SIDE_MARGIN,
             width,
@@ -1816,6 +1827,11 @@ class VideoRenderer:
                 stroke_width=stroke_width,
                 font_loader=font_loader,
             )
+        if video_type == VideoType.TYPE_2:
+            fitted_size = getattr(font, "size", 0)
+            reduced_size = max(1, int(round(fitted_size * TYPE_2_HOOK_FONT_SCALE)))
+            if fitted_size and reduced_size < fitted_size:
+                font = font_loader(reduced_size, True)
         text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
         block_width = min(
             width - _scale_x(80, width),
@@ -2078,8 +2094,14 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.18),
-            base_size=self._scaled_text_size(39, minimum=17),
-            min_size=self._scaled_text_size(30, minimum=14),
+            base_size=self._scaled_text_size(
+                TEXT_CARD_TITLE_FONT_SIZE,
+                minimum=18,
+            ),
+            min_size=self._scaled_text_size(
+                TEXT_CARD_TITLE_MIN_FONT_SIZE,
+                minimum=15,
+            ),
             bold=False,
             stroke_width=0,
         )
@@ -2088,8 +2110,14 @@ class VideoRenderer:
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.40),
-            base_size=self._scaled_text_size(37, minimum=16),
-            min_size=self._scaled_text_size(28, minimum=13),
+            base_size=self._scaled_text_size(
+                TEXT_CARD_BODY_FONT_SIZE,
+                minimum=17,
+            ),
+            min_size=self._scaled_text_size(
+                TEXT_CARD_BODY_MIN_FONT_SIZE,
+                minimum=14,
+            ),
             bold=False,
             stroke_width=0,
             balanced=True,

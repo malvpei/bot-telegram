@@ -33,15 +33,21 @@ from app.render import (
     SAFE_TEXT_BOTTOM_MARGIN,
     SAFE_TEXT_TOP_MARGIN,
     TEXT_CARD_CORNER_RADIUS,
+    TEXT_CARD_BODY_FONT_SIZE,
+    TEXT_CARD_BODY_MIN_FONT_SIZE,
     TEXT_CARD_PADDING_X,
     TEXT_CARD_PADDING_Y,
+    TEXT_CARD_TITLE_FONT_SIZE,
+    TEXT_CARD_TITLE_MIN_FONT_SIZE,
     TEXT_CARD_TITLE_PADDING_Y,
     TEXT_AVOID_CLEARANCE_MARGIN,
     TEXT_FACE_AVOID_WEIGHT,
     TEXT_FALLBACK_HEAD_AVOID_WEIGHT,
     TEXT_HEAD_AVOID_WEIGHT,
     TYPE_1_HOOK_SIDE_MARGIN,
+    TYPE_2_HOOK_FONT_SCALE,
     TYPE_2_HOOK_INNER_STROKE_WIDTH,
+    TYPE_2_HOOK_STROKE_WIDTH,
     TYPE_3_TITLE_FONT_SIZE,
     TYPE_4_TITLE_INNER_STROKE_WIDTH,
     TYPE_4_TITLE_STROKE_WIDTH,
@@ -307,6 +313,38 @@ def test_type_2_balanced_spanish_hook_stays_large(monkeypatch):
     assert getattr(font, "size", 0) >= 68
     assert abs(widths[0] - widths[1]) <= 40
     assert captured["inner_stroke_width"] == TYPE_2_HOOK_INNER_STROKE_WIDTH
+    assert captured["stroke_width"] == TYPE_2_HOOK_STROKE_WIDTH
+
+
+def test_type_2_hook_is_only_one_percent_smaller_with_stronger_outline(
+    monkeypatch,
+):
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+    image = Image.new("RGB", (1080, 1920), (0, 0, 0))
+    captured: dict[str, object] = {}
+
+    monkeypatch.setattr(
+        renderer,
+        "_fit_prebroken_lines",
+        lambda *args, **kwargs: renderer._load_type_2_hook_font(100, True),
+    )
+    monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 100)
+
+    def capture_lines(draw, lines, font, **kwargs):
+        captured["font_size"] = getattr(font, "size", 0)
+        captured["stroke_width"] = kwargs["stroke_width"]
+
+    monkeypatch.setattr(renderer, "_draw_lines", capture_lines)
+
+    renderer._draw_hook_text(
+        image,
+        "Primera linea\nSegunda linea",
+        video_type=VideoType.TYPE_2,
+    )
+
+    assert TYPE_2_HOOK_FONT_SCALE == 0.99
+    assert captured["font_size"] == 99
+    assert captured["stroke_width"] == TYPE_2_HOOK_STROKE_WIDTH == 5
 
 
 def test_type_2_hook_uses_thinner_regular_face_without_changing_layout(monkeypatch):
@@ -728,6 +766,10 @@ def test_caption_cards_use_tighter_padding_and_rounder_tiktok_corners():
     assert TEXT_CARD_PADDING_Y == 10
     assert TEXT_CARD_TITLE_PADDING_Y == 13
     assert TEXT_CARD_CORNER_RADIUS == 20
+    assert TEXT_CARD_TITLE_FONT_SIZE == 40
+    assert TEXT_CARD_TITLE_MIN_FONT_SIZE == 31
+    assert TEXT_CARD_BODY_FONT_SIZE == 38
+    assert TEXT_CARD_BODY_MIN_FONT_SIZE == 29
 
 
 def test_type_1_title_is_only_slightly_larger_than_body():
@@ -740,8 +782,8 @@ def test_type_1_title_is_only_slightly_larger_than_body():
         draw,
         max_width=800,
         max_height=300,
-        base_size=39,
-        min_size=30,
+        base_size=TEXT_CARD_TITLE_FONT_SIZE,
+        min_size=TEXT_CARD_TITLE_MIN_FONT_SIZE,
         bold=False,
         stroke_width=0,
     )
@@ -750,8 +792,8 @@ def test_type_1_title_is_only_slightly_larger_than_body():
         draw,
         max_width=800,
         max_height=300,
-        base_size=37,
-        min_size=28,
+        base_size=TEXT_CARD_BODY_FONT_SIZE,
+        min_size=TEXT_CARD_BODY_MIN_FONT_SIZE,
         bold=False,
         stroke_width=0,
     )
@@ -835,8 +877,8 @@ def test_type_2_english_tip3_title_stays_on_one_line():
         draw,
         max_width=820,
         max_height=int(1920 * 0.18),
-        base_size=39,
-        min_size=30,
+        base_size=TEXT_CARD_TITLE_FONT_SIZE,
+        min_size=TEXT_CARD_TITLE_MIN_FONT_SIZE,
         bold=False,
         stroke_width=0,
     )
