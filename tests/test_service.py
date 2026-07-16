@@ -504,6 +504,10 @@ def test_type_4_generates_six_ai_slides_and_normalizes_original_reference():
         assert root / "outputs" / "users" / "1" in result.slides[-1].media.local_path.parents
         assert Image.open(result.slides[-1].media.local_path).size == (72, 128)
         assert result.slides[-1].media.local_path.read_bytes() != reference.read_bytes()
+        assert service.state.get_last_social_choice(
+            VideoType.TYPE_4,
+            Language.ES,
+        ) == "es_story_1"
         assert renderer.written_plan is not None
         assert renderer.written_plan.slides[0].text.startswith("Así pasé")
         assert renderer.written_plan.slides[4].text.startswith("Entonces encontré")

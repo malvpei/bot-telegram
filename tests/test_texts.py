@@ -603,6 +603,41 @@ def test_type_4_story_texts_are_exactly_fixed(state_dir):
     assert package.slides_by_role[SlideRole.STORY_SUCCESS_COMIC] == "Después de un año y medio..."
 
 
+def test_type_4_social_titles_and_descriptions_rotate_without_repeating(state_dir):
+    generator = _make_generator(state_dir)
+    variants = generator._social_copy_variants(VideoType.TYPE_4, Language.ES)
+
+    assert list(variants) == [f"es_story_{index}" for index in range(1, 11)]
+    titles = [title for title, _description, _hashtags in variants.values()]
+    descriptions = [
+        description
+        for _title, description, _hashtags in variants.values()
+    ]
+    assert len(set(titles)) == 10
+    assert len(set(descriptions)) == 10
+    assert all(len(description) >= 300 for description in descriptions)
+
+    generated_titles: list[str] = []
+    generated_descriptions: list[str] = []
+    for expected_key in variants:
+        package = generator.generate(VideoType.TYPE_4, Language.ES)
+        assert package.social_choice_key == expected_key
+        generated_titles.append(package.social_copy.title)
+        generated_descriptions.append(package.social_copy.description)
+        assert "#dropshipping" in package.social_copy.hashtags
+        generator.state.set_last_social_choice(
+            VideoType.TYPE_4,
+            Language.ES,
+            package.social_choice_key,
+        )
+
+    assert len(set(generated_titles)) == 10
+    assert len(set(generated_descriptions)) == 10
+
+    restarted = generator.generate(VideoType.TYPE_4, Language.ES)
+    assert restarted.social_choice_key == "es_story_1"
+
+
 def test_type_3_can_use_paypal_and_instagram(state_dir, monkeypatch):
     monkeypatch.setattr(texts_module.random, "choice", lambda seq: list(seq)[0])
     generator = _make_generator(state_dir)

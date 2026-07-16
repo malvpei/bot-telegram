@@ -126,6 +126,7 @@ TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH = 0
 TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.28
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
+TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH = 48
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
 TEXT_FACE_AVOID_WEIGHT = 260.0
@@ -1311,9 +1312,9 @@ class VideoRenderer:
         height: int,
         language: Language,
     ) -> None:
-        # The reference uses a medium title: regular face plus a minimal white
-        # inner stroke, keeping the black outline readable over moving video.
-        font = self._load_font(size=_scale_y(60, height), bold=False)
+        # The animated tool template uses a clearly bold hook while retaining
+        # the existing white fill and black outline over moving video.
+        font = self._load_font(size=_scale_y(60, height), bold=True)
         line_gap = _scale_y(4, height)
         first_line, second_line = TYPE_4_TITLE_LINES[self._type_4_language(language)]
         first_width, first_height = self._text_size(
@@ -1395,10 +1396,16 @@ class VideoRenderer:
         ) = row
         label = labels.get(label_key, label_key)
         width, height = image.size
+        label_left = label_x
+        label_right = label_x + label_w
+        if label_key == "payments" and label == "Payments:":
+            extra_each_side = TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH // 2
+            label_left -= extra_each_side
+            label_right += extra_each_side
         label_box = (
-            _scale_x(label_x, width),
+            _scale_x(label_left, width),
             _scale_y(label_y, height),
-            _scale_x(label_x + label_w, width),
+            _scale_x(label_right, width),
             _scale_y(label_y + label_h, height),
         )
         self._draw_white_label_pill(

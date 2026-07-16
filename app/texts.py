@@ -1046,19 +1046,198 @@ class ScriptGenerator:
     ) -> dict[str, tuple[str, str, list[str]]]:
         if video_type == VideoType.TYPE_4:
             return {
-                "es_story": (
-                    "De trabajar en el MacDonald al Porsche 911 GT3",
+                "es_story_1": (
+                    "De 0 ventas a dejar de elegir a ciegas",
                     (
-                        "Carrusel estilo comic sobre el camino de montar una tienda "
-                        "de dropshipping, fallar con productos sin demanda, descubrir "
-                        "Dropradar y encontrar por fin un producto con ventas reales."
+                        "Durante meses confundí trabajar más con avanzar. Retocaba la "
+                        "tienda, estudiaba anuncios y probaba productos sin saber qué "
+                        "señal estaba buscando. El cambio llegó cuando dejé de elegir "
+                        "por intuición y empecé a validar demanda, competencia y datos "
+                        "antes de gastar. Dropradar no hizo el trabajo por mí, pero me "
+                        "ayudó a convertir cada prueba en una decisión con sentido."
                     ),
                     [
                         "#dropshipping",
                         "#ecommerce",
                         "#dropradar",
                         "#shopify",
+                        "#productresearch",
+                    ],
+                ),
+                "es_story_2": (
+                    "La parte que no se ve antes de la primera venta",
+                    (
+                        "Montar la tienda fue la parte fácil. Lo difícil fue abrir el "
+                        "panel cada día y seguir viendo cero pedidos después de tantas "
+                        "horas de trabajo. Probé varios productos, cambié creativos y "
+                        "estuve muy cerca de cerrar todo. Mi primera venta no llegó por "
+                        "hacer otro cambio estético, llegó cuando empecé a investigar "
+                        "productos con datos reales y a descartar ideas antes de perder "
+                        "más tiempo y presupuesto con ellas."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#tiendaonline",
+                        "#primeraventa",
+                        "#emprender",
+                        "#dropradar",
+                    ],
+                ),
+                "es_story_3": (
+                    "Casi cierro la tienda antes de cambiar esto",
+                    (
+                        "Después de tres productos fallidos pensé que el problema era "
+                        "yo. Trabajaba más horas, copiaba nuevas ideas y aun así no "
+                        "entendía por qué nadie compraba. Antes de rendirme cambié una "
+                        "sola parte del proceso: dejé de lanzar por corazonadas y empecé "
+                        "a pedir pruebas de demanda antes de crear la tienda y los "
+                        "anuncios. Ahí apareció Dropradar y, por primera vez, cada dato "
+                        "me ayudaba a decidir qué probar y qué descartar."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#negociosonline",
+                        "#ecommercetips",
+                        "#shopify",
+                        "#dropradar",
+                    ],
+                ),
+                "es_story_4": (
+                    "Lo que cambió cuando empecé a validar con datos",
+                    (
+                        "No necesitaba encontrar cien productos, necesitaba entender por "
+                        "qué uno merecía una prueba. Durante meses lancé ideas sin mirar "
+                        "bien la demanda, la competencia ni los creativos que ya estaban "
+                        "funcionando. Cuando ordené esa investigación con Dropradar, los "
+                        "resultados dejaron de parecer una lotería. No todos los tests "
+                        "salieron bien, pero cada uno tenía una hipótesis clara y podía "
+                        "explicar qué había aprendido antes de pasar al siguiente."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#datos",
+                        "#productresearch",
+                        "#ecommerce",
+                        "#dropradar",
+                    ],
+                ),
+                "es_story_5": (
+                    "Del turno en McDonald's a construir algo propio",
+                    (
+                        "Esta historia no cambió de un día para otro. Empezó compaginando "
+                        "turnos, noches delante del portátil y una tienda que no vendía "
+                        "nada. Hubo productos equivocados, anuncios sin respuesta y meses "
+                        "en los que abandonar parecía lo más sensato. El punto de giro fue "
+                        "dejar de perseguir tendencias al azar y construir un método para "
+                        "validar cada idea. Los datos no sustituyeron la constancia, pero "
+                        "hicieron que toda esa constancia apuntara en una dirección útil."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#historiasreales",
+                        "#emprendedores",
                         "#negocioonline",
+                        "#dropradar",
+                    ],
+                ),
+                "es_story_6": (
+                    "Mi primera venta llegó cuando dejé de improvisar",
+                    (
+                        "Pensaba que la solución era trabajar todavía más: otra plantilla, "
+                        "otro creativo y otro producto que parecía viral. En realidad, "
+                        "seguía improvisando con más esfuerzo. La primera venta llegó "
+                        "después de cambiar el orden: investigar, validar, comparar señales "
+                        "y solo entonces preparar la oferta. Usar Dropradar me ayudó a ver "
+                        "qué productos tenían movimiento real antes de invertir. Ese pedido "
+                        "no fue el final de la historia, pero sí la prueba de que el proceso "
+                        "nuevo tenía mucho más sentido que seguir adivinando."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#primeraventa",
+                        "#shopifystore",
+                        "#ecommercebusiness",
+                        "#dropradar",
+                    ],
+                ),
+                "es_story_7": (
+                    "El proceso detrás del Porsche 911 GT3",
+                    (
+                        "La foto final es la parte llamativa, pero no cuenta los meses de "
+                        "cero ventas, los productos que nadie quería y las veces que pensé "
+                        "en dejarlo. El progreso empezó cuando dejé de buscar un golpe de "
+                        "suerte y construí un proceso repetible para elegir productos. "
+                        "Analizar datos con Dropradar, revisar la competencia y validar la "
+                        "demanda antes de lanzar hizo que cada prueba fuese menos impulsiva. "
+                        "El objetivo tardó, pero por fin el trabajo diario tenía una lógica "
+                        "que podía repetir y mejorar."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#porsche911",
+                        "#ecommerce",
+                        "#constancia",
+                        "#dropradar",
+                    ],
+                ),
+                "es_story_8": (
+                    "No necesitaba más motivación, necesitaba método",
+                    (
+                        "Motivación tenía de sobra cuando abrí la tienda. Lo que no tenía "
+                        "era un criterio para saber qué producto probar, cuánto tiempo darle "
+                        "y cuándo descartarlo. Por eso repetía el mismo error con nombres y "
+                        "creativos distintos. Empezar a validar con datos cambió la forma de "
+                        "trabajar: menos apuestas, más preguntas concretas y decisiones que "
+                        "podía explicar. Dropradar se convirtió en una parte de ese método, "
+                        "no en un atajo, y ahí fue cuando el esfuerzo empezó a producir "
+                        "aprendizajes y ventas en lugar de solo cansancio."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#mentalidad",
+                        "#ecommercetips",
+                        "#productresearch",
+                        "#dropradar",
+                    ],
+                ),
+                "es_story_9": (
+                    "Tres productos fallidos y una lección útil",
+                    (
+                        "Los tres primeros productos no funcionaron y durante un tiempo "
+                        "solo vi dinero perdido. Después entendí que el fallo más caro no "
+                        "era que una prueba saliera mal, era no saber por qué había salido "
+                        "mal. Empecé a estudiar demanda, saturación, anuncios y señales de "
+                        "venta antes de lanzar. Con Dropradar pude filtrar mejor las ideas "
+                        "y reservar el presupuesto para productos con argumentos reales. "
+                        "Seguí fallando alguna vez, pero ya no repetía exactamente el mismo "
+                        "error sin aprender nada."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#aprendizaje",
+                        "#tiendaonline",
+                        "#marketingdigital",
+                        "#dropradar",
+                    ],
+                ),
+                "es_story_10": (
+                    "Antes de rendirme cambié cómo elegía productos",
+                    (
+                        "Estuve a punto de cerrar la tienda porque cada lanzamiento se "
+                        "sentía igual: muchas horas, algo de presupuesto y ninguna señal "
+                        "clara. El último intento fue distinto. En vez de empezar por el "
+                        "diseño o el anuncio, empecé por los datos y utilicé Dropradar para "
+                        "comparar demanda, competencia y creativos. Encontrar un producto "
+                        "mejor no resolvió todo de golpe, pero me dio una base real para "
+                        "conseguir la primera venta y construir desde ahí sin volver a "
+                        "trabajar completamente a ciegas."
+                    ),
+                    [
+                        "#dropshipping",
+                        "#emprenderonline",
+                        "#productresearch",
+                        "#shopify",
+                        "#dropradar",
                     ],
                 ),
             }

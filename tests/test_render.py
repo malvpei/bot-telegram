@@ -49,6 +49,8 @@ from app.render import (
     TYPE_2_HOOK_INNER_STROKE_WIDTH,
     TYPE_2_HOOK_STROKE_WIDTH,
     TYPE_3_TITLE_FONT_SIZE,
+    TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH,
+    TYPE_4_LABEL_FONT_SIZE,
     TYPE_4_TITLE_INNER_STROKE_WIDTH,
     TYPE_4_TITLE_STROKE_WIDTH,
     TYPE_4_STORY_CAPTION_PRIMARY_CENTER,
@@ -1701,7 +1703,7 @@ def test_type_4_template_overlay_draws_fixed_labels_icons_and_text():
     assert icon_region.mean() > 60
 
 
-def test_type_4_tool_template_uses_medium_title_and_regular_weight_names(
+def test_type_4_tool_template_uses_bold_title_and_regular_weight_names(
     monkeypatch,
 ):
     settings = replace(get_settings(), width=360, height=640)
@@ -1716,11 +1718,33 @@ def test_type_4_tool_template_uses_medium_title_and_regular_weight_names(
     monkeypatch.setattr(renderer, "_load_font", capture_font)
     renderer.build_type_4_template_overlay()
 
-    assert captured_title_weights[0] is False
+    assert captured_title_weights[0] is True
     assert TYPE_4_TITLE_STROKE_WIDTH == 3
     assert TYPE_4_TITLE_INNER_STROKE_WIDTH == 1
     assert TYPE_4_TEXT_STROKE_WIDTH == 4
     assert TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH == 0
+
+
+def test_type_4_english_payments_label_uses_full_size_in_wider_pill(monkeypatch):
+    settings = replace(get_settings(), width=1080, height=1920)
+    renderer = VideoRenderer(settings)
+    captured: dict[str, object] = {}
+    original_draw_centered = renderer._draw_centered_lines_in_box
+
+    def capture_label(draw, lines, font, box, **kwargs):
+        if lines == ["Payments:"]:
+            captured["font_size"] = getattr(font, "size", 0)
+            captured["box"] = box
+        return original_draw_centered(draw, lines, font, box, **kwargs)
+
+    monkeypatch.setattr(renderer, "_draw_centered_lines_in_box", capture_label)
+
+    renderer.build_type_4_template_overlay(Language.EN)
+
+    assert captured["font_size"] == TYPE_4_LABEL_FONT_SIZE
+    box = captured["box"]
+    assert isinstance(box, tuple)
+    assert box[2] - box[0] == 176 + TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH
 
 
 def test_template_video_render_forces_output_without_audio(monkeypatch):

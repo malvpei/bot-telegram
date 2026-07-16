@@ -675,6 +675,12 @@ class VideoCreationService:
             )
             video_path, script_path = self._render_outputs(plan, job_dir)
 
+            if script_package.social_choice_key:
+                self.state.set_last_social_choice(
+                    VideoType.TYPE_4,
+                    Language.ES,
+                    script_package.social_choice_key,
+                )
             self.state.log_job(
                 self.state.build_job_record(
                     job_id=job_id,
