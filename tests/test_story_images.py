@@ -576,6 +576,28 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
     assert "Do not show a bedroom" in prompts[STORY_SCENES[5].role]
 
 
+def test_failure_scenes_show_store_products_and_negative_review_cues():
+    generator = StoryCarouselImageGenerator(get_settings())
+    first_failure_prompt = generator._build_prompt(STORY_SCENES[2])
+    deep_failure_prompt = generator._build_prompt(STORY_SCENES[3])
+
+    assert "ecommerce store-admin dashboard" in first_failure_prompt
+    assert "recognizable generic product thumbnail cards" in first_failure_prompt
+    assert "one filled red star followed by four empty outline stars" in (
+        first_failure_prompt
+    )
+    assert "red thumbs-down icon" in first_failure_prompt
+    assert "same generic product thumbnail lineup" in deep_failure_prompt
+    assert "negative customer-review cards" in deep_failure_prompt
+    assert "return/refund arrow symbol" in deep_failure_prompt
+    assert "no readable letters, words or numbers" in deep_failure_prompt
+
+    review_prompt = generator._review_prompt(STORY_SCENES[3])
+    assert "recognizable product thumbnails" in review_prompt
+    assert "at least one unmistakable negative-review cue" in review_prompt
+    assert "exact icon counts are non-blocking" in review_prompt
+
+
 def test_story_environment_changes_between_videos_but_stays_fixed_within_each(
     tmp_path,
     monkeypatch,

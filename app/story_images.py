@@ -243,14 +243,21 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "only the story moment: the protagonist is sad and discouraged because "
             "he has no sales, with slumped shoulders, visibly disappointed eyes and "
             "a downturned mouth, seated and looking at the same laptop. On its screen "
-            "use a minimal ecommerce dashboard made of blank cards and one simple "
-            "red downward line ending at an empty result, with no readable text or "
-            "numbers. Keep both his sad face and the screen naturally visible."
+            "show a clean ecommerce store-admin dashboard, not generic analytics. "
+            "Include two large recognizable generic product thumbnail cards, such as "
+            "a plain black t-shirt and a simple sneaker, with empty-order indicators. "
+            "Beside them show a customer-review panel with three white review cards. "
+            "Each review card uses one filled red star followed by four empty outline "
+            "stars, a red thumbs-down icon and short gray placeholder lines. Add one "
+            "simple red downward sales chart. Keep these store elements large and "
+            "clear on the angled screen, with no readable text, letters or numbers. "
+            "Keep both his sad face and the complete screen naturally visible."
         ),
         review_criteria=(
             "Same room and right-person/left-laptop three-quarter side composition as "
             "the prior bedroom scene; clear sadness, correct seated pose, complete "
-            "screen visible and an obviously failing dashboard."
+            "screen visible and an obviously failing store dashboard with recognizable "
+            "product thumbnails plus unmistakable low-star or thumbs-down review cues."
         ),
     ),
     StoryScene(
@@ -261,13 +268,22 @@ STORY_SCENES: tuple[StoryScene, ...] = (
             "hunched forward with one clearly visible tear, one hand covering part "
             "of his face and the other near the keyboard or trackpad. Use "
             "dark blue room lighting, laptop glow and a slightly messier desk. The "
-            "screen shows tidy blank analytics cards and a red downward chart with "
-            "no readable letters or numbers. One scene only."
+            "complete screen shows the same ecommerce store and same generic product "
+            "thumbnail lineup established in scene 3, now performing even worse. "
+            "Show two large product cards, several negative customer-review cards "
+            "with one filled red star and four empty outline stars, red thumbs-down "
+            "icons, a small return/refund arrow symbol and a strong red downward sales "
+            "chart. Use only short blank gray lines inside the review cards: no "
+            "readable letters, words or numbers. Keep the interface clean enough that "
+            "the products and bad-review signals remain obvious from the angled view. "
+            "One scene only."
         ),
         review_criteria=(
             "Same bedroom and right-person/left-laptop three-quarter side composition "
             "at night; one distressed protagonist with a believable hand-to-face pose "
-            "and a geometrically correct failing laptop whose screen remains visible."
+            "and a geometrically correct failing laptop whose complete screen remains "
+            "visible, showing recognizable store products and obvious negative-review "
+            "signals such as low-star rows or red thumbs-down icons."
         ),
     ),
     StoryScene(
@@ -1175,6 +1191,10 @@ class StoryCarouselImageGenerator:
             "also blocking. The requested emotion is also mandatory; specifically, "
             "worry, "
             "sadness, a frown or anxious eyebrows are blocking in calm focused scenes. "
+            "In a failure scene that requests them, the screen must show recognizable "
+            "product thumbnails and at least one unmistakable negative-review cue, "
+            "such as a low-star row or red thumbs-down icon; exact icon counts are "
+            "non-blocking. "
             "Score a clean image that tells the required story at least 8/10, "
             "even when it has harmless cosmetic differences.\n\n"
             f"Core scene requirement: {scene.review_criteria}\n\n"
