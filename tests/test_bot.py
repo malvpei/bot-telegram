@@ -37,6 +37,7 @@ from app.bot import (
     story_carousel_command,
     wizard_delivery,
     wizard_gender,
+    wizard_story_language,
     wizard_type,
 )
 from app.config import get_settings
@@ -465,7 +466,7 @@ def test_scheduled_ai_batch_needs_no_instagram_accounts():
         assert service.request.video_type == VideoType.TYPE_4
         assert service.request.gender == VideoGender.MALE
         assert application.bot.events[0][0] == "message"
-        assert "generada por IA en espanol" in application.bot.events[0][1]
+        assert "generada por IA en ES" in application.bot.events[0][1]
         assert application.bot.events[1] == ("album", "ai_1.jpg,ai_2.jpg")
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -1070,7 +1071,7 @@ def test_wizard_delivery_stores_separate_text_choice_and_asks_language():
     ]
 
 
-def test_type_4_button_uses_r2_without_waiting_for_photo():
+def test_type_4_button_asks_language_then_uses_r2_without_waiting_for_photo():
     captured: dict[str, VideoRequest] = {}
 
     async def capture_execute_job(update, context, request):
@@ -1083,16 +1084,27 @@ def test_type_4_button_uses_r2_without_waiting_for_photo():
     with patch("app.bot._execute_job", capture_execute_job):
         state = asyncio.run(wizard_type(update, context))
 
+        assert state == LANGUAGE_STATE
+        assert "idioma" in query.edited_text
+        assert [button.callback_data for button in query.reply_markup.inline_keyboard[0]] == [
+            "wizard:storylang:es",
+            "wizard:storylang:en",
+        ]
+
+        language_query = FakeRegenerateQuery("wizard:storylang:en")
+        language_update = FakeRegenerateUpdate(language_query)
+        state = asyncio.run(wizard_story_language(language_update, context))
+
     assert state == ConversationHandler.END
-    assert "siguiente imagen de R2" in query.edited_text
+    assert "siguiente imagen de R2" in language_query.edited_text
     assert captured["request"].video_type == VideoType.TYPE_4
-    assert captured["request"].language == Language.ES
+    assert captured["request"].language == Language.EN
     assert captured["request"].reference_image_path is None
     assert captured["request"].account_inputs == []
     assert context.user_data == {}
 
 
-def test_story_carousel_command_waits_for_photo():
+def test_story_carousel_command_asks_language_then_waits_for_photo():
     async def allow(update):
         return True
 
@@ -1102,9 +1114,17 @@ def test_story_carousel_command_waits_for_photo():
     with patch("app.bot._ensure_allowed", allow):
         state = asyncio.run(story_carousel_command(update, context))
 
-    assert state == STORY_PHOTO_STATE
+    assert state == LANGUAGE_STATE
     assert context.user_data["video_type"] == "4"
-    assert "foto de referencia" in update.effective_message.text
+    assert "idioma" in update.effective_message.text
+
+    query = FakeRegenerateQuery("wizard:storylang:en")
+    language_update = FakeRegenerateUpdate(query)
+    state = asyncio.run(wizard_story_language(language_update, context))
+
+    assert state == STORY_PHOTO_STATE
+    assert context.user_data["language"] == "en"
+    assert "foto de referencia" in query.edited_text
 
 
 def test_template_video_sends_queue_restart_warning():

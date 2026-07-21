@@ -287,7 +287,7 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
     assert second.choice_key == "b"
     assert (
         second.slides_by_role[SlideRole.HOOK]
-        == "Errores que cuestan dinero\nal empezar en Dropshipping"
+        == "Errores que cuestan dinero\nal empezar en Dropshipping..."
     )
     assert second.slides_by_role[SlideRole.TIP4].startswith(
         "4. Descuidar el trato con el comprador\n"
@@ -636,6 +636,25 @@ def test_type_4_social_titles_and_descriptions_rotate_without_repeating(state_di
 
     restarted = generator.generate(VideoType.TYPE_4, Language.ES)
     assert restarted.social_choice_key == "es_story_1"
+
+
+def test_type_4_has_complete_english_story_and_rotating_social_copy(state_dir):
+    generator = _make_generator(state_dir)
+    package = generator.generate(VideoType.TYPE_4, Language.EN)
+    variants = generator._social_copy_variants(VideoType.TYPE_4, Language.EN)
+
+    assert package.slides_by_role[SlideRole.STORY_MCDONALD].startswith(
+        "This is how I went from working"
+    )
+    assert "Dropradar" in package.slides_by_role[SlideRole.STORY_DROPRADAR]
+    assert package.slides_by_role[SlideRole.STORY_SUCCESS_COMIC] == (
+        "A year and a half later..."
+    )
+    assert list(variants) == [f"en_story_{index}" for index in range(1, 11)]
+    assert len({title for title, _description, _tags in variants.values()}) == 10
+    assert len({description for _title, description, _tags in variants.values()}) == 10
+    assert package.social_choice_key == "en_story_1"
+    assert package.social_copy.title == variants["en_story_1"][0]
 
 
 def test_type_3_can_use_paypal_and_instagram(state_dir, monkeypatch):

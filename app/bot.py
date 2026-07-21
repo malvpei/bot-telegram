@@ -141,6 +141,10 @@ def run_bot() -> None:
             ],
             LANGUAGE_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
+                CallbackQueryHandler(
+                    wizard_story_language,
+                    pattern=r"^wizard:storylang:",
+                ),
                 CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:"),
             ],
             LOWERCASE_STATE: [
@@ -311,7 +315,8 @@ async def batch_reset_command(
     await update.effective_message.reply_text(
         "Rotacion reiniciada. El siguiente lote volvera al orden inicial: "
         "1 ES, 2 ES, 3 EN, IA ES y 1 EN. "
-        "La IA solo aparecera en espanol; el video de mujer queda fuera del lote."
+        "A partir de ahi, la IA rota con la misma frecuencia en ES y EN; "
+        "el video de mujer queda fuera del lote."
     )
 
 
@@ -551,7 +556,8 @@ async def _create_and_send_batch_generated_video(
     result = await asyncio.to_thread(service.create_video, request)
     if result.video_type == VideoType.TYPE_4:
         result_line = (
-            f"Lote {item.position}/{count}: historia generada por IA en espanol.\n"
+            f"Lote {item.position}/{count}: historia generada por IA en "
+            f"{result.language.value.upper()}.\n"
             f"Referencia elegida: {result.chosen_account}"
         )
     else:
@@ -833,7 +839,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
         "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
-        "/story_carousel - crear una historia IA desde una foto enviada al bot\n"
+        "/story_carousel [es|en] - crear una historia IA desde una foto enviada al bot\n"
         "/batch [cantidad] - crear ahora un lote rotativo (5 por defecto)\n"
         "/schedule 5 08:00 17:00 - programar lotes diarios\n"
         "/schedule off - desactivar la programacion\n"
@@ -956,7 +962,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Usa /batch para crear el lote rotativo ahora. Por ejemplo, "
         "/schedule 5 08:00 17:00 prepara cinco piezas todos los dias con "
         "antelacion para esas horas (Europe/Madrid por defecto). La IA rota "
-        "solo en espanol; ingles no usa IA y el video de mujer queda fuera del lote.\n\n"
+        "con la misma frecuencia en espanol e ingles; el video de mujer queda "
+        "fuera del lote.\n\n"
         "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
         "jobs y cuentas recientes no vuelven a cero."
     )
@@ -1309,11 +1316,20 @@ async def story_carousel_command(
 ) -> int:
     if not await _ensure_allowed(update):
         return ConversationHandler.END
-    _prepare_story_carousel_state(context)
+    _prepare_story_carousel_state(context, source="upload")
+    requested_language = _story_language_from_args(getattr(context, "args", []))
+    if requested_language is not None:
+        context.user_data["language"] = requested_language.value
+        await update.effective_message.reply_text(
+            "Mandame la foto de referencia y creo el carrusel IA estilo comic "
+            f"en {requested_language.value.upper()}."
+        )
+        return STORY_PHOTO_STATE
     await update.effective_message.reply_text(
-        "Mandame la foto de referencia y creo el carrusel IA estilo comic."
+        "Elige el idioma del carrusel IA.",
+        reply_markup=_story_language_keyboard(),
     )
-    return STORY_PHOTO_STATE
+    return LANGUAGE_STATE
 
 
 async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1459,26 +1475,12 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     context.user_data["video_type"] = raw_type
 
     if raw_type == VideoType.TYPE_4.value:
-        raw_gender = context.user_data.get("video_gender", VideoGender.MALE.value)
-        try:
-            gender = VideoGender(raw_gender)
-        except ValueError:
-            gender = VideoGender.MALE
+        context.user_data["story_source"] = "r2"
         await query.edit_message_text(
-            "Perfecto. Cojo la siguiente imagen de R2 y creo el carrusel IA estilo comic."
+            "Perfecto. Elige el idioma de la historia IA.",
+            reply_markup=_story_language_keyboard(),
         )
-        request = VideoRequest(
-            chat_id=update.effective_chat.id,
-            user_id=update.effective_user.id,
-            video_type=VideoType.TYPE_4,
-            language=Language.ES,
-            account_inputs=[],
-            gender=gender,
-            lowercase_text=False,
-        )
-        await _execute_job(update, context, request)
-        _clear_wizard_state(context)
-        return ConversationHandler.END
+        return LANGUAGE_STATE
 
     keyboard = InlineKeyboardMarkup(
         [
@@ -1550,6 +1552,50 @@ async def wizard_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         reply_markup=keyboard,
     )
     return LOWERCASE_STATE
+
+
+async def wizard_story_language(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    query = update.callback_query
+    await query.answer()
+    raw_lang = query.data.rsplit(":", maxsplit=1)[-1]
+    try:
+        language = Language(raw_lang)
+    except ValueError:
+        await query.edit_message_text("Idioma no reconocido. Lanza /create otra vez.")
+        return ConversationHandler.END
+    context.user_data["language"] = language.value
+
+    if context.user_data.get("story_source") == "upload":
+        await query.edit_message_text(
+            "Mandame la foto de referencia y creo el carrusel IA estilo comic "
+            f"en {language.value.upper()}."
+        )
+        return STORY_PHOTO_STATE
+
+    raw_gender = context.user_data.get("video_gender", VideoGender.MALE.value)
+    try:
+        gender = VideoGender(raw_gender)
+    except ValueError:
+        gender = VideoGender.MALE
+    await query.edit_message_text(
+        "Perfecto. Cojo la siguiente imagen de R2 y creo el carrusel IA "
+        f"en {language.value.upper()}."
+    )
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.TYPE_4,
+        language=language,
+        account_inputs=[],
+        gender=gender,
+        lowercase_text=False,
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
 
 
 async def wizard_lowercase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1647,7 +1693,7 @@ async def wizard_story_photo(
         chat_id=update.effective_chat.id,
         user_id=update.effective_user.id,
         video_type=VideoType.TYPE_4,
-        language=Language.ES,
+        language=Language(context.user_data.get("language", Language.ES.value)),
         account_inputs=[],
         gender=VideoGender.MALE,
         lowercase_text=False,
@@ -2134,11 +2180,43 @@ def _parse_template_video_command_args(args) -> tuple[Language, str | None]:
     return Language.ES, " ".join(values).strip() or None
 
 
-def _prepare_story_carousel_state(context: ContextTypes.DEFAULT_TYPE) -> None:
+def _story_language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Español",
+                    callback_data="wizard:storylang:es",
+                ),
+                InlineKeyboardButton(
+                    "English",
+                    callback_data="wizard:storylang:en",
+                ),
+            ]
+        ]
+    )
+
+
+def _story_language_from_args(args) -> Language | None:
+    values = [str(value).strip().lower() for value in (args or []) if str(value).strip()]
+    if not values:
+        return None
+    if values[0] in {"en", "eng", "english", "ingles", "inglés"}:
+        return Language.EN
+    if values[0] in {"es", "esp", "spanish", "espanol", "español"}:
+        return Language.ES
+    return None
+
+
+def _prepare_story_carousel_state(
+    context: ContextTypes.DEFAULT_TYPE,
+    *,
+    source: str = "upload",
+) -> None:
     context.user_data["video_type"] = VideoType.TYPE_4.value
-    context.user_data["language"] = Language.ES.value
     context.user_data["video_gender"] = VideoGender.MALE.value
     context.user_data["accounts_snapshot"] = []
+    context.user_data["story_source"] = source
 
 
 async def _download_story_reference_photo(
@@ -2179,6 +2257,7 @@ def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
     context.user_data.pop("language", None)
     context.user_data.pop("separate_slide_text", None)
     context.user_data.pop("reference_image_path", None)
+    context.user_data.pop("story_source", None)
 
 
 def _accounts_path_for_gender(settings, gender: VideoGender):

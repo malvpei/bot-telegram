@@ -46,6 +46,7 @@ from app.render import (
     TEXT_HEAD_AVOID_WEIGHT,
     TYPE_1_HOOK_SIDE_MARGIN,
     TYPE_2_HOOK_FONT_SCALE,
+    TYPE_2_COSTLY_MISTAKES_HOOK_FONT_SCALE,
     TYPE_2_HOOK_INNER_STROKE_WIDTH,
     TYPE_2_HOOK_STROKE_WIDTH,
     TYPE_3_TITLE_FONT_SIZE,
@@ -287,7 +288,7 @@ def test_type_2_balanced_spanish_hook_stays_large(monkeypatch):
     settings = replace(get_settings(), width=1080, height=1920)
     renderer = VideoRenderer(settings)
     image = Image.new("RGB", (1080, 1920), (0, 0, 0))
-    text = "Errores que cuestan dinero\nal empezar en Dropshipping"
+    text = "Errores que cuestan dinero\nal empezar en Dropshipping..."
     captured: dict[str, object] = {}
 
     monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 100)
@@ -312,10 +313,36 @@ def test_type_2_balanced_spanish_hook_stays_large(monkeypatch):
     ]
 
     assert captured["lines"] == text.splitlines()
-    assert getattr(font, "size", 0) >= 68
-    assert abs(widths[0] - widths[1]) <= 40
+    assert getattr(font, "size", 0) >= 62
+    assert abs(widths[0] - widths[1]) <= 100
     assert captured["inner_stroke_width"] == TYPE_2_HOOK_INNER_STROKE_WIDTH
     assert captured["stroke_width"] == TYPE_2_HOOK_STROKE_WIDTH
+
+
+def test_costly_mistakes_hook_uses_its_smaller_scale(monkeypatch):
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+    image = Image.new("RGB", (1080, 1920), (0, 0, 0))
+    captured = {}
+    monkeypatch.setattr(
+        renderer,
+        "_fit_prebroken_lines",
+        lambda *args, **kwargs: renderer._load_type_2_hook_font(100, True),
+    )
+    monkeypatch.setattr(renderer, "_safe_text_start_y", lambda *args, **kwargs: 100)
+    monkeypatch.setattr(
+        renderer,
+        "_draw_lines",
+        lambda draw, lines, font, **kwargs: captured.update(font_size=font.size),
+    )
+
+    renderer._draw_hook_text(
+        image,
+        "Errores que cuestan dinero\nal empezar en Dropshipping...",
+        video_type=VideoType.TYPE_2,
+    )
+
+    assert TYPE_2_COSTLY_MISTAKES_HOOK_FONT_SCALE == 0.92
+    assert captured["font_size"] == 92
 
 
 def test_type_2_hook_is_only_one_percent_smaller_with_stronger_outline(
@@ -925,8 +952,8 @@ def test_type_4_story_caption_prefers_lower_part_of_reserved_top_area():
         media=_candidate(Path("source.jpg")),
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.28
-    assert TYPE_4_STORY_CAPTION_PRIMARY_CENTER == 0.28
+    assert renderer._caption_preferred_centers(slide)[0] == 0.30
+    assert TYPE_4_STORY_CAPTION_PRIMARY_CENTER == 0.30
 
 
 def test_type_4_success_caption_also_uses_reserved_top_area():
@@ -938,7 +965,7 @@ def test_type_4_success_caption_also_uses_reserved_top_area():
         media=_candidate(Path("source.jpg")),
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.28
+    assert renderer._caption_preferred_centers(slide)[0] == 0.30
 
 
 def test_lower_story_caption_still_clears_detected_head_region():

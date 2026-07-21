@@ -15,9 +15,10 @@ TOOLS_TOKEN = "tools"
 AI_TOKEN = "ai"
 DEFAULT_BATCH_TIMES: tuple[str, str] = ("08:00", "17:00")
 
-# Solo el carril masculino en espanol incluye la historia generada por IA.
-# Ingles conserva su rotacion sin IA. El carril femenino queda fuera de los
-# lotes temporalmente, aunque se mantiene su rotacion para compatibilidad.
+# Los carriles masculino ES y EN comparten la misma frecuencia de historias IA,
+# de modo que ambos idiomas recorren tipos 1/2/3, IA y herramientas por igual.
+# El carril femenino queda fuera de los lotes temporalmente, aunque se mantiene
+# su rotacion para compatibilidad.
 SPANISH_MALE_ROTATION: tuple[str, ...] = (
     "1",
     "2",
@@ -33,9 +34,11 @@ ENGLISH_MALE_ROTATION: tuple[str, ...] = (
     "1",
     "2",
     "3",
+    AI_TOKEN,
     "1",
     "2",
     "3",
+    AI_TOKEN,
     TOOLS_TOKEN,
 )
 FEMALE_ROTATION: tuple[str, ...] = ("1", "2")
@@ -70,7 +73,7 @@ class BatchItem:
         if self.kind == BatchItemKind.TOOLS:
             return f"herramientas {self.language.value.upper()}"
         if self.kind == BatchItemKind.AI:
-            return "IA ES (hombre)"
+            return f"IA {self.language.value.upper()} (hombre)"
         gender = "mujer" if self.gender == VideoGender.FEMALE else "hombre"
         return (
             f"tipo {self.video_type.value} {self.language.value.upper()} "
@@ -119,7 +122,7 @@ def build_batch_plan(count: int, phase: int) -> list[BatchItem]:
                 BatchItem(
                     position=index + 1,
                     kind=BatchItemKind.AI,
-                    language=Language.ES,
+                    language=lane.language,
                     gender=VideoGender.MALE,
                     video_type=VideoType.TYPE_4,
                 )

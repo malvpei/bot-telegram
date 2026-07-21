@@ -11,6 +11,7 @@ import pytest
 from PIL import Image, ImageDraw
 
 from app.config import get_settings
+from app.state import StateStore
 from app.story_images import (
     STORY_ENVIRONMENT_VARIANTS,
     STORY_SCENES,
@@ -539,10 +540,10 @@ def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():
         assert "Do not create panels" in prompt
         assert "no horizontal separators" in prompt
         assert "Do not add any readable text" in prompt
-        assert "Keep the upper 36 percent calm" in prompt
+        assert "Keep the upper 39 percent calm" in prompt
         assert "IMMUTABLE STORY CORE" in prompt
         assert "Dropradar" not in prompt
-    assert "fast-food restaurant kitchen" in prompts[STORY_SCENES[0].role]
+    assert "selected fast-food restaurant area" in prompts[STORY_SCENES[0].role]
     assert "No luxury shirt" in prompts[STORY_SCENES[0].role]
     assert "no logo, brand mark, letters or name tag" in prompts[
         STORY_SCENES[0].role
@@ -633,6 +634,7 @@ def test_story_environment_changes_between_videos_but_stays_fixed_within_each(
 
     assert selected_profiles[0][0] != selected_profiles[1][0]
     assert STORY_ENVIRONMENT_VARIANTS[0].restaurant in selected_profiles[0][1]
+    assert STORY_ENVIRONMENT_VARIANTS[0].restaurant_action in selected_profiles[0][1]
     assert STORY_ENVIRONMENT_VARIANTS[0].bedroom in selected_profiles[0][2]
     assert generator._active_environment_variant is None
 
@@ -650,11 +652,35 @@ def test_selected_environment_is_injected_only_into_matching_story_scenes():
     success_prompt = generator._build_prompt(STORY_SCENES[5])
 
     assert variant.restaurant in restaurant_prompt
+    assert variant.restaurant_action in restaurant_prompt
     assert variant.bedroom not in restaurant_prompt
     assert all(variant.bedroom in prompt for prompt in bedroom_prompts)
     assert all(variant.restaurant not in prompt for prompt in bedroom_prompts)
     assert variant.restaurant not in success_prompt
     assert variant.bedroom not in success_prompt
+    assert "FINAL-PANEL REFERENCE FIDELITY HAS PRIORITY" in success_prompt
+
+
+def test_story_environment_cycle_survives_generator_restart(tmp_path):
+    state = StateStore(tmp_path / "state")
+    selected_keys = []
+    for _ in STORY_ENVIRONMENT_VARIANTS:
+        generator = StoryCarouselImageGenerator(get_settings(), state=state)
+        selected_keys.append(generator._choose_environment_variant().key)
+
+    assert selected_keys == [variant.key for variant in STORY_ENVIRONMENT_VARIANTS]
+    restarted = StoryCarouselImageGenerator(get_settings(), state=state)
+    assert restarted._choose_environment_variant().key == STORY_ENVIRONMENT_VARIANTS[0].key
+
+
+def test_final_scene_review_requires_original_composition_fidelity():
+    generator = StoryCarouselImageGenerator(get_settings())
+
+    prompt = generator._review_prompt(STORY_SCENES[5])
+
+    assert "Compare it directly with image 1" in prompt
+    assert "car model/color/angle" in prompt
+    assert "Only the illustration style should materially change" in prompt
 
 
 def test_story_environment_is_cleared_when_generation_fails(tmp_path, monkeypatch):

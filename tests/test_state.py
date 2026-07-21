@@ -140,6 +140,22 @@ def test_type_3_background_queue_rotates_globally(state_dir):
     assert store.get_next_type_3_background_id(background_ids) == "bg-1"
 
 
+def test_template_queue_does_not_replay_when_pool_changes_mid_cycle(state_dir):
+    store = StateStore(state_dir)
+
+    assert store.get_next_template_video_id("videos", ["a", "b", "c"])[0] == "a"
+    # Removing the already-served first entry must not shift a cursor back to b/a.
+    assert store.get_next_template_video_id("videos", ["b", "c", "d"])[0] == "b"
+    assert store.get_next_template_video_id("videos", ["b", "c", "d"])[0] == "c"
+    assert store.get_next_template_video_id("videos", ["b", "c", "d"])[0] == "d"
+    selected, restarted = store.get_next_template_video_id(
+        "videos",
+        ["b", "c", "d"],
+    )
+    assert selected == "b"
+    assert restarted is True
+
+
 def test_memory_snapshot_reports_usage_and_account_diversity(state_dir):
     store = StateStore(state_dir)
     store.ensure_persistence_marker()

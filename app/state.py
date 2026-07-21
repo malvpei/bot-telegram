@@ -46,6 +46,7 @@ class StateStore:
         self._type_3_background_queue_path = self.state_dir / "type3_background_queue.json"
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
+        self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
         self._last_batch_run_path = self.state_dir / "last_batch_run.json"
@@ -355,6 +356,7 @@ class StateStore:
         self,
         scope: str,
         video_ids: list[str],
+        legacy_aliases: dict[str, str] | None = None,
     ) -> tuple[str | None, bool]:
         if not video_ids:
             return None, False
@@ -369,27 +371,126 @@ class StateStore:
             queue = scopes.get(scope_key)
             if not isinstance(queue, dict):
                 queue = {}
+            if legacy_aliases:
+                queue = dict(queue)
+                for field in ("order", "remaining"):
+                    values = queue.get(field)
+                    if isinstance(values, list):
+                        queue[field] = [
+                            legacy_aliases.get(str(value), str(value))
+                            for value in values
+                        ]
+                last_selected = queue.get("last_selected")
+                if last_selected is not None:
+                    queue["last_selected"] = legacy_aliases.get(
+                        str(last_selected),
+                        str(last_selected),
+                    )
 
             order = self._normalize_template_video_order(queue, video_ids)
-            cursor = queue.get("cursor", 0)
-            try:
-                cursor = int(cursor)
-            except (TypeError, ValueError):
-                cursor = 0
-            if cursor < 0:
-                cursor = 0
+            saved_order = self._normalize_template_video_order(
+                {},
+                queue.get("order", []) if isinstance(queue, dict) else [],
+            )
+            saved_remaining = queue.get("remaining")
+            if isinstance(saved_remaining, list):
+                # Keep an explicit set of videos not yet served in this cycle.
+                # A numeric cursor can point backwards when files are removed or
+                # renamed, which was the source of intermittent repeats.
+                remaining = self._normalize_template_video_order(
+                    {},
+                    [
+                        video_id
+                        for video_id in saved_remaining
+                        if video_id in order
+                    ],
+                )
+                known_ids = set(saved_order)
+                remaining.extend(
+                    video_id
+                    for video_id in order
+                    if video_id not in known_ids and video_id not in remaining
+                )
+                started = bool(queue.get("started", True))
+            else:
+                # Migrate the old cursor format without replaying entries that
+                # were already served before the deployment.
+                cursor = queue.get("cursor", 0)
+                try:
+                    cursor = max(0, int(cursor))
+                except (TypeError, ValueError):
+                    cursor = 0
+                already_served = set(saved_order[:cursor])
+                remaining = [
+                    video_id for video_id in order if video_id not in already_served
+                ]
+                started = cursor > 0
 
-            restarted = False
-            if cursor >= len(order):
-                cursor = 0
-                restarted = True
+            restarted = bool(started and not remaining)
+            if not remaining:
+                remaining = list(order)
 
-            selected = order[cursor] if order else None
+            selected = remaining.pop(0) if remaining else None
             scopes[scope_key] = {
                 "order": order,
-                "cursor": cursor + 1,
+                "remaining": remaining,
+                "last_selected": selected,
+                "started": selected is not None,
             }
             self._write_json(self._template_video_queue_path, {"scopes": scopes})
+        return selected, restarted
+
+    def get_next_story_environment_id(
+        self,
+        environment_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        """Rotate every story environment once and persist across restarts."""
+        return self._get_next_simple_cycle_id(
+            self._story_environment_queue_path,
+            environment_ids,
+        )
+
+    def _get_next_simple_cycle_id(
+        self,
+        path: Path,
+        item_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        if not item_ids:
+            return None, False
+        with self._exclusive():
+            queue = self._read_json(path, {})
+            if not isinstance(queue, dict):
+                queue = {}
+            order = self._normalize_template_video_order(queue, item_ids)
+            remaining_raw = queue.get("remaining")
+            if isinstance(remaining_raw, list):
+                remaining = self._normalize_template_video_order(
+                    {},
+                    [item for item in remaining_raw if item in order],
+                )
+                old_order = set(queue.get("order", []))
+                remaining.extend(
+                    item
+                    for item in order
+                    if item not in old_order and item not in remaining
+                )
+                started = bool(queue.get("started", True))
+            else:
+                remaining = list(order)
+                started = False
+            restarted = bool(started and not remaining)
+            if not remaining:
+                remaining = list(order)
+            selected = remaining.pop(0) if remaining else None
+            self._write_json(
+                path,
+                {
+                    "order": order,
+                    "remaining": remaining,
+                    "last_selected": selected,
+                    "started": selected is not None,
+                },
+            )
         return selected, restarted
 
     def get_next_story_reference_image_id(

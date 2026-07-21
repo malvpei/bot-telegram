@@ -60,16 +60,18 @@ def test_spanish_male_lane_runs_ai_after_each_type_cycle_then_tools():
     assert first_lane[-1].kind == BatchItemKind.TOOLS
 
 
-def test_second_batch_advances_each_lane_without_early_ai():
+def test_second_batch_advances_each_lane_and_can_schedule_english_ai():
     plan = build_batch_plan(5, phase=1)
 
     assert [item.video_type.value if item.video_type else "tools" for item in plan] == [
         "2",
         "3",
-        "1",
+        "4",
         "1",
         "2",
     ]
+    assert plan[2].kind == BatchItemKind.AI
+    assert plan[2].language == Language.EN
     assert plan[3].kind == BatchItemKind.GENERATED
     assert plan[3].video_type == VideoType.TYPE_1
     assert all(item.gender == VideoGender.MALE for item in plan)
@@ -89,26 +91,24 @@ def test_legacy_batch_lane_constructor_and_rotation_alias_stay_compatible():
     lane = BatchLane(Language.EN, VideoGender.MALE, 0)
 
     assert lane.rotation == ROTATION
-    assert ROTATION == ("1", "2", "3", "1", "2", "3", "tools")
+    assert ROTATION == ("1", "2", "3", "ai", "1", "2", "3", "ai", "tools")
 
 
-def test_ai_never_enters_english_and_no_women_enter_batches():
-    assert BATCH_ROTATION_CYCLE_LENGTH == 63
-    ai_items = []
+def test_ai_rotates_equally_in_english_and_spanish_and_no_women_enter_batches():
+    assert BATCH_ROTATION_CYCLE_LENGTH == 9
+    ai_items = {Language.ES: 0, Language.EN: 0}
     for phase in range(BATCH_ROTATION_CYCLE_LENGTH):
         plan = build_batch_plan(5, phase=phase)
         for item in plan:
             assert item.gender == VideoGender.MALE
-            if item.language == Language.EN:
-                assert item.kind != BatchItemKind.AI
-                assert item.video_type != VideoType.TYPE_4
             if item.kind == BatchItemKind.AI:
-                ai_items.append(item)
-                assert item.language == Language.ES
+                ai_items[item.language] += 1
                 assert item.gender == VideoGender.MALE
                 assert item.video_type == VideoType.TYPE_4
 
-    assert ai_items
+    # There are three Spanish lanes and two English lanes, but each individual
+    # lane contains exactly two AI slots in the same nine-step cycle.
+    assert ai_items == {Language.ES: 6, Language.EN: 4}
     assert [item.short_label for item in build_batch_plan(5, 0)] == [
         item.short_label
         for item in build_batch_plan(5, BATCH_ROTATION_CYCLE_LENGTH)

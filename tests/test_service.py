@@ -173,6 +173,25 @@ class PrefixFallbackR2Storage(FakeR2Storage):
         return []
 
 
+class DuplicateTemplateR2Storage(FakeR2Storage):
+    def list_videos(self, prefix: str):
+        self.listed_prefix = prefix
+        return [
+            R2Object(key="videos/copy-a.mp4", size=10, etag="same-etag"),
+            R2Object(key="videos/copy-b.mp4", size=10, etag="same-etag"),
+            R2Object(key="videos/different.mp4", size=20, etag="different-etag"),
+        ]
+
+    def download(self, key: str, destination: Path) -> Path:
+        self.downloaded_key = key
+        self.download_count += 1
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(
+            b"same-video" if "copy-" in key else b"different-video"
+        )
+        return destination
+
+
 class FakeStoryImageGenerator:
     def __init__(self) -> None:
         self.reference_image_path: Path | None = None
@@ -515,6 +534,50 @@ def test_type_4_generates_six_ai_slides_and_normalizes_original_reference():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_4_renders_complete_english_story():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            width=72,
+            height=128,
+        )
+        reference = root / "reference.jpg"
+        Image.new("RGB", (90, 120), (20, 40, 60)).save(reference)
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.script_generator = ScriptGenerator(service.state)
+        service.renderer = FakeRenderer()
+        service.story_image_generator = FakeStoryImageGenerator()
+
+        result = service._create_story_carousel_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=1,
+                video_type=VideoType.TYPE_4,
+                language=Language.EN,
+                account_inputs=[],
+                reference_image_path=reference,
+            )
+        )
+
+        assert result.language == Language.EN
+        assert result.slides[0].text.startswith("This is how I went")
+        assert result.slides[4].text.startswith("Then I found Dropradar")
+        assert service.state.get_last_social_choice(
+            VideoType.TYPE_4,
+            Language.EN,
+        ) == "en_story_1"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_type_4_downloads_reference_from_r2_when_no_photo_is_passed():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -749,6 +812,40 @@ def test_create_template_video_downloads_from_r2_when_configured(monkeypatch):
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_r2_template_queue_deduplicates_objects_with_same_content_etag():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            r2_input_prefix="videos",
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = FakeRenderer()
+        service.r2_storage = DuplicateTemplateR2Storage()
+        service.state = StateStore(root / "state")
+        service._job_lock = Lock()
+
+        first = service.create_template_video()
+        first_bytes = service.renderer.template_input_video.read_bytes()
+        second = service.create_template_video()
+        second_bytes = service.renderer.template_input_video.read_bytes()
+        third = service.create_template_video()
+        third_bytes = service.renderer.template_input_video.read_bytes()
+
+        assert first.queue_restarted is False
+        assert second.queue_restarted is False
+        assert first_bytes != second_bytes
+        assert third.queue_restarted is True
+        assert third_bytes == first_bytes
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_r2_template_cache_is_bounded_and_prunes_stale_partials(
     tmp_path,
     monkeypatch,
@@ -856,6 +953,44 @@ def test_template_video_queue_appends_new_videos_to_end():
         assert picked_third == third
         assert picked_restart == first
         assert result_restart.queue_restarted is True
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_template_video_queue_deduplicates_identical_file_copies():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        source_dir = root / "template_videos"
+        source_dir.mkdir()
+        (source_dir / "copy-a.mp4").write_bytes(b"same-video")
+        (source_dir / "copy-b.mp4").write_bytes(b"same-video")
+        (source_dir / "different.mp4").write_bytes(b"different-video")
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            template_videos_dir=source_dir,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.renderer = FakeRenderer()
+        service.state = StateStore(root / "state")
+        service._job_lock = Lock()
+
+        first = service.create_template_video()
+        first_bytes = service.renderer.template_input_video.read_bytes()
+        second = service.create_template_video()
+        second_bytes = service.renderer.template_input_video.read_bytes()
+        third = service.create_template_video()
+        third_bytes = service.renderer.template_input_video.read_bytes()
+
+        assert first.queue_restarted is False
+        assert second.queue_restarted is False
+        assert first_bytes != second_bytes
+        assert third.queue_restarted is True
+        assert third_bytes == first_bytes
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

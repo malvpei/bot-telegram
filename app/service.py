@@ -273,7 +273,10 @@ class VideoCreationService:
         self.script_generator = ScriptGenerator(self.state)
         self.renderer = VideoRenderer(self.settings)
         self.r2_storage = R2StorageClient(self.settings)
-        self.story_image_generator = StoryCarouselImageGenerator(self.settings)
+        self.story_image_generator = StoryCarouselImageGenerator(
+            self.settings,
+            state=self.state,
+        )
         # instaloader holds session/cookies that aren't safe to share across
         # concurrent threads, so we serialize the whole pipeline. Telegram
         # video generation is a single-tenant workflow anyway.
@@ -607,6 +610,10 @@ class VideoCreationService:
         )
 
     def _create_story_carousel_locked(self, request: VideoRequest) -> GenerationResult:
+        try:
+            story_language = Language(request.language)
+        except (TypeError, ValueError):
+            story_language = Language.ES
         job_id = self._build_job_id()
         job_dir = self._job_output_dir(job_id, request.user_id)
         reference_image_path = request.reference_image_path
@@ -632,7 +639,7 @@ class VideoCreationService:
 
             script_package = self.script_generator.generate(
                 VideoType.TYPE_4,
-                Language.ES,
+                story_language,
                 gender=request.gender,
                 lowercase_text=False,
             )
@@ -668,7 +675,7 @@ class VideoCreationService:
             plan = VideoPlan(
                 chosen_account=reference_source,
                 video_type=VideoType.TYPE_4,
-                language=Language.ES,
+                language=story_language,
                 slides=slides,
                 used_media_ids=list(reserved_media_ids),
                 fallback_accounts=[],
@@ -678,7 +685,7 @@ class VideoCreationService:
             if script_package.social_choice_key:
                 self.state.set_last_social_choice(
                     VideoType.TYPE_4,
-                    Language.ES,
+                    story_language,
                     script_package.social_choice_key,
                 )
             self.state.log_job(
@@ -688,7 +695,7 @@ class VideoCreationService:
                     requested_accounts=[reference_source],
                     fallback_accounts=[],
                     video_type=VideoType.TYPE_4,
-                    language=Language.ES,
+                    language=story_language,
                     video_path=str(video_path) if video_path is not None else None,
                     script_path=str(script_path),
                     gender=request.gender.value,
@@ -707,7 +714,7 @@ class VideoCreationService:
             social_copy=script_package.social_copy,
             chosen_account=plan.chosen_account,
             video_type=VideoType.TYPE_4,
-            language=Language.ES,
+            language=story_language,
             fallback_accounts=[],
             slides=list(plan.slides),
             pool_remaining=0,
@@ -1205,13 +1212,21 @@ class VideoCreationService:
             scope = f" bajo el prefijo {r2_prefix!r}" if r2_prefix else ""
             raise ValueError(f"No encontré videos en R2{scope}.")
         ordered_videos = sorted(videos, key=lambda item: item.key)
-        selected_key, queue_restarted = self.state.get_next_template_video_id(
+        videos_by_identity = {
+            self._r2_template_content_identity(video): video
+            for video in ordered_videos
+        }
+        selected_identity, queue_restarted = self.state.get_next_template_video_id(
             f"r2:{r2_prefix}",
-            [video.key for video in ordered_videos],
+            list(videos_by_identity),
+            legacy_aliases={
+                video.key: self._r2_template_content_identity(video)
+                for video in ordered_videos
+            },
         )
-        selected = next(
-            (video for video in ordered_videos if video.key == selected_key),
-            ordered_videos[0],
+        selected = videos_by_identity.get(
+            selected_identity,
+            next(iter(videos_by_identity.values())),
         )
         suffix = Path(selected.key).suffix.lower() or ".mp4"
         object_identity = "|".join(
@@ -1331,14 +1346,45 @@ class VideoCreationService:
                 f"{source_dir}."
             )
         ordered_candidates = sorted(candidates)
+        identities_by_path = {
+            path: self._local_template_content_identity(path)
+            for path in ordered_candidates
+        }
+        candidates_by_identity = {
+            identity: path for path, identity in identities_by_path.items()
+        }
         selected_id, queue_restarted = self.state.get_next_template_video_id(
             f"local:{source_dir.resolve()}",
-            [str(path.resolve()) for path in ordered_candidates],
+            list(candidates_by_identity),
+            legacy_aliases={
+                str(path.resolve()): identity
+                for path, identity in identities_by_path.items()
+            },
         )
-        selected_path = Path(selected_id) if selected_id else ordered_candidates[0]
-        if selected_path not in ordered_candidates:
-            selected_path = ordered_candidates[0]
-        return selected_path, queue_restarted
+        return (
+            candidates_by_identity.get(
+                selected_id,
+                next(iter(candidates_by_identity.values())),
+            ),
+            queue_restarted,
+        )
+
+    @staticmethod
+    def _local_template_content_identity(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return f"sha256:{digest.hexdigest()}"
+
+    @staticmethod
+    def _r2_template_content_identity(video) -> str:
+        etag = str(getattr(video, "etag", "") or "").strip().strip('"').lower()
+        if etag:
+            return f"etag:{etag}:{int(getattr(video, 'size', 0) or 0)}"
+        # Older/test R2 listings may not expose an ETag. The key is then the
+        # strongest stable identity available without downloading every object.
+        return f"key:{video.key}"
 
     def _normalize_slide_images(
         self,

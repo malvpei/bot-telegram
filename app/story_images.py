@@ -21,6 +21,7 @@ from PIL import Image, ImageOps, ImageStat
 
 from app.config import Settings
 from app.models import MediaCandidate, SlideRole
+from app.state import StateStore
 
 
 LOGGER = logging.getLogger(__name__)
@@ -48,7 +49,7 @@ NO_OVERLAY_TEXT_DIRECTIVE = (
     "subtitles, labels, brand names, watermarks or social-media UI anywhere in "
     "the illustration. Do not add unrelated company logos to clothes or devices. "
     "Use simple abstract interface shapes instead. An external "
-    "compositor will add all exact wording later. Keep the upper 36 percent calm "
+    "compositor will add all exact wording later. Keep the upper 39 percent calm "
     "and uncluttered for that external caption, without putting the protagonist's "
     "face, hands or important objects there."
 )
@@ -115,6 +116,17 @@ IMMUTABLE_STORY_CORE_DIRECTIVE = (
     "required by the scene. This subject-and-camera blueprint has priority over "
     "every environment description."
 )
+ORIGINAL_COMPOSITION_FIDELITY_DIRECTIVE = (
+    "FINAL-PANEL REFERENCE FIDELITY HAS PRIORITY: input 1 is the exact source "
+    "photo and must remain the composition blueprint. Preserve the protagonist's "
+    "body pose, orientation, scale and position; the car model, color, angle, "
+    "scale and position; the crop, camera height, horizon, road, mountains, trees, "
+    "sky and major background landmarks as closely as an illustration permits. "
+    "Do not redesign, relocate, mirror, zoom, recrop, add or remove the main "
+    "subjects. Change only the rendering medium into the established flat 2D "
+    "cartoon style. Input 2, when present, supplies style only and must never "
+    "override input 1's composition."
+)
 
 
 @dataclass(frozen=True)
@@ -136,6 +148,8 @@ class StoryImageReview:
 class StoryEnvironmentVariant:
     key: str
     restaurant: str
+    restaurant_action: str
+    restaurant_review: str
     bedroom: str
 
 
@@ -145,12 +159,21 @@ STORY_ENVIRONMENT_VARIANTS: tuple[StoryEnvironmentVariant, ...] = (
         restaurant=(
             "cream subway tiles with a narrow muted-red trim, brushed-steel prep "
             "counters, warm ceiling lights and compact black menu-board shapes "
-            "without readable text"
+            "without readable text; this is the front service counter, not the kitchen"
+        ),
+        restaurant_action=(
+            "He works at the front counter taking one customer's order, with one "
+            "hand resting beside a generic touchscreen register and the other "
+            "gesturing politely; the customer is only a small background figure"
+        ),
+        restaurant_review=(
+            "front-counter worker clearly taking an order beside a register"
         ),
         bedroom=(
             "warm beige walls, a walnut desk, an olive-green desk lamp, navy "
-            "curtains, two short floating shelves and one simple car print without "
-            "readable text"
+            "curtains, two staggered floating shelves with books and a plant, a "
+            "woven rug, cork pinboard with blank notes and one simple car print "
+            "without readable text"
         ),
     ),
     StoryEnvironmentVariant(
@@ -159,10 +182,18 @@ STORY_ENVIRONMENT_VARIANTS: tuple[StoryEnvironmentVariant, ...] = (
             "light-gray wall tiles with charcoal lower panels, red pendant lights, "
             "a stainless central prep bench and a compact open fry station"
         ),
+        restaurant_action=(
+            "He works at the grill cooking patties with a metal spatula in one hand, "
+            "standing safely beside the visible flat-top grill; no finished burger "
+            "is required in his hands"
+        ),
+        restaurant_review=(
+            "kitchen worker visibly cooking patties at the grill with a spatula"
+        ),
         bedroom=(
             "muted sage walls, a light-oak desk, a matte-black desk lamp, a cream "
-            "roller blind, one tall narrow bookcase and two small geometric wall "
-            "prints without readable text"
+            "roller blind, one tall narrow bookcase, a pegboard with headphones and "
+            "small shelves, a round rug and two geometric wall prints without text"
         ),
     ),
     StoryEnvironmentVariant(
@@ -171,10 +202,18 @@ STORY_ENVIRONMENT_VARIANTS: tuple[StoryEnvironmentVariant, ...] = (
             "warm tan ceramic tiles, dark-red cabinet fronts, silver extraction "
             "hoods, a side grill and stacked plain paper food boxes"
         ),
+        restaurant_action=(
+            "He works at the burger assembly station, placing lettuce onto one open "
+            "burger on a clean wrapper while the bun and ingredients remain visible"
+        ),
+        restaurant_review=(
+            "kitchen worker clearly assembling one burger at a preparation station"
+        ),
         bedroom=(
             "a dusty-blue accent wall with the other walls off-white, a medium-oak "
-            "desk, a small white articulated lamp, gray curtains, a low cube shelf "
-            "and one minimalist road print without readable text"
+            "desk, a small white articulated lamp, gray curtains, a low cube shelf, "
+            "a floor plant, a skateboard leaned against the wall and one minimalist "
+            "road print without readable text"
         ),
     ),
     StoryEnvironmentVariant(
@@ -183,10 +222,93 @@ STORY_ENVIRONMENT_VARIANTS: tuple[StoryEnvironmentVariant, ...] = (
             "clean off-white square tiles, dark graphite worktops, slim red accent "
             "strips, a wall-mounted utensil rail and a bright side preparation area"
         ),
+        restaurant_action=(
+            "He works at the fries station lifting one fryer basket above the fryer "
+            "with both hands on its insulated handle; fries and the station are clear"
+        ),
+        restaurant_review=(
+            "kitchen worker clearly operating a fryer basket at the fries station"
+        ),
         bedroom=(
             "warm light-gray walls, a dark-oak desk, a compact brass lamp, rust-"
-            "colored curtains, one asymmetrical wall shelf and a small abstract "
-            "sports-car poster without readable text"
+            "colored curtains, one asymmetrical wall shelf, a slim record cabinet, "
+            "two framed abstract prints and a small sports-car poster without text"
+        ),
+    ),
+    StoryEnvironmentVariant(
+        key="brick_teal",
+        restaurant=(
+            "white brick-pattern walls, teal-gray counter panels, warm downlights, "
+            "a stainless packing counter and shelves of plain folded takeaway bags"
+        ),
+        restaurant_action=(
+            "He works at the drive-through packing station, checking one open paper "
+            "takeaway bag and placing a wrapped burger inside it"
+        ),
+        restaurant_review=(
+            "worker clearly packing a drive-through takeaway order into a paper bag"
+        ),
+        bedroom=(
+            "an exposed pale-brick accent wall, deep-teal side walls, a black metal "
+            "and oak desk, an orange cone lamp, bamboo blinds, a vinyl-record shelf, "
+            "hanging plant and a framed city illustration without readable text"
+        ),
+    ),
+    StoryEnvironmentVariant(
+        key="sand_green",
+        restaurant=(
+            "sand-colored wall panels, forest-green lower cabinets, a bright drinks "
+            "counter, stainless cup holders and abstract overhead menu panels"
+        ),
+        restaurant_action=(
+            "He works at the drinks and dessert station filling one plain paper cup "
+            "from a beverage dispenser while watching it carefully"
+        ),
+        restaurant_review=(
+            "worker clearly filling a drink at the beverage station"
+        ),
+        bedroom=(
+            "soft sand walls with a forest-green alcove, a pale ash desk, a green "
+            "glass lamp, linen curtains, a ladder shelf with books and ceramics, a "
+            "small cactus collection and a patterned runner rug"
+        ),
+    ),
+    StoryEnvironmentVariant(
+        key="navy_copper",
+        restaurant=(
+            "cool white tiles with navy counter fronts, copper pendant lights, a "
+            "bright refrigerated preparation bench and neatly arranged ingredients"
+        ),
+        restaurant_action=(
+            "He works at the cold preparation station, portioning lettuce and tomato "
+            "into ingredient trays with clean food-service tongs"
+        ),
+        restaurant_review=(
+            "worker clearly preparing fresh ingredients with tongs at a prep bench"
+        ),
+        bedroom=(
+            "a navy accent wall and pale-gray side walls, a honey-oak desk, a copper "
+            "task lamp, white blinds, a wall grid with blank cards, a guitar on a "
+            "stand, a small speaker and three framed line-art prints without text"
+        ),
+    ),
+    StoryEnvironmentVariant(
+        key="terracotta_cream",
+        restaurant=(
+            "cream wall tiles, terracotta-red booth backs, black window frames, warm "
+            "globe lights and a clean dining area visible behind the service zone"
+        ),
+        restaurant_action=(
+            "He works in the dining area wiping one empty table with a cloth while "
+            "holding a small cleaning spray bottle in the other hand"
+        ),
+        restaurant_review=(
+            "restaurant worker clearly cleaning a dining table with cloth and spray"
+        ),
+        bedroom=(
+            "warm cream walls with a terracotta arch painted behind the desk, a dark "
+            "walnut desk, a cream mushroom lamp, checked curtains, a round wall "
+            "mirror, two plants, a low drawer unit and travel photos with no text"
         ),
     ),
 )
@@ -197,19 +319,20 @@ STORY_SCENES: tuple[StoryScene, ...] = (
         role=SlideRole.STORY_MCDONALD,
         prompt=(
             "Scene 1: transform the reference person into the protagonist working "
-            "sadly in one busy fast-food restaurant kitchen. He wears a black "
+            "sadly during one shift in the selected fast-food restaurant area. He "
+            "wears a black "
             "short-sleeve polo uniform, red visor and black or red apron. Keep the "
             "uniform completely generic: no logo, brand mark, letters or name tag "
-            "is required. No luxury shirt, car clothing or sunglasses. He stands "
-            "centered in the lower half holding one finished burger with both hands, "
-            "tired expression. "
-            "Show industrial fryers, grill, fries and burgers; coworkers may appear "
-            "only as small indistinct background silhouettes. Do not show a laptop, "
-            "desk, bedroom or car in this restaurant scene."
+            "is required. No luxury shirt, car clothing or sunglasses. Give him a "
+            "tired, discouraged expression while he performs the exact per-video "
+            "work task specified below with believable hands and appropriate tools. "
+            "Do not replace that task with laptop work or a generic pose. Coworkers "
+            "or customers may appear only as small indistinct background figures. "
+            "Do not show a laptop, desk, bedroom or car in this restaurant scene."
         ),
         review_criteria=(
-            "One tired fast-food worker in a restaurant kitchen, holding one burger "
-            "with believable hands, wearing the requested black/red uniform."
+            "One tired fast-food worker wearing the requested generic black/red "
+            "uniform and visibly performing the selected per-video restaurant task."
         ),
     ),
     StoryScene(
@@ -317,27 +440,37 @@ STORY_SCENES: tuple[StoryScene, ...] = (
     StoryScene(
         role=SlideRole.STORY_SUCCESS_COMIC,
         prompt=(
-            "Scene 6: transform the original reference photo into the exact same flat "
-            "cartoon style used by this story. Preserve the photo composition closely: "
-            "one outdoor road scene, the same young man beside one black Porsche 911 "
-            "GT3-style sports car, mountains, trees and dramatic cloudy sky. Do not "
+            "Scene 6: redraw the original reference photo in the exact same flat "
+            "cartoon style used by this story while retaining its composition almost "
+            "one-to-one. The person, car, road and every major background element must "
+            "stay at the same side, scale, angle and crop as input 1. Keep the exact "
+            "sports-car model and color visible in input 1 rather than inventing a "
+            "different car. Do not "
             "show a bedroom, laptop, desk, restaurant, lamp or poster. The protagonist "
             "is happy and proud. No text inside the image."
         ),
         review_criteria=(
             "One proud recognizable protagonist beside one well-formed black sports "
-            "car outdoors, matching the reference composition and the story's 2D style."
+            "car outdoors, matching the original reference pose, subject placement, "
+            "crop, car angle and background composition very closely, in the story's "
+            "2D style."
         ),
     ),
 )
 
 
 class StoryCarouselImageGenerator:
-    def __init__(self, settings: Settings) -> None:
+    def __init__(
+        self,
+        settings: Settings,
+        state: StateStore | None = None,
+    ) -> None:
         self.settings = settings
+        self.state = state
         self._generation_lock = Lock()
         self._active_environment_variant: StoryEnvironmentVariant | None = None
         self._last_environment_variant_key: str | None = None
+        self._environment_cycle_remaining: list[str] = []
 
     def generate_slides(
         self,
@@ -460,14 +593,30 @@ class StoryCarouselImageGenerator:
         return generated
 
     def _choose_environment_variant(self) -> StoryEnvironmentVariant:
-        available = [
-            variant
-            for variant in STORY_ENVIRONMENT_VARIANTS
-            if variant.key != self._last_environment_variant_key
-        ]
-        if not available:
-            available = list(STORY_ENVIRONMENT_VARIANTS)
-        selected = random.choice(available)
+        variants_by_key = {
+            variant.key: variant for variant in STORY_ENVIRONMENT_VARIANTS
+        }
+        if self.state is not None:
+            selected_key, restarted = self.state.get_next_story_environment_id(
+                list(variants_by_key)
+            )
+            if restarted:
+                LOGGER.info("Story environment queue restarted after full cycle")
+            selected = variants_by_key.get(
+                selected_key,
+                STORY_ENVIRONMENT_VARIANTS[0],
+            )
+        else:
+            if not self._environment_cycle_remaining:
+                self._environment_cycle_remaining = list(variants_by_key)
+            available = [
+                key
+                for key in self._environment_cycle_remaining
+                if key != self._last_environment_variant_key
+            ] or list(self._environment_cycle_remaining)
+            selected_key = random.choice(available)
+            self._environment_cycle_remaining.remove(selected_key)
+            selected = variants_by_key[selected_key]
         self._last_environment_variant_key = selected.key
         return selected
 
@@ -1165,6 +1314,25 @@ class StoryCarouselImageGenerator:
         )
 
     def _review_prompt(self, scene: StoryScene) -> str:
+        role_specific = ""
+        if (
+            scene.role == SlideRole.STORY_MCDONALD
+            and self._active_environment_variant is not None
+        ):
+            role_specific = (
+                "For this candidate, the mandatory selected work assignment is: "
+                f"{self._active_environment_variant.restaurant_review}. Reject a "
+                "generic standing pose or a different restaurant job as wrong action. "
+            )
+        elif scene.role == SlideRole.STORY_SUCCESS_COMIC:
+            role_specific = (
+                "For this final candidate, small composition differences are NOT "
+                "automatically acceptable. Compare it directly with image 1. A major "
+                "change to the person's pose or placement, car model/color/angle or "
+                "placement, crop, camera side, road, horizon or principal background "
+                "layout is a blocking composition failure. Only the illustration style "
+                "should materially change. "
+            )
         return (
             "You are the practical visual quality gate for a vertical social-media "
             "story. Image 1 is the original identity/photo reference. If three "
@@ -1195,6 +1363,7 @@ class StoryCarouselImageGenerator:
             "product thumbnails and at least one unmistakable negative-review cue, "
             "such as a low-star row or red thumbs-down icon; exact icon counts are "
             "non-blocking. "
+            f"{role_specific}"
             "Score a clean image that tells the required story at least 8/10, "
             "even when it has harmless cosmetic differences.\n\n"
             f"Core scene requirement: {scene.review_criteria}\n\n"
@@ -1304,9 +1473,11 @@ class StoryCarouselImageGenerator:
         if scene.role == SlideRole.STORY_MCDONALD:
             return (
                 "PER-VIDEO RESTAURANT ENVIRONMENT: use "
-                f"{selected.restaurant}. Change only the restaurant decoration, "
-                "finishes and background layout. Do not change the protagonist's "
-                "identity, uniform, burger action, camera logic or caption-safe "
+                f"{selected.restaurant}. EXACT WORK ASSIGNMENT FOR THIS VIDEO: "
+                f"{selected.restaurant_action}. Both the restaurant zone and the "
+                "job function are intentionally different from other story versions. "
+                "Do not substitute a burger-holding pose or a different task. Do not "
+                "change the protagonist's identity, generic uniform or caption-safe "
                 "upper area."
             )
         if scene.role in {
@@ -1344,6 +1515,8 @@ class StoryCarouselImageGenerator:
                 "relevant, composition. Input 2 is the approved cartoon continuity "
                 "anchor. Never blend them into two people or two frames."
             )
+        if scene.role == SlideRole.STORY_SUCCESS_COMIC:
+            directives.append(ORIGINAL_COMPOSITION_FIDELITY_DIRECTIVE)
         if scene.role == SlideRole.STORY_BUILDING_STORE:
             directives.extend(
                 (

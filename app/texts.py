@@ -224,7 +224,7 @@ class ScriptGenerator:
         if video_type == VideoType.TYPE_2:
             return self._build_type_2_es if language == Language.ES else self._build_type_2_en
         if video_type == VideoType.TYPE_4:
-            return self._build_type_4_es
+            return self._build_type_4_es if language == Language.ES else self._build_type_4_en
         return self._build_type_3_es if language == Language.ES else self._build_type_3_en
 
     # ------------------------------------------------------------------
@@ -451,7 +451,7 @@ class ScriptGenerator:
                 SlideRole.TIP4: "4. Proyecta confianza y transparencia\nMuestra tu producto real en uso, sé honesto con los tiempos de envío y destaca políticas de garantía claras, esta autenticidad elimina las dudas del espectador disparando tus conversiones.",
             },
             "b": {
-                SlideRole.HOOK: "Errores que cuestan dinero\nal empezar en Dropshipping",
+                SlideRole.HOOK: "Errores que cuestan dinero\nal empezar en Dropshipping...",
                 SlideRole.TIP1: '1. Tener una tienda con aspecto "barato"\nSi tu web parece una plantilla de hace diez años, nadie confiará en ti. Añade reseñas, ofrece ofertas, sé sincero con los tiempos de envío e intenta reducirlos para conseguir ventas reales.',
                 SlideRole.TIP2: "2. Quemar el dinero en anuncios\nNo lances dinero a Facebook o TikTok esperando un milagro. Empieza con poco, prueba diferentes enfoques y usa el contenido orgánico para ver qué funciona antes de invertir fuerte.",
                 SlideRole.TIP3: "3. Vender lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
@@ -661,8 +661,42 @@ class ScriptGenerator:
             ),
             SlideRole.STORY_ORIGINAL_REFERENCE: "",
         }
+        return self._compose_type_4(Language.ES, slides_by_role)
+
+    def _build_type_4_en(self) -> ScriptPackage:
+        slides_by_role = {
+            SlideRole.STORY_MCDONALD: (
+                "This is how I went from working at McDonald's to achieving my "
+                "dream: buying a Porsche 911 GT3."
+            ),
+            SlideRole.STORY_BUILDING_STORE: (
+                "I built my store and spent hours researching products and studying "
+                "creatives."
+            ),
+            SlideRole.STORY_FIRST_FAILURE: (
+                "The first month I made 0 sales. The product simply did not attract "
+                "any interest."
+            ),
+            SlideRole.STORY_DEEP_FAILURE: (
+                "The following months were worse: I tested 3 products, sold none and "
+                "almost quit for good."
+            ),
+            SlideRole.STORY_DROPRADAR: (
+                "Then I found Dropradar, validated a product with data and made my "
+                "first sale that month."
+            ),
+            SlideRole.STORY_SUCCESS_COMIC: "A year and a half later...",
+            SlideRole.STORY_ORIGINAL_REFERENCE: "",
+        }
+        return self._compose_type_4(Language.EN, slides_by_role)
+
+    def _compose_type_4(
+        self,
+        language: Language,
+        slides_by_role: dict[SlideRole, str],
+    ) -> ScriptPackage:
         ordered = [slides_by_role[role] for role in TYPE_4_ROLES]
-        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_4, Language.ES)
+        social_key, social_copy = self._choose_social_copy(VideoType.TYPE_4, language)
         self._assert_type_4_rules(slides_by_role)
         return ScriptPackage(
             slides_by_role=slides_by_role,
@@ -1340,7 +1374,58 @@ class ScriptGenerator:
         video_type: VideoType,
     ) -> dict[str, tuple[str, str, list[str]]]:
         if video_type == VideoType.TYPE_4:
-            return self._social_copy_variants_es(video_type)
+            return {
+                "en_story_1": (
+                    "From zero sales to decisions backed by data",
+                    "For months I confused working more with making progress. I kept rebuilding the store and testing products without knowing which signal mattered. Things changed when I started validating demand, competition and proven creatives before spending, using Dropradar to turn each test into a decision I could explain.",
+                    ["#dropshipping", "#ecommerce", "#dropradar", "#shopify", "#productresearch"],
+                ),
+                "en_story_2": (
+                    "What nobody shows before the first sale",
+                    "Building the store was the easy part. The hard part was opening the dashboard every day and still seeing no orders after hours of work. My first sale arrived when I stopped making cosmetic changes and began using real product data to reject weak ideas before losing more time and budget.",
+                    ["#dropshipping", "#onlinestore", "#firstsale", "#entrepreneur", "#dropradar"],
+                ),
+                "en_story_3": (
+                    "I nearly closed the store before changing this",
+                    "After three failed products I thought I was the problem. Before quitting, I changed one part of the process: every launch needed evidence of demand before I built the offer and ads. Dropradar helped me see which ideas deserved a test and which ones should be discarded early.",
+                    ["#dropshipping", "#onlinebusiness", "#ecommercetips", "#shopify", "#dropradar"],
+                ),
+                "en_story_4": (
+                    "What changed when I started validating with data",
+                    "I did not need one hundred product ideas; I needed to understand why one product deserved a test. Once I organized research around demand, competition and working creatives, the results stopped feeling random. Not every test won, but each one had a clear hypothesis and a useful lesson.",
+                    ["#dropshipping", "#data", "#productresearch", "#ecommerce", "#dropradar"],
+                ),
+                "en_story_5": (
+                    "From restaurant shifts to building something of my own",
+                    "This story did not change overnight. It started with work shifts, late nights at the laptop and a store with no sales. The turning point came when I stopped chasing random products and used Dropradar to compare real market signals before committing money to another launch.",
+                    ["#dropshippingjourney", "#ecommerce", "#onlinebusiness", "#motivation", "#dropradar"],
+                ),
+                "en_story_6": (
+                    "Three failed products taught me this",
+                    "Each failed launch looked like bad luck until I reviewed how I had chosen the product. I had no consistent criteria for demand, competition or creative potential. Building that checklist and researching through Dropradar made losses easier to prevent and every new test easier to understand.",
+                    ["#dropshippingtips", "#producttesting", "#ecommercebusiness", "#shopify", "#dropradar"],
+                ),
+                "en_story_7": (
+                    "The first sale started before the ad went live",
+                    "I used to think the creative was everything, so I kept editing videos for products that had weak fundamentals. The real improvement happened earlier: product validation. Looking at market evidence in Dropradar before building the campaign gave the offer a much better chance from the start.",
+                    ["#firstsale", "#dropshipping", "#productvalidation", "#digitalmarketing", "#dropradar"],
+                ),
+                "en_story_8": (
+                    "Why more hours did not create more sales",
+                    "I could spend an entire night changing the store and still wake up with the same result. Effort without a selection process only made me tired. Once product research had clear rules and Dropradar supplied comparable data, my time went into testing stronger opportunities instead of polishing guesses.",
+                    ["#entrepreneurship", "#dropshipping", "#ecommerce", "#productresearch", "#dropradar"],
+                ),
+                "en_story_9": (
+                    "The month I stopped treating products like a lottery",
+                    "My launches used to begin with a trend, a feeling and a rushed store. Then I started checking demand, saturation and creative signals first. Dropradar did not guarantee a winner, but it gave every decision a reason and finally made the first sale feel repeatable rather than accidental.",
+                    ["#dropshippingbusiness", "#ecommercetips", "#onlinestore", "#validation", "#dropradar"],
+                ),
+                "en_story_10": (
+                    "A better process changed the whole story",
+                    "The Porsche is the visible ending, but the important part was the process in between: failed products, zero-sale months and learning to test with discipline. Using Dropradar to filter ideas with data helped me protect budget, learn faster and stay consistent long enough to see results.",
+                    ["#dropshippingstory", "#ecommercejourney", "#consistency", "#shopify", "#dropradar"],
+                ),
+            }
         if video_type == VideoType.TYPE_1:
             return {
                 "en1": (

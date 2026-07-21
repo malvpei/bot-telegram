@@ -55,6 +55,7 @@ HOOK_TEXT_STROKE_WIDTH = 4
 TYPE_2_HOOK_STROKE_WIDTH = 5
 TYPE_2_HOOK_INNER_STROKE_WIDTH = 1
 TYPE_2_HOOK_FONT_SCALE = 0.99
+TYPE_2_COSTLY_MISTAKES_HOOK_FONT_SCALE = 0.92
 FIXED_SCREEN_TEXT_MARGIN = 78
 FEBRUARY_FIXED_SCREEN_TEXT_MARGIN = 30
 FEBRUARY_TITLE_MIN_BOX_WIDTH = 380
@@ -123,7 +124,7 @@ TYPE_4_TITLE_STROKE_WIDTH = 3
 TYPE_4_TITLE_INNER_STROKE_WIDTH = 1
 TYPE_4_TEXT_STROKE_WIDTH = 4
 TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH = 0
-TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.28
+TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.30
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH = 48
@@ -1836,7 +1837,15 @@ class VideoRenderer:
             )
         if video_type == VideoType.TYPE_2:
             fitted_size = getattr(font, "size", 0)
-            reduced_size = max(1, int(round(fitted_size * TYPE_2_HOOK_FONT_SCALE)))
+            normalized_hook = " ".join(text.lower().split())
+            font_scale = (
+                TYPE_2_COSTLY_MISTAKES_HOOK_FONT_SCALE
+                if normalized_hook.startswith(
+                    "errores que cuestan dinero al empezar en dropshipping"
+                )
+                else TYPE_2_HOOK_FONT_SCALE
+            )
+            reduced_size = max(1, int(round(fitted_size * font_scale)))
             if fitted_size and reduced_size < fitted_size:
                 font = font_loader(reduced_size, True)
         text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
@@ -2226,12 +2235,12 @@ class VideoRenderer:
         if slide is not None and slide.role in TYPE_4_STORY_CAPTION_ROLES:
             return (
                 TYPE_4_STORY_CAPTION_PRIMARY_CENTER,
-                0.30,
-                0.26,
                 0.32,
-                0.24,
+                0.28,
                 0.34,
-                0.22,
+                0.26,
+                0.36,
+                0.24,
             )
         if (
             slide is not None and slide.fixed_asset and slide.role == SlideRole.TIP3
