@@ -790,10 +790,10 @@ def test_connected_caption_background_keeps_stepped_line_widths(monkeypatch):
     assert len(set(widths)) == 2
 
 
-def test_caption_cards_use_tighter_padding_and_rounder_tiktok_corners():
+def test_caption_cards_keep_horizontal_shape_with_slightly_taller_background():
     assert TEXT_CARD_PADDING_X == 30
-    assert TEXT_CARD_PADDING_Y == 10
-    assert TEXT_CARD_TITLE_PADDING_Y == 13
+    assert TEXT_CARD_PADDING_Y == 13
+    assert TEXT_CARD_TITLE_PADDING_Y == 16
     assert TEXT_CARD_CORNER_RADIUS == 20
     assert TEXT_CARD_TITLE_FONT_SIZE == 40
     assert TEXT_CARD_TITLE_MIN_FONT_SIZE == 31

@@ -314,7 +314,7 @@ async def batch_reset_command(
     store.reset_batch_rotation()
     await update.effective_message.reply_text(
         "Rotacion reiniciada. El siguiente lote volvera al orden inicial: "
-        "1 ES, 2 ES, 3 EN, IA ES y 1 EN. "
+        "1 ES, 2 ES, 3 EN, 1 ES y 1 EN. "
         "A partir de ahi, la IA rota con la misma frecuencia en ES y EN; "
         "el video de mujer queda fuera del lote."
     )

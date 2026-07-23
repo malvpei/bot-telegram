@@ -200,15 +200,15 @@ El primer lote de cinco es:
 1. tipo 1 en espanol (hombre)
 2. tipo 2 en espanol (hombre)
 3. tipo 3 en ingles (hombre)
-4. carrusel IA en espanol (hombre)
+4. tipo 1 en espanol (hombre)
 5. tipo 1 en ingles (hombre)
 
 Cada posicion avanza por una secuencia adecuada a su idioma y genero. Los
-hombres en espanol rotan por
-`1 -> 2 -> 3 -> IA -> 1 -> 2 -> 3 -> IA -> herramientas`; los hombres en ingles
-mantienen `1 -> 2 -> 3 -> 1 -> 2 -> 3 -> herramientas`, sin IA. El carril de
-mujeres queda temporalmente fuera de los lotes. La historia IA usa una referencia
-de R2 y siempre se genera en espanol. El paso actual, los horarios y el ultimo
+hombres en espanol e ingles rotan por la misma secuencia:
+`1 -> 2 -> 3 -> 1 -> 2 -> 3 -> IA -> herramientas`. Despues de herramientas,
+el ciclo vuelve al tipo 1. El carril de mujeres queda temporalmente fuera de
+los lotes. La historia IA usa una referencia de R2 y se genera en el idioma de
+su carril, espanol o ingles. El paso actual, los horarios y el ultimo
 resultado se guardan dentro de `DATA_DIR/state`, por lo que sobreviven a los
 reinicios y redeploys. Solo se procesa un lote a la vez para no reutilizar
 fotos ni compartir a la vez la sesion de Instagram.

@@ -21,14 +21,14 @@ def test_first_batch_has_five_videos_and_no_female_lane():
         BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
-        BatchItemKind.AI,
+        BatchItemKind.GENERATED,
         BatchItemKind.GENERATED,
     ]
     assert [item.video_type for item in plan] == [
         VideoType.TYPE_1,
         VideoType.TYPE_2,
         VideoType.TYPE_3,
-        VideoType.TYPE_4,
+        VideoType.TYPE_1,
         VideoType.TYPE_1,
     ]
     assert [item.language for item in plan] == [
@@ -41,40 +41,51 @@ def test_first_batch_has_five_videos_and_no_female_lane():
     assert all(item.gender == VideoGender.MALE for item in plan)
 
 
-def test_spanish_male_lane_runs_ai_after_each_type_cycle_then_tools():
-    first_lane = [build_batch_plan(1, phase)[0] for phase in range(9)]
+def test_spanish_male_lane_runs_two_type_cycles_then_ai_and_tools():
+    first_lane = [build_batch_plan(1, phase)[0] for phase in range(8)]
 
     assert [item.video_type.value if item.video_type else "tools" for item in first_lane] == [
         "1",
         "2",
         "3",
-        "4",
         "1",
         "2",
         "3",
         "4",
         "tools",
     ]
-    assert first_lane[3].kind == BatchItemKind.AI
-    assert first_lane[7].kind == BatchItemKind.AI
+    assert first_lane[6].kind == BatchItemKind.AI
     assert first_lane[-1].kind == BatchItemKind.TOOLS
 
 
-def test_second_batch_advances_each_lane_and_can_schedule_english_ai():
+def test_second_batch_advances_each_lane_without_early_ai():
     plan = build_batch_plan(5, phase=1)
 
     assert [item.video_type.value if item.video_type else "tools" for item in plan] == [
         "2",
         "3",
-        "4",
         "1",
         "2",
+        "2",
     ]
-    assert plan[2].kind == BatchItemKind.AI
+    assert plan[2].kind == BatchItemKind.GENERATED
     assert plan[2].language == Language.EN
     assert plan[3].kind == BatchItemKind.GENERATED
-    assert plan[3].video_type == VideoType.TYPE_1
+    assert plan[3].video_type == VideoType.TYPE_2
     assert all(item.gender == VideoGender.MALE for item in plan)
+
+
+def test_english_lane_reaches_ai_then_tools_in_the_same_eight_step_cycle():
+    english_lane = [build_batch_plan(3, phase)[2] for phase in range(8)]
+
+    assert [
+        item.video_type.value if item.video_type else "tools"
+        for item in english_lane
+    ] == ["3", "1", "2", "3", "4", "tools", "1", "2"]
+    assert english_lane[4].kind == BatchItemKind.AI
+    assert english_lane[4].language == Language.EN
+    assert english_lane[5].kind == BatchItemKind.TOOLS
+    assert english_lane[5].language == Language.EN
 
 
 def test_batch_size_can_repeat_the_five_lane_profile():
@@ -91,11 +102,11 @@ def test_legacy_batch_lane_constructor_and_rotation_alias_stay_compatible():
     lane = BatchLane(Language.EN, VideoGender.MALE, 0)
 
     assert lane.rotation == ROTATION
-    assert ROTATION == ("1", "2", "3", "ai", "1", "2", "3", "ai", "tools")
+    assert ROTATION == ("1", "2", "3", "1", "2", "3", "ai", "tools")
 
 
 def test_ai_rotates_equally_in_english_and_spanish_and_no_women_enter_batches():
-    assert BATCH_ROTATION_CYCLE_LENGTH == 9
+    assert BATCH_ROTATION_CYCLE_LENGTH == 8
     ai_items = {Language.ES: 0, Language.EN: 0}
     for phase in range(BATCH_ROTATION_CYCLE_LENGTH):
         plan = build_batch_plan(5, phase=phase)
@@ -106,9 +117,9 @@ def test_ai_rotates_equally_in_english_and_spanish_and_no_women_enter_batches():
                 assert item.gender == VideoGender.MALE
                 assert item.video_type == VideoType.TYPE_4
 
-    # There are three Spanish lanes and two English lanes, but each individual
-    # lane contains exactly two AI slots in the same nine-step cycle.
-    assert ai_items == {Language.ES: 6, Language.EN: 4}
+    # There are three Spanish lanes and two English lanes, with exactly one IA
+    # slot per lane in the same eight-step cycle.
+    assert ai_items == {Language.ES: 3, Language.EN: 2}
     assert [item.short_label for item in build_batch_plan(5, 0)] == [
         item.short_label
         for item in build_batch_plan(5, BATCH_ROTATION_CYCLE_LENGTH)
