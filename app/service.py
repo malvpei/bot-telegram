@@ -14,6 +14,12 @@ from uuid import uuid4
 
 from PIL import Image
 
+from app.advice_cards import (
+    ADVICE_EXTERNAL_PHRASES,
+    ADVICE_ROTATION_CYCLE_LENGTH,
+    advice_selection,
+    format_advice_script,
+)
 from app.config import DEFAULT_ACCOUNT_PICK_ATTEMPTS, get_settings
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
 from app.media_pool import MediaPoolService
@@ -355,11 +361,11 @@ class VideoCreationService:
             )
         if self.settings.image_provider == "fal" and not self.settings.fal_key:
             warnings.append(
-                "Falta FAL_KEY; el carrusel IA tipo 4 no podra generar imagenes con fal.ai."
+                "Falta FAL_KEY; la Historia IA no podra generar imagenes con fal.ai."
             )
         if self.settings.image_provider == "openai" and not self.settings.openai_api_key:
             warnings.append(
-                "Falta OPENAI_API_KEY; el carrusel IA tipo 4 no podra generar imagenes con OpenAI."
+                "Falta OPENAI_API_KEY; la Historia IA no podra generar imagenes con OpenAI."
             )
         if (
             self.settings.story_review_enabled
@@ -494,6 +500,8 @@ class VideoCreationService:
         }
 
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
+        if request.video_type == VideoType.ADVICE:
+            return self._create_advice_card_locked(request)
         if request.video_type == VideoType.TYPE_4:
             return self._create_story_carousel_locked(request)
 
@@ -609,6 +617,94 @@ class VideoCreationService:
             separate_slide_text=request.separate_slide_text,
         )
 
+    def _create_advice_card_locked(self, request: VideoRequest) -> GenerationResult:
+        try:
+            language = Language(request.language)
+        except (TypeError, ValueError):
+            language = Language.ES
+        phase = self.state.get_type_4_advice_phase(
+            cycle_length=ADVICE_ROTATION_CYCLE_LENGTH
+        )
+        background, tips, pack_index = advice_selection(phase, language)
+        job_id = self._build_job_id()
+        job_dir = self._job_output_dir(job_id, request.user_id)
+        slides_dir = job_dir / "slides"
+        slides_dir.mkdir(parents=True, exist_ok=True)
+        output_path = slides_dir / "slide_01.jpg"
+        script_text = format_advice_script(tips)
+
+        image = self.renderer.render_advice_card(tips, language, background)
+        image.convert("RGB").save(
+            output_path,
+            format="JPEG",
+            quality=95,
+            subsampling=0,
+        )
+        media = MediaCandidate(
+            source_account="tipo4_consejos",
+            source_id=f"advice:{phase}:{language.value}",
+            local_path=output_path,
+            permalink="",
+            caption="",
+            width=self.settings.width,
+            height=self.settings.height,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        slide = SlidePlan(
+            index=1,
+            role=SlideRole.ADVICE_CARD,
+            text=script_text,
+            media=media,
+            fixed_asset=True,
+        )
+        plan = VideoPlan(
+            chosen_account=f"tipo4:{background.value}:guion-{pack_index + 1}",
+            video_type=VideoType.ADVICE,
+            language=language,
+            slides=[slide],
+            used_media_ids=[],
+            fallback_accounts=[],
+        )
+        script_path = self.renderer.write_script(plan, job_dir)
+        social_copy = SocialCopy(
+            title=ADVICE_EXTERNAL_PHRASES[language],
+            description="",
+            hashtags=[],
+        )
+        self.state.log_job(
+            self.state.build_job_record(
+                job_id=job_id,
+                chosen_account=plan.chosen_account,
+                requested_accounts=[],
+                fallback_accounts=[],
+                video_type=VideoType.ADVICE,
+                language=language,
+                video_path=None,
+                script_path=str(script_path),
+                gender=request.gender.value,
+                user_id=request.user_id,
+                chat_id=request.chat_id,
+            )
+        )
+        self.state.advance_type_4_advice_phase(
+            cycle_length=ADVICE_ROTATION_CYCLE_LENGTH
+        )
+        self._cleanup_old_outputs()
+        return GenerationResult(
+            video_path=None,
+            script_path=script_path,
+            preview_text=script_text,
+            social_copy=social_copy,
+            chosen_account=plan.chosen_account,
+            video_type=VideoType.ADVICE,
+            language=language,
+            fallback_accounts=[],
+            slides=[slide],
+            pool_remaining=0,
+            pool_low_stock=False,
+            separate_slide_text=False,
+        )
+
     def _create_story_carousel_locked(self, request: VideoRequest) -> GenerationResult:
         try:
             story_language = Language(request.language)
@@ -649,7 +745,7 @@ class VideoCreationService:
             )
             if len(generated_media) != len(TYPE_4_ROLES) - 1:
                 raise RuntimeError(
-                    "El generador IA no devolvio las 6 imagenes esperadas para el tipo 4."
+                    "El generador no devolvio las 6 imagenes esperadas para la Historia IA."
                 )
 
             reference_media = self._copy_story_reference_image(
@@ -729,7 +825,7 @@ class VideoCreationService:
     ) -> tuple[Path, str, bool, str]:
         if getattr(self, "r2_storage", None) is None or not self.r2_storage.is_configured:
             raise ValueError(
-                "El tipo 4 necesita una imagen en R2. Configura R2 y sube imagenes "
+                "La Historia IA necesita una imagen en R2. Configura R2 y sube imagenes "
                 f"al prefijo {self.settings.r2_image_prefix!r}."
             )
         prefix = self.settings.r2_image_prefix

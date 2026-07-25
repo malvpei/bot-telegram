@@ -36,6 +36,7 @@ from app.bot import (
     create_command,
     story_carousel_command,
     wizard_delivery,
+    wizard_advice_language,
     wizard_gender,
     wizard_story_language,
     wizard_type,
@@ -1016,11 +1017,13 @@ def test_create_command_offers_template_video_without_accounts():
     assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
     assert buttons[0][1].text == "Video tools R2 EN"
     assert buttons[0][1].callback_data == TEMPLATE_VIDEO_CREATE_EN
-    assert buttons[1][0].text == "Historia IA desde R2"
-    assert buttons[1][0].callback_data == "wizard:type:4"
+    assert buttons[1][0].text == "Tipo 4 - Consejos"
+    assert buttons[1][0].callback_data == "wizard:type:advice"
+    assert buttons[1][1].text == "Historia IA desde R2"
+    assert buttons[1][1].callback_data == "wizard:type:4"
 
 
-def test_wizard_gender_restores_type_4_story_option():
+def test_wizard_gender_offers_type_4_and_story_as_separate_options():
     context = FakeContext()
     context.user_data["accounts_by_gender"] = {
         VideoGender.MALE.value: ["alpha"],
@@ -1033,8 +1036,10 @@ def test_wizard_gender_restores_type_4_story_option():
 
     assert state != ConversationHandler.END
     buttons = query.reply_markup.inline_keyboard
-    assert buttons[1][0].text == "Tipo 4 - Historia IA"
-    assert buttons[1][0].callback_data == "wizard:type:4"
+    assert buttons[1][0].text == "Tipo 4 - Consejos"
+    assert buttons[1][0].callback_data == "wizard:type:advice"
+    assert buttons[1][1].text == "Historia IA"
+    assert buttons[1][1].callback_data == "wizard:type:4"
 
 
 def test_wizard_type_asks_how_to_deliver_slide_text():
@@ -1101,6 +1106,41 @@ def test_type_4_button_asks_language_then_uses_r2_without_waiting_for_photo():
     assert captured["request"].language == Language.EN
     assert captured["request"].reference_image_path is None
     assert captured["request"].account_inputs == []
+    assert context.user_data == {}
+
+
+def test_advice_type_4_asks_language_and_needs_no_instagram_accounts():
+    captured: dict[str, VideoRequest] = {}
+
+    async def capture_execute_job(update, context, request):
+        captured["request"] = request
+
+    context = FakeContext()
+    query = FakeRegenerateQuery("wizard:type:advice")
+    update = FakeRegenerateUpdate(query)
+
+    with patch("app.bot._execute_job", capture_execute_job):
+        state = asyncio.run(wizard_type(update, context))
+
+        assert state == LANGUAGE_STATE
+        assert "Tipo 4" in query.edited_text
+        assert [
+            button.callback_data
+            for button in query.reply_markup.inline_keyboard[0]
+        ] == [
+            "wizard:advicelang:es",
+            "wizard:advicelang:en",
+        ]
+
+        language_query = FakeRegenerateQuery("wizard:advicelang:en")
+        language_update = FakeRegenerateUpdate(language_query)
+        state = asyncio.run(wizard_advice_language(language_update, context))
+
+    assert state == ConversationHandler.END
+    assert captured["request"].video_type == VideoType.ADVICE
+    assert captured["request"].language == Language.EN
+    assert captured["request"].account_inputs == []
+    assert captured["request"].separate_slide_text is False
     assert context.user_data == {}
 
 

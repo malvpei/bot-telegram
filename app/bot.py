@@ -128,7 +128,7 @@ def run_bot() -> None:
         states={
             GENDER_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:4$"),
+                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:4|advice)$"),
                 CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:"),
             ],
             TYPE_STATE: [
@@ -144,6 +144,10 @@ def run_bot() -> None:
                 CallbackQueryHandler(
                     wizard_story_language,
                     pattern=r"^wizard:storylang:",
+                ),
+                CallbackQueryHandler(
+                    wizard_advice_language,
+                    pattern=r"^wizard:advicelang:",
                 ),
                 CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:"),
             ],
@@ -937,7 +941,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Flujo:\n"
         "1. /create\n"
         "2. elige Hombres o Mujeres\n"
-        "3. elige Tipo 1, Tipo 2, Tipo 3 o la Historia IA\n"
+        "3. elige Tipo 1, Tipo 2, Tipo 3, Tipo 4 o la Historia IA\n"
         "4. elige si quieres texto incrustado en la imagen o separado\n"
         "5. elige Español o English\n"
         "6. elige si quieres textos normales o todo en minúscula\n"
@@ -946,8 +950,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "1 = historia de 7 imágenes (slide 6 = tip3_dropradar.jpg, febrero)\n"
         "2 = 4 consejos + hook (slide 3 = tip3_dropradar.jpg, tip3)\n"
         "3 = hook + herramientas para empezar dropshipping en 2026\n"
-        "4 = historia IA vertical de 6 escenas + la foto original, con el "
-        "texto del guion compuesto fuera de la IA para que siempre se lea bien\n\n"
+        "4 = cuatro consejos rotativos sobre fondo negro, blanco o ilustrado\n"
+        "IA = historia vertical de 6 escenas + la foto original, con el texto "
+        "compuesto fuera de la IA para que siempre se lea bien\n\n"
         "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
         "accounts_women.txt (una por línea). Para cambiarlas edita el archivo "
         "y guarda; se releen en cada /create.\n\n"
@@ -1358,6 +1363,10 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 ],
                 [
                     InlineKeyboardButton(
+                        "Tipo 4 - Consejos",
+                        callback_data="wizard:type:advice",
+                    ),
+                    InlineKeyboardButton(
                         "Historia IA desde R2",
                         callback_data="wizard:type:4",
                     ),
@@ -1368,7 +1377,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             (
                 "Que quieres crear?\n\n"
                 "No encontre cuentas cargadas, asi que puedes crear el video "
-                "de herramientas R2 o la historia IA desde R2."
+                "de herramientas R2, el Tipo 4 o la historia IA desde R2."
             ),
             reply_markup=keyboard,
         )
@@ -1397,6 +1406,10 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 ),
             ],
             [
+                InlineKeyboardButton(
+                    "Tipo 4 - Consejos",
+                    callback_data="wizard:type:advice",
+                ),
                 InlineKeyboardButton(
                     "Historia IA desde R2",
                     callback_data="wizard:type:4",
@@ -1449,7 +1462,11 @@ async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
             ],
             [
                 InlineKeyboardButton(
-                    "Tipo 4 - Historia IA",
+                    "Tipo 4 - Consejos",
+                    callback_data="wizard:type:advice",
+                ),
+                InlineKeyboardButton(
+                    "Historia IA",
                     callback_data="wizard:type:4",
                 ),
             ],
@@ -1473,6 +1490,14 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         await query.edit_message_text("Tipo no reconocido. Lanza /create otra vez.")
         return ConversationHandler.END
     context.user_data["video_type"] = raw_type
+
+    if raw_type == VideoType.ADVICE.value:
+        context.user_data["separate_slide_text"] = False
+        await query.edit_message_text(
+            "Perfecto. Elige el idioma del Tipo 4.",
+            reply_markup=_advice_language_keyboard(),
+        )
+        return LANGUAGE_STATE
 
     if raw_type == VideoType.TYPE_4.value:
         context.user_data["story_source"] = "r2"
@@ -1592,6 +1617,43 @@ async def wizard_story_language(
         account_inputs=[],
         gender=gender,
         lowercase_text=False,
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
+
+
+async def wizard_advice_language(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    query = update.callback_query
+    await query.answer()
+    raw_lang = query.data.rsplit(":", maxsplit=1)[-1]
+    try:
+        language = Language(raw_lang)
+    except ValueError:
+        await query.edit_message_text("Idioma no reconocido. Lanza /create otra vez.")
+        return ConversationHandler.END
+    context.user_data["language"] = language.value
+
+    raw_gender = context.user_data.get("video_gender", VideoGender.MALE.value)
+    try:
+        gender = VideoGender(raw_gender)
+    except ValueError:
+        gender = VideoGender.MALE
+    await query.edit_message_text(
+        f"Perfecto. Creo el siguiente diseño Tipo 4 en {language.value.upper()}."
+    )
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.ADVICE,
+        language=language,
+        account_inputs=[],
+        gender=gender,
+        lowercase_text=False,
+        separate_slide_text=False,
     )
     await _execute_job(update, context, request)
     _clear_wizard_state(context)
@@ -1837,7 +1899,9 @@ async def _execute_job(
     request: VideoRequest,
 ) -> None:
     chat = update.effective_chat
-    if request.video_type == VideoType.TYPE_4:
+    if request.video_type == VideoType.ADVICE:
+        status_text = "Estoy creando el siguiente diseño rotativo del Tipo 4."
+    elif request.video_type == VideoType.TYPE_4:
         status_text = (
             "Estoy generando el carrusel IA. Esto puede tardar porque son 6 escenas."
         )
@@ -1859,7 +1923,13 @@ async def _execute_job(
         await status_message.edit_text(f"No pude generar el video.\n\n{error}")
         return
 
-    if result.video_type == VideoType.TYPE_4:
+    if result.video_type == VideoType.ADVICE:
+        header = (
+            "Tipo 4 listo\n"
+            f"Idioma: {result.language.value.upper()}\n"
+            "Entrega: 4 consejos en una imagen"
+        )
+    elif result.video_type == VideoType.TYPE_4:
         source_label = (
             result.chosen_account
             if str(result.chosen_account).startswith("r2:")
@@ -1867,7 +1937,7 @@ async def _execute_job(
         )
         header = (
             "Carrusel IA listo\n"
-            "Tipo: 4\n"
+            "Tipo: Historia IA\n"
             f"Fuente: {source_label}\n"
             "Entrega: 6 escenas generadas + foto original"
         )
@@ -1895,7 +1965,7 @@ async def _execute_job(
             video_type=result.video_type,
             separate_slide_text=result.separate_slide_text,
         )
-        if result.video_type == VideoType.TYPE_4:
+        if result.video_type in {VideoType.TYPE_4, VideoType.ADVICE}:
             return
         context.user_data["repeat_request"] = {
             "chosen_account": result.chosen_account,
@@ -2191,6 +2261,23 @@ def _story_language_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     "English",
                     callback_data="wizard:storylang:en",
+                ),
+            ]
+        ]
+    )
+
+
+def _advice_language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Español",
+                    callback_data="wizard:advicelang:es",
+                ),
+                InlineKeyboardButton(
+                    "English",
+                    callback_data="wizard:advicelang:en",
                 ),
             ]
         ]

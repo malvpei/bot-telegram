@@ -712,7 +712,7 @@ class ScriptGenerator:
     def _assert_type_4_rules(slides_by_role: dict[SlideRole, str]) -> None:
         expected_roles = set(TYPE_4_ROLES)
         if set(slides_by_role) != expected_roles:
-            raise ValueError("Tipo 4: faltan slides de la historia.")
+            raise ValueError("Historia IA: faltan slides de la historia.")
         required_texts = [
             slides_by_role[SlideRole.STORY_MCDONALD],
             slides_by_role[SlideRole.STORY_BUILDING_STORE],
@@ -722,9 +722,9 @@ class ScriptGenerator:
             slides_by_role[SlideRole.STORY_SUCCESS_COMIC],
         ]
         if any(not text.strip() for text in required_texts):
-            raise ValueError("Tipo 4: los 6 textos narrativos son obligatorios.")
+            raise ValueError("Historia IA: los 6 textos narrativos son obligatorios.")
         if "Dropradar" not in slides_by_role[SlideRole.STORY_DROPRADAR]:
-            raise ValueError("Tipo 4: el punto de inflexion debe mencionar Dropradar.")
+            raise ValueError("Historia IA: el punto de inflexion debe mencionar Dropradar.")
 
     def _choose_social_copy(
         self,

@@ -159,6 +159,13 @@ el bot.
 /cancel       — cancela el wizard en curso
 ```
 
+El **Tipo 4** genera una sola imagen vertical con cuatro consejos y no necesita
+cuentas de Instagram. Rota entre fondo negro, fondo blanco y un diseño
+ilustrado con tarjetas e iconos de dropshipping. También rota cuatro guiones en
+español e inglés; el cuarto consejo siempre recomienda Dropradar. Cada entrega
+incluye fuera de la imagen la frase de apertura correspondiente al idioma.
+La **Historia IA** continúa disponible como una opción independiente.
+
 Flujo recomendado: ejecuta **/download_pool** para poblar un lote de fotos aptas
 en `data/state/media_pool.json`. El comando revisa cuentas una por una, descarga
 las fotos válidas, respeta `used_media.json`, y pone cada cuenta revisada en
@@ -296,8 +303,8 @@ consultar su ID con `/my_id`; el propietario gestiona el acceso con:
 ```
 
 Todos consumen el mismo pool global: una foto reservada por cualquier usuario
-desaparece para los demás y no vuelve a utilizarse. Las referencias de R2 del
-tipo 4 siguen la misma regla. Los jobs, rutas de salida e historial mostrado por
+desaparece para los demás y no vuelve a utilizarse. Las referencias de R2 de la
+Historia IA siguen la misma regla. Los jobs, rutas de salida e historial mostrado por
 `/memory` quedan separados por usuario. `/sync`, `/download_pool`, `/schedule`
 y `/batch_reset` son comandos exclusivos del propietario porque modifican el
 estado compartido.
@@ -324,7 +331,7 @@ Tras desplegar, ejecuta `/memory`: debe mostrar `DATA_DIR: /app/data` y
 no esta montado en esa app de Coolify y el siguiente redeploy puede borrar la
 memoria.
 
-Para el carrusel IA tipo 4, `STORY_FAL_MODEL` controla el generador de historias
+Para la Historia IA, `STORY_FAL_MODEL` controla el generador de historias
 de forma independiente. Dejalo en `openai/gpt-image-2/edit`. Un `FAL_MODEL`
 antiguo (por ejemplo, Flux Kontext) ya no puede degradar estas escenas. Al
 arrancar, el log `Story AI settings` muestra el modelo que realmente se usara.

@@ -10,6 +10,7 @@ from uuid import uuid4
 import numpy as np
 from PIL import Image, ImageDraw
 
+from app.advice_cards import ADVICE_PACKS, AdviceBackground
 from app.config import get_settings
 from app.models import (
     ImageMetrics,
@@ -59,6 +60,42 @@ from app.render import (
     TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH,
     VideoRenderer,
 )
+
+
+def test_type_4_flat_advice_cards_invert_background_and_text_colors():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    tips = ADVICE_PACKS[Language.ES][0]
+
+    black = renderer.render_advice_card(tips, Language.ES, AdviceBackground.BLACK)
+    white = renderer.render_advice_card(tips, Language.ES, AdviceBackground.WHITE)
+    black_pixels = np.asarray(black)
+    white_pixels = np.asarray(white)
+
+    assert black.size == (360, 640)
+    assert white.size == (360, 640)
+    assert tuple(black_pixels[0, 0]) == (0, 0, 0)
+    assert tuple(white_pixels[0, 0]) == (255, 255, 255)
+    assert (black_pixels[..., :3] > 235).all(axis=2).mean() > 0.01
+    assert (white_pixels[..., :3] < 25).all(axis=2).mean() > 0.01
+
+
+def test_type_4_illustrated_advice_card_draws_header_cards_and_icons():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+
+    result = renderer.render_advice_card(
+        ADVICE_PACKS[Language.EN][1],
+        Language.EN,
+        AdviceBackground.ILLUSTRATED,
+    )
+    pixels = np.asarray(result)
+
+    assert result.size == (360, 640)
+    assert tuple(pixels[0, 0]) == (247, 247, 245)
+    assert (pixels[..., 0] < 50).mean() > 0.01
+    assert (
+        (pixels[..., 2] > pixels[..., 0] + 25)
+        & (pixels[..., 2] > pixels[..., 1])
+    ).mean() > 0.001
 
 
 def test_numbered_titleless_tip_keeps_number_with_body_for_rendering():

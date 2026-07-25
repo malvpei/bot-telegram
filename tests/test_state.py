@@ -140,6 +140,18 @@ def test_type_3_background_queue_rotates_globally(state_dir):
     assert store.get_next_type_3_background_id(background_ids) == "bg-1"
 
 
+def test_type_4_advice_rotation_persists_and_wraps(state_dir):
+    store = StateStore(state_dir)
+
+    assert store.get_type_4_advice_phase(cycle_length=12) == 0
+    assert store.advance_type_4_advice_phase(cycle_length=12) == 1
+    assert StateStore(state_dir).get_type_4_advice_phase(cycle_length=12) == 1
+
+    for _ in range(11):
+        store.advance_type_4_advice_phase(cycle_length=12)
+    assert store.get_type_4_advice_phase(cycle_length=12) == 0
+
+
 def test_template_queue_does_not_replay_when_pool_changes_mid_cycle(state_dir):
     store = StateStore(state_dir)
 

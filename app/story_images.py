@@ -913,7 +913,7 @@ class StoryCarouselImageGenerator:
     ) -> None:
         if not self.settings.fal_key:
             raise RuntimeError(
-                "Falta FAL_KEY. Configuralo para usar el carrusel IA tipo 4 con fal.ai."
+                "Falta FAL_KEY. Configuralo para usar la Historia IA con fal.ai."
             )
 
         prompt = self._build_prompt(
@@ -1012,7 +1012,7 @@ class StoryCarouselImageGenerator:
     ) -> None:
         if not self.settings.openai_api_key:
             raise RuntimeError(
-                "Falta OPENAI_API_KEY. Configuralo para usar el carrusel IA tipo 4."
+                "Falta OPENAI_API_KEY. Configuralo para usar la Historia IA."
             )
 
         with ExitStack() as stack:

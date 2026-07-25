@@ -11,6 +11,7 @@ from uuid import uuid4
 from PIL import Image
 import pytest
 
+from app.advice_cards import AdviceBackground
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoRequest, VideoType
 from app.r2_storage import R2Object
@@ -28,6 +29,7 @@ class FakeRenderer:
         self.render_slide_still_calls: list[VideoType] = []
         self.render_slide_still_sources: list[Path] = []
         self.render_slide_still_texts: list[str] = []
+        self.advice_card_calls: list[tuple[Language, AdviceBackground]] = []
         self.written_plan: VideoPlan | None = None
 
     def render(self, plan: VideoPlan, job_dir: Path):
@@ -47,6 +49,10 @@ class FakeRenderer:
         self.render_slide_still_sources.append(slide.media.local_path)
         self.render_slide_still_texts.append(slide.text)
         return Image.new("RGB", (72, 128), (40, 80, 120))
+
+    def render_advice_card(self, tips, language, background) -> Image.Image:
+        self.advice_card_calls.append((language, background))
+        return Image.new("RGB", (72, 128), (20, 30, 40))
 
     def render_template_video(self, input_video: Path, job_dir: Path, language=None) -> Path:
         self.template_input_video = input_video
@@ -475,6 +481,61 @@ def test_type_1_outputs_skip_full_video_render():
         assert service.renderer.render_slide_still_calls == [VideoType.TYPE_1]
         assert plan.slides[0].media.local_path.name == "slide_01.jpg"
         assert plan.slides[0].media.local_path.exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            width=72,
+            height=128,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.renderer = FakeRenderer()
+
+        spanish = service._create_video_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=10,
+                video_type=VideoType.ADVICE,
+                language=Language.ES,
+                account_inputs=[],
+            )
+        )
+        english = service._create_video_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=10,
+                video_type=VideoType.ADVICE,
+                language=Language.EN,
+                account_inputs=[],
+            )
+        )
+
+        assert service.renderer.advice_card_calls == [
+            (Language.ES, AdviceBackground.BLACK),
+            (Language.EN, AdviceBackground.WHITE),
+        ]
+        assert spanish.video_type == VideoType.ADVICE
+        assert spanish.slides[0].media.local_path.exists()
+        assert spanish.social_copy.title == (
+            "un dropshipper millonario me contó la regla número #1 para vender fácilmente"
+        )
+        assert english.social_copy.title == (
+            "A millionaire dropshipper told me rule number #1 for selling easily"
+        )
+        assert "Dropradar" in english.preview_text
+        assert service.state.get_type_4_advice_phase(cycle_length=12) == 2
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

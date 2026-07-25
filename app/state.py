@@ -44,6 +44,7 @@ class StateStore:
         self._excluded_accounts_path = self.state_dir / "excluded_accounts.json"
         self._account_cooldowns_path = self.state_dir / "account_cooldowns.json"
         self._type_3_background_queue_path = self.state_dir / "type3_background_queue.json"
+        self._type_4_advice_rotation_path = self.state_dir / "type4_advice_rotation.json"
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
@@ -351,6 +352,34 @@ class StateStore:
                 self._type_3_background_queue_path,
                 {"order": normalized},
             )
+
+    def get_type_4_advice_phase(self, *, cycle_length: int) -> int:
+        normalized_length = max(1, int(cycle_length))
+        with self._exclusive():
+            payload = self._read_json(self._type_4_advice_rotation_path, {})
+        try:
+            phase = int(payload.get("phase", 0))
+        except (AttributeError, TypeError, ValueError):
+            phase = 0
+        return max(0, phase) % normalized_length
+
+    def advance_type_4_advice_phase(self, *, cycle_length: int) -> int:
+        normalized_length = max(1, int(cycle_length))
+        with self._exclusive():
+            payload = self._read_json(self._type_4_advice_rotation_path, {})
+            try:
+                current = int(payload.get("phase", 0))
+            except (AttributeError, TypeError, ValueError):
+                current = 0
+            next_phase = (max(0, current) + 1) % normalized_length
+            self._write_json(
+                self._type_4_advice_rotation_path,
+                {
+                    "phase": next_phase,
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                },
+            )
+        return next_phase
 
     def get_next_template_video_id(
         self,

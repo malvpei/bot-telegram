@@ -13,6 +13,11 @@ import imageio_ffmpeg
 import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
+from app.advice_cards import (
+    ADVICE_ILLUSTRATED_TITLES,
+    AdviceBackground,
+    AdviceTip,
+)
 from app.config import Settings
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
 from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
@@ -128,6 +133,12 @@ TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.30
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH = 48
+ADVICE_FLAT_TEXT_SIZE = 46
+ADVICE_FLAT_MIN_TEXT_SIZE = 32
+ADVICE_FLAT_SIDE_MARGIN = 150
+ADVICE_FLAT_BLOCK_GAP = 48
+ADVICE_FLAT_LINE_GAP = 10
+ADVICE_ILLUSTRATED_CARD_RADIUS = 28
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
 TEXT_FACE_AVOID_WEIGHT = 260.0
@@ -332,6 +343,485 @@ class VideoRenderer:
         source_image = self._load_source_image(slide.media.local_path)
         frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
         return Image.fromarray(frame)
+
+    def render_advice_card(
+        self,
+        tips: tuple[AdviceTip, ...],
+        language: Language,
+        background: AdviceBackground,
+    ) -> Image.Image:
+        if len(tips) != 4:
+            raise ValueError("El Tipo 4 necesita exactamente cuatro consejos.")
+        if background == AdviceBackground.ILLUSTRATED:
+            return self._render_illustrated_advice_card(tips, language)
+
+        canvas_fill = (
+            (0, 0, 0, 255)
+            if background == AdviceBackground.BLACK
+            else (255, 255, 255, 255)
+        )
+        text_fill = (
+            (255, 255, 255, 255)
+            if background == AdviceBackground.BLACK
+            else (0, 0, 0, 255)
+        )
+        stroke_fill = (
+            (0, 0, 0, 255)
+            if background == AdviceBackground.BLACK
+            else (255, 255, 255, 255)
+        )
+        image = Image.new("RGBA", (self.settings.width, self.settings.height), canvas_fill)
+        self._draw_flat_advice_list(
+            image,
+            tips,
+            fill=text_fill,
+            stroke_fill=stroke_fill,
+        )
+        return image.convert("RGB")
+
+    def _draw_flat_advice_list(
+        self,
+        image: Image.Image,
+        tips: tuple[AdviceTip, ...],
+        *,
+        fill: tuple[int, int, int, int],
+        stroke_fill: tuple[int, int, int, int],
+    ) -> None:
+        draw = ImageDraw.Draw(image)
+        width, height = image.size
+        max_width = max(
+            1,
+            width - (_scale_x(ADVICE_FLAT_SIDE_MARGIN, width) * 2),
+        )
+        block_gap = _scale_y(ADVICE_FLAT_BLOCK_GAP, height)
+        line_gap = _scale_y(ADVICE_FLAT_LINE_GAP, height)
+        stroke_width = max(1, _scale_x(2, width))
+
+        selected_font: ImageFont.ImageFont | None = None
+        selected_blocks: list[list[str]] = []
+        selected_heights: list[int] = []
+        for font_size in range(
+            self._scaled_text_size(ADVICE_FLAT_TEXT_SIZE, minimum=20),
+            self._scaled_text_size(ADVICE_FLAT_MIN_TEXT_SIZE, minimum=16) - 1,
+            -2,
+        ):
+            font = self._load_font(size=font_size, bold=True)
+            blocks: list[list[str]] = []
+            heights: list[int] = []
+            for index, tip in enumerate(tips, start=1):
+                title_lines = self._wrap_text(
+                    f"{index}. {tip.title}",
+                    font,
+                    max_width,
+                    draw,
+                    stroke_width=stroke_width,
+                )
+                body_lines = self._wrap_text(
+                    tip.body,
+                    font,
+                    max_width,
+                    draw,
+                    stroke_width=stroke_width,
+                )
+                lines = [*title_lines, *body_lines]
+                blocks.append(lines)
+                heights.append(
+                    self._block_height(
+                        lines,
+                        font,
+                        draw,
+                        stroke_width=stroke_width,
+                        line_gap=line_gap,
+                    )
+                )
+            total_height = sum(heights) + block_gap * (len(blocks) - 1)
+            selected_font = font
+            selected_blocks = blocks
+            selected_heights = heights
+            if total_height <= int(height * 0.72):
+                break
+
+        if selected_font is None:
+            return
+        total_height = sum(selected_heights) + block_gap * (len(selected_blocks) - 1)
+        y = max(_scale_y(120, height), (height - total_height) // 2)
+        x = (width - max_width) // 2
+        for block_index, lines in enumerate(selected_blocks):
+            for line in lines:
+                bbox = draw.textbbox(
+                    (0, 0),
+                    line or "A",
+                    font=selected_font,
+                    stroke_width=stroke_width,
+                )
+                draw.text(
+                    (x - bbox[0], y - bbox[1]),
+                    line,
+                    font=selected_font,
+                    fill=fill,
+                    stroke_width=stroke_width,
+                    stroke_fill=stroke_fill,
+                )
+                y += (bbox[3] - bbox[1]) + line_gap
+            if lines:
+                y -= line_gap
+            if block_index < len(selected_blocks) - 1:
+                y += block_gap
+
+    def _render_illustrated_advice_card(
+        self,
+        tips: tuple[AdviceTip, ...],
+        language: Language,
+    ) -> Image.Image:
+        width, height = self.settings.width, self.settings.height
+        image = Image.new("RGBA", (width, height), (247, 247, 245, 255))
+        draw = ImageDraw.Draw(image)
+        title, subtitle = ADVICE_ILLUSTRATED_TITLES[language]
+        side_margin = _scale_x(70, width)
+        max_width = width - side_margin * 2
+
+        title_font, title_lines = self._fit_text(
+            title,
+            draw,
+            max_width=max_width,
+            max_height=_scale_y(145, height),
+            base_size=self._scaled_text_size(58, minimum=28),
+            min_size=self._scaled_text_size(42, minimum=22),
+            bold=True,
+            stroke_width=0,
+            balanced=True,
+        )
+        title_height = self._block_height(title_lines, title_font, draw, stroke_width=0)
+        title_y = _scale_y(66, height)
+        self._draw_lines(
+            draw,
+            title_lines,
+            title_font,
+            start_y=title_y,
+            width=width,
+            fill=(15, 18, 21),
+            stroke_width=0,
+            line_gap=_scale_y(5, height),
+        )
+        subtitle_font = self._load_font(
+            size=self._scaled_text_size(28, minimum=16),
+            bold=False,
+        )
+        subtitle_width, subtitle_height = self._text_size(
+            draw,
+            subtitle,
+            subtitle_font,
+            stroke_width=0,
+        )
+        draw.text(
+            ((width - subtitle_width) // 2, title_y + title_height + _scale_y(18, height)),
+            subtitle,
+            font=subtitle_font,
+            fill=(88, 92, 96),
+        )
+
+        cards_top = max(
+            _scale_y(285, height),
+            title_y + title_height + subtitle_height + _scale_y(55, height),
+        )
+        cards_bottom = _scale_y(110, height)
+        card_gap = _scale_y(34, height)
+        card_height = (
+            height - cards_top - cards_bottom - card_gap * (len(tips) - 1)
+        ) // len(tips)
+        card_left = side_margin
+        card_right = width - side_margin
+        radius = _scale_x(ADVICE_ILLUSTRATED_CARD_RADIUS, width)
+
+        for index, tip in enumerate(tips, start=1):
+            top = cards_top + (index - 1) * (card_height + card_gap)
+            bottom = top + card_height
+            shadow_offset = _scale_y(10, height)
+            draw.rounded_rectangle(
+                (
+                    card_left,
+                    top + shadow_offset,
+                    card_right,
+                    bottom + shadow_offset,
+                ),
+                radius=radius,
+                fill=(30, 35, 40, 28),
+            )
+            draw.rounded_rectangle(
+                (card_left, top, card_right, bottom),
+                radius=radius,
+                fill=(255, 255, 255, 255),
+                outline=(230, 231, 232, 255),
+                width=max(1, _scale_x(2, width)),
+            )
+
+            number_font = self._load_font(
+                size=self._scaled_text_size(92, minimum=42),
+                bold=True,
+            )
+            number = str(index)
+            number_width, number_height = self._text_size(
+                draw,
+                number,
+                number_font,
+                stroke_width=0,
+            )
+            number_center_x = card_left + _scale_x(78, width)
+            draw.text(
+                (
+                    number_center_x - number_width // 2,
+                    top + (card_height - number_height) // 2,
+                ),
+                number,
+                font=number_font,
+                fill=(8, 10, 12),
+            )
+
+            icon_center = (
+                card_left + _scale_x(215, width),
+                top + card_height // 2,
+            )
+            self._draw_advice_icon(
+                draw,
+                icon_center,
+                _scale_x(112, width),
+                index,
+            )
+
+            text_left = card_left + _scale_x(315, width)
+            text_right = card_right - _scale_x(40, width)
+            text_width = max(1, text_right - text_left)
+            title_font = self._load_font(
+                size=self._scaled_text_size(37, minimum=19),
+                bold=True,
+            )
+            body_font = self._load_font(
+                size=self._scaled_text_size(29, minimum=16),
+                bold=False,
+            )
+            title_lines = self._wrap_text(
+                tip.title,
+                title_font,
+                text_width,
+                draw,
+                stroke_width=0,
+            )
+            body_lines = self._wrap_text(
+                tip.body,
+                body_font,
+                text_width,
+                draw,
+                stroke_width=0,
+            )
+            title_block_height = self._block_height(
+                title_lines,
+                title_font,
+                draw,
+                stroke_width=0,
+                line_gap=_scale_y(3, height),
+            )
+            body_block_height = self._block_height(
+                body_lines,
+                body_font,
+                draw,
+                stroke_width=0,
+                line_gap=_scale_y(4, height),
+            )
+            text_gap = _scale_y(13, height)
+            text_top = top + max(
+                _scale_y(24, height),
+                (
+                    card_height
+                    - title_block_height
+                    - body_block_height
+                    - text_gap
+                )
+                // 2,
+            )
+            self._draw_left_aligned_lines(
+                draw,
+                title_lines,
+                title_font,
+                x=text_left,
+                start_y=text_top,
+                fill=(15, 18, 21),
+                line_gap=_scale_y(3, height),
+            )
+            self._draw_left_aligned_lines(
+                draw,
+                body_lines,
+                body_font,
+                x=text_left,
+                start_y=text_top + title_block_height + text_gap,
+                fill=(70, 74, 79),
+                line_gap=_scale_y(4, height),
+            )
+        return image.convert("RGB")
+
+    def _draw_left_aligned_lines(
+        self,
+        draw: ImageDraw.ImageDraw,
+        lines: list[str],
+        font: ImageFont.ImageFont,
+        *,
+        x: int,
+        start_y: int,
+        fill: tuple[int, int, int],
+        line_gap: int,
+    ) -> None:
+        y = start_y
+        for line in lines:
+            bbox = draw.textbbox((0, 0), line or "A", font=font)
+            draw.text((x - bbox[0], y - bbox[1]), line, font=font, fill=fill)
+            y += (bbox[3] - bbox[1]) + line_gap
+
+    def _draw_advice_icon(
+        self,
+        draw: ImageDraw.ImageDraw,
+        center: tuple[int, int],
+        size: int,
+        index: int,
+    ) -> None:
+        cx, cy = center
+        half = size // 2
+        palette = {
+            1: ((224, 246, 240), (17, 142, 104)),
+            2: ((255, 238, 218), (234, 125, 45)),
+            3: ((235, 232, 255), (111, 87, 219)),
+            4: ((224, 241, 255), (42, 126, 190)),
+        }
+        background, accent = palette[index]
+        draw.ellipse(
+            (cx - half, cy - half, cx + half, cy + half),
+            fill=background,
+        )
+        line_width = max(2, size // 17)
+        dark = (24, 29, 34)
+        if index == 1:
+            box = (
+                cx - size // 4,
+                cy - size // 5,
+                cx + size // 6,
+                cy + size // 4,
+            )
+            draw.rectangle(box, outline=dark, width=line_width)
+            draw.line(
+                (box[0], box[1], (box[0] + box[2]) // 2, box[1] - size // 8, box[2], box[1]),
+                fill=dark,
+                width=line_width,
+                joint="curve",
+            )
+            glass_center = (cx + size // 5, cy + size // 6)
+            glass_r = size // 8
+            draw.ellipse(
+                (
+                    glass_center[0] - glass_r,
+                    glass_center[1] - glass_r,
+                    glass_center[0] + glass_r,
+                    glass_center[1] + glass_r,
+                ),
+                outline=accent,
+                width=line_width,
+            )
+            draw.line(
+                (
+                    glass_center[0] + glass_r,
+                    glass_center[1] + glass_r,
+                    cx + size // 3,
+                    cy + size // 3,
+                ),
+                fill=accent,
+                width=line_width,
+            )
+        elif index == 2:
+            draw.rounded_rectangle(
+                (
+                    cx - size // 3,
+                    cy - size // 4,
+                    cx + size // 3,
+                    cy + size // 6,
+                ),
+                radius=max(4, size // 16),
+                outline=dark,
+                width=line_width,
+            )
+            draw.polygon(
+                (
+                    (cx - size // 7, cy + size // 6),
+                    (cx - size // 4, cy + size // 3),
+                    (cx + size // 16, cy + size // 6),
+                ),
+                fill=accent,
+            )
+            for offset in (-size // 6, 0, size // 6):
+                draw.ellipse(
+                    (
+                        cx + offset - line_width,
+                        cy - line_width * 2,
+                        cx + offset + line_width,
+                        cy,
+                    ),
+                    fill=accent,
+                )
+        elif index == 3:
+            for offset, height_ratio in ((-1, 2), (0, 3), (1, 4)):
+                bar_width = size // 7
+                bar_height = size * height_ratio // 12
+                left = cx + offset * size // 5 - bar_width // 2
+                draw.rounded_rectangle(
+                    (
+                        left,
+                        cy + size // 3 - bar_height,
+                        left + bar_width,
+                        cy + size // 3,
+                    ),
+                    radius=max(2, bar_width // 4),
+                    fill=accent if offset == 1 else dark,
+                )
+            draw.line(
+                (
+                    cx - size // 3,
+                    cy + size // 3,
+                    cx + size // 3,
+                    cy + size // 3,
+                ),
+                fill=dark,
+                width=line_width,
+            )
+        else:
+            draw.line(
+                (
+                    cx - size // 4,
+                    cy + size // 5,
+                    cx - size // 12,
+                    cy,
+                    cx + size // 16,
+                    cy + size // 10,
+                    cx + size // 4,
+                    cy - size // 4,
+                ),
+                fill=accent,
+                width=line_width,
+                joint="curve",
+            )
+            for px, py in (
+                (cx - size // 4, cy + size // 5),
+                (cx - size // 12, cy),
+                (cx + size // 16, cy + size // 10),
+                (cx + size // 4, cy - size // 4),
+            ):
+                r = max(3, size // 24)
+                draw.ellipse((px - r, py - r, px + r, py + r), fill=dark)
+            draw.ellipse(
+                (
+                    cx - size // 3,
+                    cy - size // 3,
+                    cx + size // 3,
+                    cy + size // 3,
+                ),
+                outline=dark,
+                width=max(1, line_width // 2),
+            )
 
     def _cached_fixed_slide_canvas(
         self,
