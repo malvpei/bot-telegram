@@ -77,6 +77,8 @@ def test_type_4_flat_advice_cards_invert_background_and_text_colors():
     assert tuple(white_pixels[0, 0]) == (255, 255, 255)
     assert (black_pixels[..., :3] > 235).all(axis=2).mean() > 0.01
     assert (white_pixels[..., :3] < 25).all(axis=2).mean() > 0.01
+    assert (black_pixels.max(axis=2) - black_pixels.min(axis=2) > 50).mean() > 0.0005
+    assert (white_pixels.max(axis=2) - white_pixels.min(axis=2) > 50).mean() > 0.0005
 
 
 def test_type_4_illustrated_advice_card_draws_header_cards_and_icons():

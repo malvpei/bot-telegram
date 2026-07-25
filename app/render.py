@@ -138,6 +138,7 @@ ADVICE_FLAT_MIN_TEXT_SIZE = 32
 ADVICE_FLAT_SIDE_MARGIN = 150
 ADVICE_FLAT_BLOCK_GAP = 48
 ADVICE_FLAT_LINE_GAP = 10
+ADVICE_FLAT_EMOJI_GAP = 12
 ADVICE_ILLUSTRATED_CARD_RADIUS = 28
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
@@ -398,7 +399,7 @@ class VideoRenderer:
         stroke_width = max(1, _scale_x(2, width))
 
         selected_font: ImageFont.ImageFont | None = None
-        selected_blocks: list[list[str]] = []
+        selected_blocks: list[tuple[list[str], int]] = []
         selected_heights: list[int] = []
         for font_size in range(
             self._scaled_text_size(ADVICE_FLAT_TEXT_SIZE, minimum=20),
@@ -406,13 +407,15 @@ class VideoRenderer:
             -2,
         ):
             font = self._load_font(size=font_size, bold=True)
-            blocks: list[list[str]] = []
+            emoji_space = self._advice_flat_emoji_space(font_size, width)
+            title_max_width = max(1, max_width - emoji_space)
+            blocks: list[tuple[list[str], int]] = []
             heights: list[int] = []
             for index, tip in enumerate(tips, start=1):
                 title_lines = self._wrap_text(
                     f"{index}. {tip.title}",
                     font,
-                    max_width,
+                    title_max_width,
                     draw,
                     stroke_width=stroke_width,
                 )
@@ -424,7 +427,7 @@ class VideoRenderer:
                     stroke_width=stroke_width,
                 )
                 lines = [*title_lines, *body_lines]
-                blocks.append(lines)
+                blocks.append((lines, len(title_lines)))
                 heights.append(
                     self._block_height(
                         lines,
@@ -446,8 +449,8 @@ class VideoRenderer:
         total_height = sum(selected_heights) + block_gap * (len(selected_blocks) - 1)
         y = max(_scale_y(120, height), (height - total_height) // 2)
         x = (width - max_width) // 2
-        for block_index, lines in enumerate(selected_blocks):
-            for line in lines:
+        for block_index, (lines, title_line_count) in enumerate(selected_blocks):
+            for line_index, line in enumerate(lines):
                 bbox = draw.textbbox(
                     (0, 0),
                     line or "A",
@@ -462,11 +465,219 @@ class VideoRenderer:
                     stroke_width=stroke_width,
                     stroke_fill=stroke_fill,
                 )
+                if line_index == title_line_count - 1:
+                    line_width = bbox[2] - bbox[0]
+                    line_height = bbox[3] - bbox[1]
+                    icon_size = self._advice_flat_emoji_size(
+                        selected_font,
+                        width,
+                        height=line_height,
+                    )
+                    icon_x = x + line_width + _scale_x(ADVICE_FLAT_EMOJI_GAP, width)
+                    self._draw_flat_advice_emoji(
+                        draw,
+                        self._flat_advice_emoji_key(tips[block_index], block_index + 1),
+                        (
+                            icon_x + icon_size // 2,
+                            y + line_height // 2,
+                        ),
+                        icon_size,
+                        stroke_fill[:3],
+                    )
                 y += (bbox[3] - bbox[1]) + line_gap
             if lines:
                 y -= line_gap
             if block_index < len(selected_blocks) - 1:
                 y += block_gap
+
+    @staticmethod
+    def _flat_advice_emoji_key(tip: AdviceTip, index: int) -> str:
+        title = tip.title.lower()
+        text = f"{tip.title} {tip.body}".lower()
+        if any(word in title for word in ("analiza", "analyse")):
+            return "chart"
+        if any(
+            word in title
+            for word in (
+                "competencia",
+                "competitors",
+                "investiga",
+                "research",
+                "activas",
+                "active",
+            )
+        ):
+            return "search"
+        if any(word in title for word in ("reseñas", "reviews")):
+            return "spy"
+        if any(
+            word in title
+            for word in ("segundo", "second", "antiguos", "old ads", "viral ads")
+        ):
+            return "clock"
+        if any(word in title for word in ("pack", "bundle", "opción", "option")):
+            return "brain"
+        if any(word in title for word in ("dudas", "questions", "preguntas", "hooks")):
+            return "brain"
+        if any(word in text for word in ("producto", "product", "comments", "comentarios")):
+            return "eyes"
+        if index == 4:
+            return "chart"
+        if index == 3:
+            return "clock"
+        if index == 2:
+            return "brain"
+        return "eyes"
+
+    @staticmethod
+    def _advice_flat_emoji_size(
+        font: ImageFont.ImageFont,
+        width: int,
+        *,
+        height: int,
+    ) -> int:
+        font_size = getattr(font, "size", height)
+        return max(_scale_x(34, width), int(round(max(font_size, height) * 1.0)))
+
+    def _advice_flat_emoji_space(self, font_size: int, width: int) -> int:
+        icon_size = max(_scale_x(34, width), int(round(font_size * 1.0)))
+        return icon_size + _scale_x(ADVICE_FLAT_EMOJI_GAP, width)
+
+    def _draw_flat_advice_emoji(
+        self,
+        draw: ImageDraw.ImageDraw,
+        key: str,
+        center: tuple[int, int],
+        size: int,
+        outline: tuple[int, int, int],
+    ) -> None:
+        cx, cy = center
+        half = size // 2
+        line = max(2, size // 12)
+        if key == "eyes":
+            eye_w = max(6, size // 3)
+            eye_h = max(7, size // 2)
+            for offset in (-size // 5, size // 5):
+                box = (
+                    cx + offset - eye_w // 2,
+                    cy - eye_h // 2,
+                    cx + offset + eye_w // 2,
+                    cy + eye_h // 2,
+                )
+                draw.ellipse(
+                    box,
+                    fill=(255, 255, 255),
+                    outline=(42, 46, 52),
+                    width=line,
+                )
+                pupil_r = max(2, size // 12)
+                draw.ellipse(
+                    (
+                        cx + offset + eye_w // 12 - pupil_r,
+                        cy - pupil_r,
+                        cx + offset + eye_w // 12 + pupil_r,
+                        cy + pupil_r,
+                    ),
+                    fill=(25, 30, 36),
+                )
+            return
+        if key == "brain":
+            lobes = (
+                (cx - size // 5, cy - size // 6),
+                (cx, cy - size // 5),
+                (cx + size // 5, cy - size // 8),
+                (cx - size // 7, cy + size // 8),
+                (cx + size // 8, cy + size // 9),
+            )
+            for lx, ly in lobes:
+                r = size // 4
+                draw.ellipse(
+                    (lx - r, ly - r, lx + r, ly + r),
+                    fill=(255, 144, 181),
+                    outline=(190, 74, 118),
+                    width=max(1, line // 2),
+                )
+            draw.arc(
+                (cx - half // 2, cy - half // 2, cx + half // 2, cy + half // 2),
+                200,
+                340,
+                fill=(190, 74, 118),
+                width=max(1, line // 2),
+            )
+            return
+        if key == "clock":
+            draw.ellipse(
+                (cx - half, cy - half, cx + half, cy + half),
+                fill=(242, 248, 255),
+                outline=(130, 143, 156),
+                width=line,
+            )
+            draw.line((cx, cy, cx, cy - size // 4), fill=(65, 76, 88), width=line)
+            draw.line((cx, cy, cx + size // 5, cy + size // 8), fill=(65, 76, 88), width=line)
+            draw.arc(
+                (cx - half, cy - half - size // 8, cx - size // 8, cy + size // 5),
+                210,
+                315,
+                fill=(102, 196, 255),
+                width=max(1, line // 2),
+            )
+            return
+        if key == "spy":
+            draw.ellipse(
+                (cx - half // 2, cy - half // 5, cx + half // 2, cy + half),
+                fill=(245, 198, 127),
+                outline=(95, 72, 48),
+                width=max(1, line // 2),
+            )
+            draw.pieslice(
+                (cx - half, cy - half, cx + half, cy + size // 8),
+                180,
+                360,
+                fill=(38, 42, 48),
+            )
+            draw.rectangle(
+                (cx - half, cy - size // 10, cx + half, cy + size // 12),
+                fill=(38, 42, 48),
+            )
+            draw.line(
+                (cx - size // 4, cy + size // 8, cx + size // 4, cy + size // 8),
+                fill=(38, 42, 48),
+                width=line,
+            )
+            return
+        if key == "chart":
+            box = (cx - half, cy - half, cx + half, cy + half)
+            draw.rounded_rectangle(
+                box,
+                radius=max(3, size // 10),
+                fill=(240, 250, 255),
+                outline=(106, 132, 150),
+                width=max(1, line // 2),
+            )
+            bar_w = max(3, size // 7)
+            bars = (
+                ((81, 170, 255), size // 4),
+                ((255, 105, 105), size // 2),
+                ((69, 201, 118), size // 3),
+            )
+            start_x = cx - size // 4
+            baseline = cy + size // 4
+            for offset, (fill, bar_h) in enumerate(bars):
+                x0 = start_x + offset * (bar_w + max(2, size // 12))
+                draw.rectangle((x0, baseline - bar_h, x0 + bar_w, baseline), fill=fill)
+            return
+        glass_r = max(5, size // 3)
+        draw.ellipse(
+            (cx - glass_r, cy - glass_r, cx + glass_r, cy + glass_r),
+            fill=(215, 243, 255),
+            outline=(64, 116, 148),
+            width=line,
+        )
+        draw.line(
+            (cx + glass_r // 2, cy + glass_r // 2, cx + half, cy + half),
+            fill=(64, 116, 148),
+            width=line,
+        )
 
     def _render_illustrated_advice_card(
         self,
