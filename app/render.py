@@ -133,8 +133,8 @@ TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.30
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH = 48
-ADVICE_FLAT_TEXT_SIZE = 46
-ADVICE_FLAT_MIN_TEXT_SIZE = 32
+ADVICE_FLAT_TEXT_SIZE = 43
+ADVICE_FLAT_MIN_TEXT_SIZE = 30
 ADVICE_FLAT_SIDE_MARGIN = 150
 ADVICE_FLAT_BLOCK_GAP = 48
 ADVICE_FLAT_LINE_GAP = 10
@@ -396,7 +396,7 @@ class VideoRenderer:
         )
         block_gap = _scale_y(ADVICE_FLAT_BLOCK_GAP, height)
         line_gap = _scale_y(ADVICE_FLAT_LINE_GAP, height)
-        stroke_width = max(1, _scale_x(2, width))
+        stroke_width = max(1, _scale_x(1, width))
 
         selected_font: ImageFont.ImageFont | None = None
         selected_blocks: list[tuple[list[str], int]] = []
@@ -406,16 +406,16 @@ class VideoRenderer:
             self._scaled_text_size(ADVICE_FLAT_MIN_TEXT_SIZE, minimum=16) - 1,
             -2,
         ):
-            font = self._load_font(size=font_size, bold=True)
+            font = self._load_font(size=font_size, bold=False)
             emoji_space = self._advice_flat_emoji_space(font_size, width)
-            title_max_width = max(1, max_width - emoji_space)
             blocks: list[tuple[list[str], int]] = []
             heights: list[int] = []
             for index, tip in enumerate(tips, start=1):
-                title_lines = self._wrap_text(
+                title_lines = self._wrap_flat_advice_title(
                     f"{index}. {tip.title}",
                     font,
-                    title_max_width,
+                    max_width,
+                    emoji_space,
                     draw,
                     stroke_width=stroke_width,
                 )
@@ -475,7 +475,7 @@ class VideoRenderer:
                     )
                     icon_x = x + line_width + _scale_x(ADVICE_FLAT_EMOJI_GAP, width)
                     self._draw_flat_advice_emoji(
-                        draw,
+                        image,
                         self._flat_advice_emoji_key(tips[block_index], block_index + 1),
                         (
                             icon_x + icon_size // 2,
@@ -489,6 +489,41 @@ class VideoRenderer:
                 y -= line_gap
             if block_index < len(selected_blocks) - 1:
                 y += block_gap
+
+    def _wrap_flat_advice_title(
+        self,
+        title: str,
+        font: ImageFont.ImageFont,
+        max_width: int,
+        emoji_space: int,
+        draw: ImageDraw.ImageDraw,
+        *,
+        stroke_width: int,
+    ) -> list[str]:
+        lines = self._wrap_text(
+            title,
+            font,
+            max_width,
+            draw,
+            stroke_width=stroke_width,
+        )
+        if not lines:
+            return lines
+        last_width = self._text_size(
+            draw,
+            lines[-1],
+            font,
+            stroke_width=stroke_width,
+        )[0]
+        if last_width + emoji_space <= max_width:
+            return lines
+        return self._wrap_text(
+            title,
+            font,
+            max(1, max_width - emoji_space),
+            draw,
+            stroke_width=stroke_width,
+        )
 
     @staticmethod
     def _flat_advice_emoji_key(tip: AdviceTip, index: int) -> str:
@@ -545,139 +580,349 @@ class VideoRenderer:
 
     def _draw_flat_advice_emoji(
         self,
+        image: Image.Image,
+        key: str,
+        center: tuple[int, int],
+        size: int,
+        _outline: tuple[int, int, int],
+    ) -> None:
+        scale = 4
+        canvas_size = max(1, size * scale)
+        layer = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        self._draw_flat_advice_emoji_shape(
+            layer,
+            draw,
+            key,
+            (canvas_size // 2, canvas_size // 2),
+            canvas_size,
+        )
+        layer = layer.resize((size, size), Image.Resampling.LANCZOS)
+        image.alpha_composite(
+            layer,
+            (center[0] - size // 2, center[1] - size // 2),
+        )
+
+    def _draw_flat_advice_emoji_shape(
+        self,
+        surface: Image.Image,
         draw: ImageDraw.ImageDraw,
         key: str,
         center: tuple[int, int],
         size: int,
-        outline: tuple[int, int, int],
     ) -> None:
         cx, cy = center
         half = size // 2
-        line = max(2, size // 12)
+        line = max(3, size // 18)
+        shadow = (0, 0, 0, 38)
+
         if key == "eyes":
-            eye_w = max(6, size // 3)
-            eye_h = max(7, size // 2)
+            eye_w = max(6, int(size * 0.34))
+            eye_h = max(7, int(size * 0.50))
             for offset in (-size // 5, size // 5):
                 box = (
                     cx + offset - eye_w // 2,
-                    cy - eye_h // 2,
+                    cy - eye_h // 2 + size // 28,
                     cx + offset + eye_w // 2,
-                    cy + eye_h // 2,
+                    cy + eye_h // 2 + size // 28,
                 )
-                draw.ellipse(
+                shadow_box = (box[0], box[1] + size // 16, box[2], box[3] + size // 16)
+                draw.ellipse(shadow_box, fill=shadow)
+                self._gradient_ellipse(
+                    surface,
                     box,
-                    fill=(255, 255, 255),
-                    outline=(42, 46, 52),
-                    width=line,
+                    (255, 255, 255, 255),
+                    (219, 226, 235, 255),
+                    outline=(64, 67, 72),
+                    width=max(2, line // 2),
                 )
-                pupil_r = max(2, size // 12)
+                pupil_r = max(3, int(size * 0.105))
+                px = cx + offset + eye_w // 12
+                py = cy + size // 28
+                self._gradient_ellipse(
+                    surface,
+                    (
+                        px - pupil_r,
+                        py - pupil_r,
+                        px + pupil_r,
+                        py + pupil_r,
+                    ),
+                    (40, 44, 51, 255),
+                    (4, 5, 7, 255),
+                )
+                shine = max(2, pupil_r // 3)
                 draw.ellipse(
                     (
-                        cx + offset + eye_w // 12 - pupil_r,
-                        cy - pupil_r,
-                        cx + offset + eye_w // 12 + pupil_r,
-                        cy + pupil_r,
+                        px - shine,
+                        py - shine - pupil_r // 3,
+                        px + shine,
+                        py + shine - pupil_r // 3,
                     ),
-                    fill=(25, 30, 36),
+                    fill=(255, 255, 255, 210),
                 )
             return
+
         if key == "brain":
-            lobes = (
-                (cx - size // 5, cy - size // 6),
-                (cx, cy - size // 5),
-                (cx + size // 5, cy - size // 8),
-                (cx - size // 7, cy + size // 8),
-                (cx + size // 8, cy + size // 9),
+            draw.ellipse(
+                (cx - size // 3, cy + size // 7, cx + size // 3, cy + size // 2),
+                fill=shadow,
             )
-            for lx, ly in lobes:
-                r = size // 4
-                draw.ellipse(
+            lobes = (
+                (cx - size // 5, cy - size // 7, size // 4),
+                (cx, cy - size // 5, size // 4),
+                (cx + size // 5, cy - size // 9, size // 4),
+                (cx - size // 6, cy + size // 9, size // 4),
+                (cx + size // 8, cy + size // 8, size // 4),
+            )
+            for lx, ly, r in lobes:
+                self._gradient_ellipse(
+                    surface,
                     (lx - r, ly - r, lx + r, ly + r),
-                    fill=(255, 144, 181),
-                    outline=(190, 74, 118),
-                    width=max(1, line // 2),
+                    (255, 185, 210, 255),
+                    (238, 83, 150, 255),
+                    outline=(198, 60, 118),
+                    width=max(2, line // 2),
                 )
+            vein = (210, 64, 121)
+            for offset in (-size // 4, -size // 12, size // 8, size // 4):
+                draw.arc(
+                    (
+                        cx + offset - size // 6,
+                        cy - size // 5,
+                        cx + offset + size // 5,
+                        cy + size // 4,
+                    ),
+                    205,
+                    345,
+                    fill=vein,
+                    width=max(2, line // 2),
+                )
+            draw.line(
+                (cx, cy - size // 3, cx, cy + size // 3),
+                fill=(190, 55, 110),
+                width=max(2, line // 3),
+            )
             draw.arc(
-                (cx - half // 2, cy - half // 2, cx + half // 2, cy + half // 2),
-                200,
-                340,
-                fill=(190, 74, 118),
-                width=max(1, line // 2),
+                (cx - size // 3, cy - size // 3, cx + size // 5, cy + size // 4),
+                70,
+                180,
+                fill=(255, 205, 224),
+                width=max(2, line // 2),
             )
             return
+
         if key == "clock":
+            button = (cx - size // 9, cy - half - size // 9, cx + size // 9, cy - half + size // 12)
+            draw.rounded_rectangle(
+                button,
+                radius=max(2, size // 20),
+                fill=(120, 134, 150),
+            )
             draw.ellipse(
+                (cx - half + line, cy - half + line + size // 16, cx + half - line, cy + half - line + size // 16),
+                fill=shadow,
+            )
+            self._gradient_ellipse(
+                surface,
                 (cx - half, cy - half, cx + half, cy + half),
-                fill=(242, 248, 255),
-                outline=(130, 143, 156),
+                (255, 255, 255, 255),
+                (220, 232, 243, 255),
+                outline=(108, 122, 137),
                 width=line,
             )
-            draw.line((cx, cy, cx, cy - size // 4), fill=(65, 76, 88), width=line)
-            draw.line((cx, cy, cx + size // 5, cy + size // 8), fill=(65, 76, 88), width=line)
+            self._gradient_ellipse(
+                surface,
+                (cx - half + line * 2, cy - half + line * 2, cx + half - line * 2, cy + half - line * 2),
+                (250, 253, 255, 255),
+                (232, 242, 249, 255),
+                outline=(206, 221, 234),
+                width=max(2, line // 3),
+            )
+            hand = (50, 61, 74)
+            draw.line((cx, cy, cx, cy - size // 4), fill=hand, width=line)
+            draw.line((cx, cy, cx + size // 5, cy + size // 8), fill=hand, width=line)
+            dot = max(3, size // 18)
+            draw.ellipse((cx - dot, cy - dot, cx + dot, cy + dot), fill=hand)
             draw.arc(
-                (cx - half, cy - half - size // 8, cx - size // 8, cy + size // 5),
-                210,
-                315,
-                fill=(102, 196, 255),
-                width=max(1, line // 2),
+                (cx - half + line * 2, cy - half + line * 2, cx + half - line * 2, cy + half - line * 2),
+                205,
+                300,
+                fill=(125, 200, 255),
+                width=max(2, line // 2),
             )
             return
+
         if key == "spy":
             draw.ellipse(
-                (cx - half // 2, cy - half // 5, cx + half // 2, cy + half),
-                fill=(245, 198, 127),
-                outline=(95, 72, 48),
-                width=max(1, line // 2),
+                (cx - size // 3, cy + size // 4, cx + size // 3, cy + half),
+                fill=shadow,
+            )
+            self._gradient_ellipse(
+                surface,
+                (cx - size // 4, cy - size // 12, cx + size // 4, cy + size // 3),
+                (255, 211, 136, 255),
+                (231, 153, 83, 255),
+                outline=(122, 83, 47),
+                width=max(2, line // 2),
             )
             draw.pieslice(
-                (cx - half, cy - half, cx + half, cy + size // 8),
+                (cx - half + line, cy - half + size // 10, cx + half - line, cy + size // 9),
                 180,
                 360,
-                fill=(38, 42, 48),
+                fill=(43, 47, 55),
             )
             draw.rectangle(
-                (cx - half, cy - size // 10, cx + half, cy + size // 12),
-                fill=(38, 42, 48),
+                (cx - half + line, cy - size // 12, cx + half - line, cy + size // 14),
+                fill=(43, 47, 55),
+            )
+            lens = max(4, size // 9)
+            for offset in (-size // 9, size // 9):
+                draw.ellipse(
+                    (cx + offset - lens, cy + size // 10 - lens, cx + offset + lens, cy + size // 10 + lens),
+                    fill=(28, 31, 37),
+                )
+            draw.line(
+                (cx - size // 4, cy + size // 9, cx + size // 4, cy + size // 9),
+                fill=(28, 31, 37),
+                width=max(2, line // 2),
             )
             draw.line(
-                (cx - size // 4, cy + size // 8, cx + size // 4, cy + size // 8),
-                fill=(38, 42, 48),
-                width=line,
+                (cx, cy + size // 6, cx, cy + size // 3),
+                fill=(126, 77, 47),
+                width=max(2, line // 2),
             )
             return
+
         if key == "chart":
             box = (cx - half, cy - half, cx + half, cy + half)
             draw.rounded_rectangle(
-                box,
-                radius=max(3, size // 10),
-                fill=(240, 250, 255),
-                outline=(106, 132, 150),
-                width=max(1, line // 2),
+                (box[0], box[1] + size // 14, box[2], box[3] + size // 14),
+                radius=max(3, size // 8),
+                fill=shadow,
             )
+            self._gradient_roundrect(
+                surface,
+                box,
+                radius=max(3, size // 8),
+                top=(255, 255, 255, 255),
+                bottom=(226, 238, 248, 255),
+                outline=(124, 145, 164),
+                width=max(2, line // 2),
+            )
+            corner = (
+                (cx + half - size // 4, cy - half),
+                (cx + half, cy - half),
+                (cx + half, cy - half + size // 4),
+            )
+            draw.polygon(corner, fill=(207, 224, 238), outline=(148, 165, 180))
             bar_w = max(3, size // 7)
             bars = (
-                ((81, 170, 255), size // 4),
-                ((255, 105, 105), size // 2),
-                ((69, 201, 118), size // 3),
+                ((76, 169, 255), size // 4),
+                ((255, 105, 110), size // 2),
+                ((69, 204, 127), size // 3),
             )
             start_x = cx - size // 4
             baseline = cy + size // 4
             for offset, (fill, bar_h) in enumerate(bars):
                 x0 = start_x + offset * (bar_w + max(2, size // 12))
-                draw.rectangle((x0, baseline - bar_h, x0 + bar_w, baseline), fill=fill)
+                draw.rounded_rectangle(
+                    (x0, baseline - bar_h, x0 + bar_w, baseline),
+                    radius=max(2, bar_w // 2),
+                    fill=fill,
+            )
             return
+
         glass_r = max(5, size // 3)
         draw.ellipse(
+            (cx - glass_r, cy - glass_r + size // 14, cx + glass_r, cy + glass_r + size // 14),
+            fill=shadow,
+        )
+        self._gradient_ellipse(
+            surface,
             (cx - glass_r, cy - glass_r, cx + glass_r, cy + glass_r),
-            fill=(215, 243, 255),
-            outline=(64, 116, 148),
+            (231, 250, 255, 230),
+            (144, 219, 248, 230),
+            outline=(69, 123, 154),
             width=line,
+        )
+        draw.ellipse(
+            (cx - glass_r + line * 2, cy - glass_r + line * 2, cx - line, cy - line),
+            fill=(255, 255, 255, 105),
         )
         draw.line(
             (cx + glass_r // 2, cy + glass_r // 2, cx + half, cy + half),
-            fill=(64, 116, 148),
-            width=line,
+            fill=(78, 92, 108),
+            width=max(line, size // 11),
         )
+
+    def _gradient_ellipse(
+        self,
+        surface: Image.Image,
+        box: tuple[int, int, int, int],
+        top: tuple[int, int, int, int],
+        bottom: tuple[int, int, int, int],
+        *,
+        outline: tuple[int, int, int] | None = None,
+        width: int = 1,
+    ) -> None:
+        x0, y0, x1, y1 = box
+        w = max(1, x1 - x0)
+        h = max(1, y1 - y0)
+        gradient = self._vertical_gradient((w, h), top, bottom)
+        mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(mask).ellipse((0, 0, w - 1, h - 1), fill=255)
+        surface.paste(gradient, (x0, y0), mask)
+        if outline is not None and width > 0:
+            ImageDraw.Draw(surface).ellipse(box, outline=outline, width=width)
+
+    def _gradient_roundrect(
+        self,
+        surface: Image.Image,
+        box: tuple[int, int, int, int],
+        *,
+        radius: int,
+        top: tuple[int, int, int, int],
+        bottom: tuple[int, int, int, int],
+        outline: tuple[int, int, int] | None = None,
+        width: int = 1,
+    ) -> None:
+        x0, y0, x1, y1 = box
+        w = max(1, x1 - x0)
+        h = max(1, y1 - y0)
+        gradient = self._vertical_gradient((w, h), top, bottom)
+        mask = Image.new("L", (w, h), 0)
+        ImageDraw.Draw(mask).rounded_rectangle(
+            (0, 0, w - 1, h - 1),
+            radius=radius,
+            fill=255,
+        )
+        surface.paste(gradient, (x0, y0), mask)
+        if outline is not None and width > 0:
+            ImageDraw.Draw(surface).rounded_rectangle(
+                box,
+                radius=radius,
+                outline=outline,
+                width=width,
+            )
+
+    @staticmethod
+    def _vertical_gradient(
+        size: tuple[int, int],
+        top: tuple[int, int, int, int],
+        bottom: tuple[int, int, int, int],
+    ) -> Image.Image:
+        width, height = size
+        if height <= 1:
+            return Image.new("RGBA", size, top)
+        rows = []
+        for y in range(height):
+            ratio = y / (height - 1)
+            color = tuple(
+                int(round(top[channel] * (1.0 - ratio) + bottom[channel] * ratio))
+                for channel in range(4)
+            )
+            rows.extend(color * width)
+        return Image.frombytes("RGBA", size, bytes(rows))
 
     def _render_illustrated_advice_card(
         self,

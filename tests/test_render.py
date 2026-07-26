@@ -81,6 +81,32 @@ def test_type_4_flat_advice_cards_invert_background_and_text_colors():
     assert (white_pixels.max(axis=2) - white_pixels.min(axis=2) > 50).mean() > 0.0005
 
 
+def test_type_4_flat_advice_title_reserves_room_for_emoji():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    image = Image.new("RGBA", (360, 640), (255, 255, 255, 255))
+    draw = ImageDraw.Draw(image)
+    font = renderer._load_font(size=28, bold=False)
+    max_width = 250
+    emoji_space = renderer._advice_flat_emoji_space(28, image.width)
+
+    lines = renderer._wrap_flat_advice_title(
+        "1. no copies el producto, copia el ángulo",
+        font,
+        max_width,
+        emoji_space,
+        draw,
+        stroke_width=1,
+    )
+
+    last_width = renderer._text_size(
+        draw,
+        lines[-1],
+        font,
+        stroke_width=1,
+    )[0]
+    assert last_width + emoji_space <= max_width
+
+
 def test_type_4_illustrated_advice_card_draws_header_cards_and_icons():
     renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
 
