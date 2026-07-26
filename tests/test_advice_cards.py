@@ -5,6 +5,7 @@ from app.advice_cards import (
     ADVICE_ROTATION_CYCLE_LENGTH,
     AdviceBackground,
     advice_selection,
+    advice_social_copy,
 )
 from app.models import Language
 
@@ -51,3 +52,18 @@ def test_advice_external_phrases_match_requested_copy():
     assert ADVICE_EXTERNAL_PHRASES[Language.ES] == (
         "un dropshipper millonario me contó la regla número #1 para vender fácilmente"
     )
+
+
+def test_advice_social_copy_has_description_and_related_hashtags():
+    title, description, hashtags = advice_social_copy(Language.ES, 0)
+
+    assert title == ADVICE_EXTERNAL_PHRASES[Language.ES]
+    assert "Dropradar" in description
+    assert "productos ganadores" in description
+    assert hashtags == [
+        "#dropshipping",
+        "#productosganadores",
+        "#ecommerce",
+        "#shopify",
+        "#dropradar",
+    ]

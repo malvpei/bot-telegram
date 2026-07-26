@@ -215,6 +215,63 @@ ADVICE_EXTERNAL_PHRASES: dict[Language, str] = {
     ),
 }
 
+ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[str, ...]] = {
+    Language.ES: (
+        "4 consejos de dropshipping para detectar mejores oportunidades y encontrar "
+        "productos ganadores validados. Usa Dropradar para investigar tu próxima "
+        "idea antes de lanzar.",
+        "Elegir producto no debería ser una apuesta. Aplica estos consejos y usa "
+        "Dropradar para encontrar productos ganadores validados antes de invertir.",
+        "Los productos ganadores dejan señales: aprende a reconocerlas en anuncios, "
+        "packs y comentarios. Dropradar te ayuda a encontrar oportunidades "
+        "validadas.",
+        "Antes de gastar en anuncios, encuentra una oportunidad más segura. Estos "
+        "consejos y Dropradar te ayudan a localizar productos ganadores validados.",
+    ),
+    Language.EN: (
+        "4 dropshipping tips to spot better opportunities and find validated winning "
+        "products. Use Dropradar to research your next idea before launching.",
+        "Choosing a product should not be a guess. Use these tips and Dropradar to "
+        "find validated winning products before you invest.",
+        "Winning products leave signals: learn to spot them in ads, bundles and "
+        "comments. Dropradar helps you find validated opportunities.",
+        "Before spending on ads, start with a safer opportunity. These tips and "
+        "Dropradar help you find validated winning products.",
+    ),
+}
+
+ADVICE_SOCIAL_HASHTAGS: dict[Language, tuple[str, ...]] = {
+    Language.ES: (
+        "#dropshipping",
+        "#productosganadores",
+        "#ecommerce",
+        "#shopify",
+        "#dropradar",
+    ),
+    Language.EN: (
+        "#dropshipping",
+        "#winningproducts",
+        "#ecommerce",
+        "#shopify",
+        "#dropradar",
+    ),
+}
+
+
+def advice_social_copy(
+    language: Language,
+    pack_index: int,
+) -> tuple[str, str, list[str]]:
+    """Return TikTok-ready title, description and hashtags for an advice card."""
+    descriptions = ADVICE_SOCIAL_DESCRIPTIONS[language]
+    hashtags = ADVICE_SOCIAL_HASHTAGS[language]
+    index = max(0, int(pack_index)) % len(descriptions)
+    return (
+        ADVICE_EXTERNAL_PHRASES[language],
+        descriptions[index],
+        list(hashtags),
+    )
+
 ADVICE_ILLUSTRATED_TITLES: dict[Language, tuple[str, str]] = {
     Language.ES: (
         "4 reglas para vender más con dropshipping",
@@ -257,6 +314,14 @@ def validate_advice_content() -> None:
     for language, packs in ADVICE_PACKS.items():
         if len(packs) != expected_pack_count:
             raise ValueError("Los idiomas no tienen el mismo número de guiones tipo 4.")
+        if len(ADVICE_SOCIAL_DESCRIPTIONS[language]) != len(packs):
+            raise ValueError(
+                f"Faltan descripciones sociales para los consejos en {language.value}."
+            )
+        if len(ADVICE_SOCIAL_HASHTAGS[language]) < 3:
+            raise ValueError(
+                f"Los consejos en {language.value} necesitan hashtags relacionados."
+            )
         for tips in packs:
             if len(tips) != 4:
                 raise ValueError("Cada guion tipo 4 debe contener exactamente 4 consejos.")

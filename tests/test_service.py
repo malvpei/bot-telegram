@@ -534,6 +534,16 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
         assert english.social_copy.title == (
             "A millionaire dropshipper told me rule number #1 for selling easily"
         )
+        assert spanish.social_copy.description
+        assert "Dropradar" in spanish.social_copy.description
+        assert "productos ganadores" in spanish.social_copy.description
+        assert spanish.social_copy.hashtags == [
+            "#dropshipping",
+            "#productosganadores",
+            "#ecommerce",
+            "#shopify",
+            "#dropradar",
+        ]
         assert "Dropradar" in english.preview_text
         assert service.state.get_type_4_advice_phase(cycle_length=12) == 2
     finally:

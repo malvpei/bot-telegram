@@ -15,8 +15,8 @@ from uuid import uuid4
 from PIL import Image
 
 from app.advice_cards import (
-    ADVICE_EXTERNAL_PHRASES,
     ADVICE_ROTATION_CYCLE_LENGTH,
+    advice_social_copy,
     advice_selection,
     format_advice_script,
 )
@@ -666,10 +666,14 @@ class VideoCreationService:
             fallback_accounts=[],
         )
         script_path = self.renderer.write_script(plan, job_dir)
+        social_title, social_description, social_hashtags = advice_social_copy(
+            language,
+            pack_index,
+        )
         social_copy = SocialCopy(
-            title=ADVICE_EXTERNAL_PHRASES[language],
-            description="",
-            hashtags=[],
+            title=social_title,
+            description=social_description,
+            hashtags=social_hashtags,
         )
         self.state.log_job(
             self.state.build_job_record(

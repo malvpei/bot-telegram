@@ -81,6 +81,20 @@ def test_type_4_flat_advice_cards_invert_background_and_text_colors():
     assert (white_pixels.max(axis=2) - white_pixels.min(axis=2) > 50).mean() > 0.0005
 
 
+def test_type_4_flat_advice_cards_use_tiktok_safe_vertical_area():
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+    image = renderer.render_advice_card(
+        ADVICE_PACKS[Language.ES][0],
+        Language.ES,
+        AdviceBackground.BLACK,
+    )
+    pixels = np.asarray(image)
+    rows = np.where((pixels.max(axis=2) > 30).any(axis=1))[0]
+
+    assert rows.min() >= 450
+    assert rows.max() <= 1400
+
+
 def test_type_4_flat_advice_title_reserves_room_for_emoji():
     renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
     image = Image.new("RGBA", (360, 640), (255, 255, 255, 255))

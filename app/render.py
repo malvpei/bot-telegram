@@ -135,7 +135,9 @@ TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH = 48
 ADVICE_FLAT_TEXT_SIZE = 43
 ADVICE_FLAT_MIN_TEXT_SIZE = 30
 ADVICE_FLAT_SIDE_MARGIN = 150
-ADVICE_FLAT_BLOCK_GAP = 48
+ADVICE_FLAT_SAFE_TOP = 220
+ADVICE_FLAT_SAFE_BOTTOM = 300
+ADVICE_FLAT_BLOCK_GAP = 60
 ADVICE_FLAT_LINE_GAP = 10
 ADVICE_FLAT_EMOJI_GAP = 12
 ADVICE_ILLUSTRATED_CARD_RADIUS = 28
@@ -452,7 +454,12 @@ class VideoRenderer:
         if selected_font is None:
             return
         total_height = sum(selected_heights) + block_gap * (len(selected_blocks) - 1)
-        y = max(_scale_y(120, height), (height - total_height) // 2)
+        safe_top = _scale_y(ADVICE_FLAT_SAFE_TOP, height)
+        safe_height = max(
+            1,
+            height - safe_top - _scale_y(ADVICE_FLAT_SAFE_BOTTOM, height),
+        )
+        y = safe_top + max(0, (safe_height - total_height) // 2)
         x = (width - max_width) // 2
         for block_index, (lines, title_line_count) in enumerate(selected_blocks):
             for line_index, line in enumerate(lines):
