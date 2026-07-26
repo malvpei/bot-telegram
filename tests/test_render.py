@@ -107,8 +107,8 @@ def test_type_4_flat_advice_title_reserves_room_for_emoji():
     assert last_width + emoji_space <= max_width
 
 
-def test_type_4_illustrated_advice_card_draws_header_cards_and_icons():
-    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+def test_type_4_illustrated_advice_card_draws_clean_cards_without_header():
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
 
     result = renderer.render_advice_card(
         ADVICE_PACKS[Language.EN][1],
@@ -117,8 +117,9 @@ def test_type_4_illustrated_advice_card_draws_header_cards_and_icons():
     )
     pixels = np.asarray(result)
 
-    assert result.size == (360, 640)
+    assert result.size == (1080, 1920)
     assert tuple(pixels[0, 0]) == (247, 247, 245)
+    assert (pixels[:120].max(axis=2) < 80).mean() < 0.001
     assert (pixels[..., 0] < 50).mean() > 0.01
     assert (
         (pixels[..., 2] > pixels[..., 0] + 25)

@@ -14,7 +14,6 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter, ImageFont
 
 from app.advice_cards import (
-    ADVICE_ILLUSTRATED_TITLES,
     AdviceBackground,
     AdviceTip,
 )
@@ -938,56 +937,13 @@ class VideoRenderer:
         width, height = self.settings.width, self.settings.height
         image = Image.new("RGBA", (width, height), (247, 247, 245, 255))
         draw = ImageDraw.Draw(image)
-        title, subtitle = ADVICE_ILLUSTRATED_TITLES[language]
         side_margin = _scale_x(70, width)
-        max_width = width - side_margin * 2
-
-        title_font, title_lines = self._fit_text(
-            title,
-            draw,
-            max_width=max_width,
-            max_height=_scale_y(145, height),
-            base_size=self._scaled_text_size(58, minimum=28),
-            min_size=self._scaled_text_size(42, minimum=22),
-            bold=True,
-            stroke_width=0,
-            balanced=True,
-        )
-        title_height = self._block_height(title_lines, title_font, draw, stroke_width=0)
-        title_y = _scale_y(66, height)
-        self._draw_lines(
-            draw,
-            title_lines,
-            title_font,
-            start_y=title_y,
-            width=width,
-            fill=(15, 18, 21),
-            stroke_width=0,
-            line_gap=_scale_y(5, height),
-        )
-        subtitle_font = self._load_font(
-            size=self._scaled_text_size(28, minimum=16),
-            bold=False,
-        )
-        subtitle_width, subtitle_height = self._text_size(
-            draw,
-            subtitle,
-            subtitle_font,
-            stroke_width=0,
-        )
-        draw.text(
-            ((width - subtitle_width) // 2, title_y + title_height + _scale_y(18, height)),
-            subtitle,
-            font=subtitle_font,
-            fill=(88, 92, 96),
-        )
-
-        cards_top = max(
-            _scale_y(285, height),
-            title_y + title_height + subtitle_height + _scale_y(55, height),
-        )
-        cards_bottom = _scale_y(110, height)
-        card_gap = _scale_y(34, height)
+        # The illustrated version is intentionally just the four useful cards;
+        # the former headline/subtitle consumed space without adding anything
+        # to the individual tips.
+        cards_top = _scale_y(150, height)
+        cards_bottom = _scale_y(150, height)
+        card_gap = _scale_y(46, height)
         card_height = (
             height - cards_top - cards_bottom - card_gap * (len(tips) - 1)
         ) // len(tips)
@@ -998,7 +954,7 @@ class VideoRenderer:
         for index, tip in enumerate(tips, start=1):
             top = cards_top + (index - 1) * (card_height + card_gap)
             bottom = top + card_height
-            shadow_offset = _scale_y(10, height)
+            shadow_offset = _scale_y(9, height)
             draw.rounded_rectangle(
                 (
                     card_left,
@@ -1018,7 +974,7 @@ class VideoRenderer:
             )
 
             number_font = self._load_font(
-                size=self._scaled_text_size(92, minimum=42),
+                size=self._scaled_text_size(96, minimum=44),
                 bold=True,
             )
             number = str(index)
@@ -1044,9 +1000,9 @@ class VideoRenderer:
                 top + card_height // 2,
             )
             self._draw_advice_icon(
-                draw,
+                image,
                 icon_center,
-                _scale_x(112, width),
+                _scale_x(124, width),
                 index,
             )
 
@@ -1054,11 +1010,11 @@ class VideoRenderer:
             text_right = card_right - _scale_x(40, width)
             text_width = max(1, text_right - text_left)
             title_font = self._load_font(
-                size=self._scaled_text_size(37, minimum=19),
+                size=self._scaled_text_size(39, minimum=20),
                 bold=True,
             )
             body_font = self._load_font(
-                size=self._scaled_text_size(29, minimum=16),
+                size=self._scaled_text_size(30, minimum=17),
                 bold=False,
             )
             title_lines = self._wrap_text(
@@ -1089,7 +1045,9 @@ class VideoRenderer:
                 stroke_width=0,
                 line_gap=_scale_y(4, height),
             )
-            text_gap = _scale_y(13, height)
+            text_gap = _scale_y(22, height)
+            divider_height = max(2, _scale_y(4, height))
+            divider_width = _scale_x(34, width)
             text_top = top + max(
                 _scale_y(24, height),
                 (
@@ -1097,6 +1055,7 @@ class VideoRenderer:
                     - title_block_height
                     - body_block_height
                     - text_gap
+                    - divider_height
                 )
                 // 2,
             )
@@ -1109,12 +1068,23 @@ class VideoRenderer:
                 fill=(15, 18, 21),
                 line_gap=_scale_y(3, height),
             )
+            divider_y = text_top + title_block_height + _scale_y(9, height)
+            draw.rounded_rectangle(
+                (
+                    text_left,
+                    divider_y,
+                    text_left + divider_width,
+                    divider_y + divider_height,
+                ),
+                radius=divider_height // 2,
+                fill=self._advice_icon_palette(index)[2],
+            )
             self._draw_left_aligned_lines(
                 draw,
                 body_lines,
                 body_font,
                 x=text_left,
-                start_y=text_top + title_block_height + text_gap,
+                start_y=text_top + title_block_height + text_gap + divider_height,
                 fill=(70, 74, 79),
                 line_gap=_scale_y(4, height),
             )
@@ -1137,153 +1107,118 @@ class VideoRenderer:
             draw.text((x - bbox[0], y - bbox[1]), line, font=font, fill=fill)
             y += (bbox[3] - bbox[1]) + line_gap
 
+    @staticmethod
+    def _advice_icon_palette(
+        index: int,
+    ) -> tuple[tuple[int, int, int], tuple[int, int, int], tuple[int, int, int]]:
+        return {
+            1: ((238, 250, 246), (211, 242, 232), (16, 145, 105)),
+            2: ((255, 246, 231), (255, 229, 198), (232, 125, 45)),
+            3: ((245, 242, 255), (226, 220, 252), (111, 87, 219)),
+            4: ((237, 248, 255), (211, 235, 250), (42, 126, 190)),
+        }.get(index, ((245, 245, 245), (230, 230, 230), (58, 64, 70)))
+
     def _draw_advice_icon(
         self,
-        draw: ImageDraw.ImageDraw,
+        image: Image.Image,
         center: tuple[int, int],
         size: int,
         index: int,
     ) -> None:
-        cx, cy = center
-        half = size // 2
-        palette = {
-            1: ((224, 246, 240), (17, 142, 104)),
-            2: ((255, 238, 218), (234, 125, 45)),
-            3: ((235, 232, 255), (111, 87, 219)),
-            4: ((224, 241, 255), (42, 126, 190)),
-        }
-        background, accent = palette[index]
-        draw.ellipse(
-            (cx - half, cy - half, cx + half, cy + half),
-            fill=background,
+        """Draw one polished, antialiased icon badge for the illustrated card."""
+        scale = 4
+        canvas_size = max(1, size * scale)
+        layer = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        cx = cy = canvas_size // 2
+        unit = canvas_size / 124.0
+        top_color, bottom_color, accent = self._advice_icon_palette(index)
+        dark = (25, 32, 38, 255)
+        stroke = max(2, int(round(4 * unit)))
+
+        def p(x: float, y: float) -> tuple[int, int]:
+            return (int(round(x * unit)), int(round(y * unit)))
+
+        def b(x0: float, y0: float, x1: float, y1: float) -> tuple[int, int, int, int]:
+            x_start, y_start = p(x0, y0)
+            x_end, y_end = p(x1, y1)
+            return (x_start, y_start, x_end, y_end)
+
+        badge_box = b(4, 4, 120, 120)
+        shadow_box = b(5, 8, 119, 122)
+        draw.ellipse(shadow_box, fill=(29, 39, 47, 28))
+        self._gradient_ellipse(
+            layer,
+            badge_box,
+            (*top_color, 255),
+            (*bottom_color, 255),
+            outline=(255, 255, 255),
+            width=max(1, int(round(1.5 * unit))),
         )
-        line_width = max(2, size // 17)
-        dark = (24, 29, 34)
+        draw.arc(b(11, 11, 113, 113), start=205, end=330, fill=(255, 255, 255, 150), width=max(1, int(round(2 * unit))))
+
         if index == 1:
-            box = (
-                cx - size // 4,
-                cy - size // 5,
-                cx + size // 6,
-                cy + size // 4,
-            )
-            draw.rectangle(box, outline=dark, width=line_width)
-            draw.line(
-                (box[0], box[1], (box[0] + box[2]) // 2, box[1] - size // 8, box[2], box[1]),
-                fill=dark,
-                width=line_width,
-                joint="curve",
-            )
-            glass_center = (cx + size // 5, cy + size // 6)
-            glass_r = size // 8
-            draw.ellipse(
-                (
-                    glass_center[0] - glass_r,
-                    glass_center[1] - glass_r,
-                    glass_center[0] + glass_r,
-                    glass_center[1] + glass_r,
-                ),
-                outline=accent,
-                width=line_width,
-            )
-            draw.line(
-                (
-                    glass_center[0] + glass_r,
-                    glass_center[1] + glass_r,
-                    cx + size // 3,
-                    cy + size // 3,
-                ),
-                fill=accent,
-                width=line_width,
-            )
+            # Storefront + search lens: a compact visual shorthand for product research.
+            store = b(31, 39, 76, 91)
+            draw.rounded_rectangle(store, radius=max(2, int(round(3 * unit))), fill=(255, 255, 255, 225), outline=dark, width=stroke)
+            draw.line((p(28, 40), p(54, 25), p(80, 40)), fill=dark, width=stroke, joint="curve")
+            draw.line((p(35, 46), p(72, 46)), fill=accent + (255,), width=max(2, int(round(3 * unit))))
+            draw.rectangle(b(43, 62, 58, 91), fill=(225, 246, 239, 255), outline=dark, width=max(1, int(round(2 * unit))))
+            lens = b(70, 69, 98, 97)
+            self._gradient_ellipse(layer, lens, (255, 255, 255, 230), (*bottom_color, 255), outline=accent, width=max(2, int(round(3 * unit))))
+            draw.line((p(92, 91), p(103, 102)), fill=accent, width=max(2, int(round(4 * unit))))
+            draw.ellipse(b(75, 74, 82, 81), fill=(255, 255, 255, 170))
         elif index == 2:
-            draw.rounded_rectangle(
-                (
-                    cx - size // 3,
-                    cy - size // 4,
-                    cx + size // 3,
-                    cy + size // 6,
-                ),
-                radius=max(4, size // 16),
-                outline=dark,
-                width=line_width,
+            # Speech bubble with three questions, cleaner than the old flat dots.
+            bubble = b(22, 31, 101, 82)
+            self._gradient_roundrect(
+                layer,
+                bubble,
+                radius=max(3, int(round(9 * unit))),
+                top=(255, 255, 255, 245),
+                bottom=(255, 246, 232, 245),
+                outline=dark[:3],
+                width=stroke,
             )
-            draw.polygon(
-                (
-                    (cx - size // 7, cy + size // 6),
-                    (cx - size // 4, cy + size // 3),
-                    (cx + size // 16, cy + size // 6),
-                ),
-                fill=accent,
-            )
-            for offset in (-size // 6, 0, size // 6):
-                draw.ellipse(
-                    (
-                        cx + offset - line_width,
-                        cy - line_width * 2,
-                        cx + offset + line_width,
-                        cy,
-                    ),
-                    fill=accent,
-                )
+            draw.polygon((p(40, 82), p(29, 101), p(55, 82)), fill=accent + (255,))
+            for x in (43, 62, 81):
+                draw.ellipse(b(x - 5, 50, x + 5, 60), fill=accent + (255,))
+            draw.arc(b(81, 18, 100, 37), start=205, end=335, fill=(255, 255, 255, 180), width=max(1, int(round(2 * unit))))
         elif index == 3:
-            for offset, height_ratio in ((-1, 2), (0, 3), (1, 4)):
-                bar_width = size // 7
-                bar_height = size * height_ratio // 12
-                left = cx + offset * size // 5 - bar_width // 2
-                draw.rounded_rectangle(
-                    (
-                        left,
-                        cy + size // 3 - bar_height,
-                        left + bar_width,
-                        cy + size // 3,
-                    ),
-                    radius=max(2, bar_width // 4),
-                    fill=accent if offset == 1 else dark,
+            # Three ascending bars and a discreet upward trend arrow.
+            baseline = 96
+            bars = ((27, 66, 42, 96), (47, 52, 62, 96), (67, 37, 82, 96))
+            bar_colors = ((49, 57, 66), (91, 108, 130), accent)
+            for box, color in zip(bars, bar_colors, strict=True):
+                self._gradient_roundrect(
+                    layer,
+                    b(*box),
+                    radius=max(2, int(round(4 * unit))),
+                    top=(*color, 255),
+                    bottom=tuple(max(0, channel - 18) for channel in color) + (255,),
+                    outline=None,
                 )
-            draw.line(
-                (
-                    cx - size // 3,
-                    cy + size // 3,
-                    cx + size // 3,
-                    cy + size // 3,
-                ),
-                fill=dark,
-                width=line_width,
-            )
+            draw.line((p(22, baseline), p(91, baseline)), fill=dark, width=stroke)
+            draw.line((p(79, 47), p(96, 30), p(96, 46)), fill=accent, width=stroke, joint="curve")
+            draw.line((p(96, 30), p(80, 30)), fill=accent, width=stroke)
         else:
-            draw.line(
-                (
-                    cx - size // 4,
-                    cy + size // 5,
-                    cx - size // 12,
-                    cy,
-                    cx + size // 16,
-                    cy + size // 10,
-                    cx + size // 4,
-                    cy - size // 4,
-                ),
-                fill=accent,
-                width=line_width,
-                joint="curve",
-            )
-            for px, py in (
-                (cx - size // 4, cy + size // 5),
-                (cx - size // 12, cy),
-                (cx + size // 16, cy + size // 10),
-                (cx + size // 4, cy - size // 4),
-            ):
-                r = max(3, size // 24)
-                draw.ellipse((px - r, py - r, px + r, py + r), fill=dark)
-            draw.ellipse(
-                (
-                    cx - size // 3,
-                    cy - size // 3,
-                    cx + size // 3,
-                    cy + size // 3,
-                ),
-                outline=dark,
-                width=max(1, line_width // 2),
-            )
+            # Analytics dial with a simple rising line, kept legible at small sizes.
+            dial = b(21, 20, 103, 102)
+            self._gradient_ellipse(layer, dial, (255, 255, 255, 230), (*bottom_color, 255), outline=dark[:3], width=max(2, int(round(2.5 * unit))))
+            draw.arc(b(30, 29, 94, 93), start=205, end=335, fill=(255, 255, 255, 180), width=max(1, int(round(2 * unit))))
+            points = (p(34, 79), p(49, 64), p(66, 70), p(87, 42))
+            draw.line(points, fill=accent, width=max(2, int(round(5 * unit))), joint="curve")
+            for px, py in points:
+                radius = max(2, int(round(4 * unit)))
+                draw.ellipse((px - radius, py - radius, px + radius, py + radius), fill=dark)
+                draw.ellipse((px - radius // 2, py - radius // 2, px + radius // 2, py + radius // 2), fill=accent)
+            draw.line((p(84, 40), p(95, 33)), fill=dark, width=max(1, int(round(2 * unit))))
+
+        layer = layer.resize((size, size), Image.Resampling.LANCZOS)
+        image.alpha_composite(
+            layer,
+            (center[0] - size // 2, center[1] - size // 2),
+        )
 
     def _cached_fixed_slide_canvas(
         self,
