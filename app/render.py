@@ -410,6 +410,7 @@ class VideoRenderer:
             emoji_space = self._advice_flat_emoji_space(font_size, width)
             blocks: list[tuple[list[str], int]] = []
             heights: list[int] = []
+            titles_fit_one_line = True
             for index, tip in enumerate(tips, start=1):
                 title_lines = self._wrap_flat_advice_title(
                     f"{index}. {tip.title}",
@@ -419,6 +420,11 @@ class VideoRenderer:
                     draw,
                     stroke_width=stroke_width,
                 )
+                # The emoji belongs to the title line.  Keep reducing the
+                # shared font size until the complete title can stay on one
+                # line; wrapping it would leave the emoji detached below it.
+                if len(title_lines) != 1:
+                    titles_fit_one_line = False
                 body_lines = self._wrap_text(
                     tip.body,
                     font,
@@ -441,7 +447,7 @@ class VideoRenderer:
             selected_font = font
             selected_blocks = blocks
             selected_heights = heights
-            if total_height <= int(height * 0.72):
+            if titles_fit_one_line and total_height <= int(height * 0.72):
                 break
 
         if selected_font is None:
