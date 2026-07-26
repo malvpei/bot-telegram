@@ -9,13 +9,15 @@ from app.advice_cards import (
 from app.models import Language
 
 
-def test_advice_packs_are_bilingual_and_always_finish_with_dropradar():
+def test_advice_packs_are_bilingual_and_promote_dropradar_winning_products():
     assert len(ADVICE_PACKS[Language.ES]) == 4
     assert len(ADVICE_PACKS[Language.EN]) == 4
     for packs in ADVICE_PACKS.values():
         for tips in packs:
             assert len(tips) == 4
-            assert "dropradar" in tips[-1].body.lower()
+            final_body = tips[-1].body.lower()
+            assert "dropradar" in final_body
+            assert any(term in final_body for term in ("ganador", "winner", "winning"))
 
 
 def test_advice_backgrounds_and_scripts_complete_twelve_step_rotation():

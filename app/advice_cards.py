@@ -44,9 +44,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "entender el anuncio.",
             ),
             AdviceTip(
-                "analiza antes de lanzar",
-                "usa Dropradar para descubrir qué productos crecen, quién los vende "
-                "y cómo los promocionan.",
+                "encuentra ganadores antes de lanzar",
+                "usa Dropradar para encontrar productos ganadores ya validados y "
+                "empezar con una oportunidad mucho más segura.",
             ),
         ),
         (
@@ -65,9 +65,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "más atractiva.",
             ),
             AdviceTip(
-                "comprueba la competencia primero",
-                "con Dropradar puedes analizar otras tiendas y evitar productos "
-                "completamente saturados.",
+                "deja de elegir productos a ciegas",
+                "Dropradar encuentra productos ganadores validados para que empieces "
+                "con una oportunidad más segura.",
             ),
         ),
         (
@@ -87,9 +87,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "ha convertido en ventas.",
             ),
             AdviceTip(
-                "investiga las tiendas activas",
-                "usa Dropradar para encontrar competidores y entender cómo presentan "
-                "el producto antes de probarlo.",
+                "encuentra productos que ya venden",
+                "usa Dropradar para detectar productos ganadores antes de perder "
+                "tiempo copiando a otras tiendas.",
             ),
         ),
         (
@@ -109,9 +109,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "económica sin cambiar su precio.",
             ),
             AdviceTip(
-                "investiga antes de gastar",
-                "usa Dropradar para comprobar demanda, competencia y tiendas activas "
-                "antes de probar el producto.",
+                "elige un producto ganador",
+                "Dropradar te ayuda a encontrar productos ganadores validados antes "
+                "de invertir en anuncios.",
             ),
         ),
     ),
@@ -133,9 +133,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "understanding the ad.",
             ),
             AdviceTip(
-                "analyse before you launch",
-                "use Dropradar to find growing products, active stores and the angles "
-                "they use to promote them.",
+                "find winners before launching",
+                "use Dropradar to find validated winning products and start with a "
+                "much safer opportunity.",
             ),
         ),
         (
@@ -154,9 +154,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "attractive.",
             ),
             AdviceTip(
-                "check the competition first",
-                "with Dropradar you can study other stores and avoid completely "
-                "saturated products.",
+                "stop picking products blindly",
+                "Dropradar finds validated winning products so you can start with a "
+                "stronger opportunity.",
             ),
         ),
         (
@@ -176,9 +176,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "not become sales yet.",
             ),
             AdviceTip(
-                "research active stores",
-                "use Dropradar to find competitors and understand their product angle "
-                "before testing yours.",
+                "find products already selling",
+                "use Dropradar to spot validated winners before wasting time copying "
+                "other stores.",
             ),
         ),
         (
@@ -198,9 +198,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "without changing its price.",
             ),
             AdviceTip(
-                "research before you spend",
-                "use Dropradar to check demand, competitors and active stores before "
-                "testing the wrong product.",
+                "choose a validated winner",
+                "Dropradar helps you find validated winning products before you spend "
+                "on ads.",
             ),
         ),
     ),
@@ -260,9 +260,15 @@ def validate_advice_content() -> None:
         for tips in packs:
             if len(tips) != 4:
                 raise ValueError("Cada guion tipo 4 debe contener exactamente 4 consejos.")
-            if "dropradar" not in tips[-1].body.lower():
+            final_body = tips[-1].body.lower()
+            if "dropradar" not in final_body:
                 raise ValueError(
                     f"El cuarto consejo tipo 4 en {language.value} debe nombrar Dropradar."
+                )
+            if not any(term in final_body for term in ("ganador", "winner", "winning")):
+                raise ValueError(
+                    f"El cuarto consejo tipo 4 en {language.value} debe presentar "
+                    "Dropradar como herramienta de productos ganadores."
                 )
 
 
