@@ -461,6 +461,7 @@ class VideoRenderer:
         )
         y = safe_top + max(0, (safe_height - total_height) // 2)
         x = (width - max_width) // 2
+        emoji_keys = self._flat_advice_emoji_keys(tips)
         for block_index, (lines, title_line_count) in enumerate(selected_blocks):
             for line_index, line in enumerate(lines):
                 bbox = draw.textbbox(
@@ -488,7 +489,7 @@ class VideoRenderer:
                     icon_x = x + line_width + _scale_x(ADVICE_FLAT_EMOJI_GAP, width)
                     self._draw_flat_advice_emoji(
                         image,
-                        self._flat_advice_emoji_key(tips[block_index], block_index + 1),
+                        emoji_keys[block_index],
                         (
                             icon_x + icon_size // 2,
                             y + line_height // 2,
@@ -575,6 +576,23 @@ class VideoRenderer:
         if index == 2:
             return "brain"
         return "eyes"
+
+    def _flat_advice_emoji_keys(self, tips: tuple[AdviceTip, ...]) -> list[str]:
+        """Return one distinct icon key per tip in the same advice card."""
+        fallback_order = ("chart", "search", "spy", "clock", "brain", "eyes")
+        used: set[str] = set()
+        keys: list[str] = []
+        for index, tip in enumerate(tips, start=1):
+            preferred = self._flat_advice_emoji_key(tip, index)
+            key = preferred
+            if key in used:
+                key = next(
+                    (candidate for candidate in fallback_order if candidate not in used),
+                    preferred,
+                )
+            keys.append(key)
+            used.add(key)
+        return keys
 
     @staticmethod
     def _advice_flat_emoji_size(

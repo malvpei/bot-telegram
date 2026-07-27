@@ -121,6 +121,15 @@ def test_type_4_flat_advice_title_reserves_room_for_emoji():
     assert last_width + emoji_space <= max_width
 
 
+def test_type_4_flat_advice_uses_distinct_emojis_per_video():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+
+    for language_packs in ADVICE_PACKS.values():
+        for tips in language_packs:
+            keys = renderer._flat_advice_emoji_keys(tips)
+            assert len(keys) == len(set(keys))
+
+
 def test_type_4_illustrated_advice_card_draws_clean_cards_without_header():
     renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
 
