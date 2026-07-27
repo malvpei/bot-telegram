@@ -141,6 +141,9 @@ ADVICE_FLAT_BLOCK_GAP = 60
 ADVICE_FLAT_LINE_GAP = 10
 ADVICE_FLAT_EMOJI_GAP = 12
 ADVICE_ILLUSTRATED_CARD_RADIUS = 28
+ADVICE_ILLUSTRATED_CARDS_TOP = 210
+ADVICE_ILLUSTRATED_CARDS_BOTTOM = 170
+ADVICE_ILLUSTRATED_CARD_GAP = 46
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
 TEXT_FACE_AVOID_WEIGHT = 260.0
@@ -966,9 +969,9 @@ class VideoRenderer:
         # The illustrated version is intentionally just the four useful cards;
         # the former headline/subtitle consumed space without adding anything
         # to the individual tips.
-        cards_top = _scale_y(150, height)
-        cards_bottom = _scale_y(150, height)
-        card_gap = _scale_y(46, height)
+        cards_top = _scale_y(ADVICE_ILLUSTRATED_CARDS_TOP, height)
+        cards_bottom = _scale_y(ADVICE_ILLUSTRATED_CARDS_BOTTOM, height)
+        card_gap = _scale_y(ADVICE_ILLUSTRATED_CARD_GAP, height)
         card_height = (
             height - cards_top - cards_bottom - card_gap * (len(tips) - 1)
         ) // len(tips)
