@@ -154,6 +154,18 @@ def test_type_4_flat_advice_rotates_the_five_requested_emojis():
     ]
 
 
+def test_type_4_flat_advice_uses_transparent_raster_emoji_assets():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+
+    for key in ("fire", "money_wings", "top", "package", "laptop"):
+        asset_path = renderer._advice_emoji_assets_dir / f"{key}.png"
+        with Image.open(asset_path) as asset:
+            assert asset.mode == "RGBA"
+            alpha = np.asarray(asset.getchannel("A"))
+            assert (alpha == 0).mean() > 0.1
+            assert (alpha > 240).mean() > 0.1
+
+
 def test_type_4_illustrated_advice_card_draws_clean_cards_without_header():
     renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
 

@@ -254,6 +254,9 @@ class VideoRenderer:
         self._font_dir = settings.fonts_dir
         self._type_3_icons_dir = settings.root_dir / "tipo3" / "iconos"
         self._type_4_icons_dir = settings.root_dir / "tipo4" / "iconos"
+        self._advice_emoji_assets_dir = (
+            settings.root_dir / "assets" / "advice_emojis"
+        )
         self._face_detector = build_cascade("haarcascade_frontalface_default.xml")
         self._profile_face_detector = build_cascade(
             "haarcascade_profileface.xml",
@@ -265,6 +268,7 @@ class VideoRenderer:
         self._type_4_overlay_cache: dict[Language, Image.Image] = {}
         self._fixed_canvas_cache: dict[tuple[object, ...], Image.Image] = {}
         self._font_cache: dict[tuple[str, int, bool], ImageFont.ImageFont] = {}
+        self._advice_emoji_cache: dict[str, Image.Image] = {}
 
     def render(self, plan: VideoPlan, job_dir: Path) -> tuple[Path, Path]:
         job_dir.mkdir(parents=True, exist_ok=True)
@@ -601,6 +605,26 @@ class VideoRenderer:
         size: int,
         _outline: tuple[int, int, int],
     ) -> None:
+        cached_asset = self._advice_emoji_cache.get(key)
+        if cached_asset is None:
+            asset_path = self._advice_emoji_assets_dir / f"{key}.png"
+            if asset_path.exists():
+                with Image.open(asset_path) as source:
+                    cached_asset = source.convert("RGBA")
+                self._advice_emoji_cache[key] = cached_asset
+        if cached_asset is not None:
+            asset = cached_asset.resize(
+                (size, size),
+                Image.Resampling.LANCZOS,
+            )
+            image.alpha_composite(
+                asset,
+                (center[0] - size // 2, center[1] - size // 2),
+            )
+            return
+
+        # Keep the vector renderer as a deployment-safe fallback in case an
+        # installation is missing the raster assets.
         scale = 4
         canvas_size = max(1, size * scale)
         layer = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
