@@ -162,6 +162,7 @@ class SocialCopy:
     title: str
     description: str
     hashtags: list[str]
+    hook: str = ""
 
     @property
     def hashtag_line(self) -> str:
@@ -178,7 +179,7 @@ class SocialCopy:
         )
         return [
             message
-            for message in [self.title, description_block]
+            for message in [self.hook, self.title, description_block]
             if message.strip()
         ]
 

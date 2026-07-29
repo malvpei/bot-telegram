@@ -15,6 +15,7 @@ from uuid import uuid4
 from PIL import Image
 
 from app.advice_cards import (
+    ADVICE_EXTERNAL_PHRASES,
     ADVICE_ROTATION_CYCLE_LENGTH,
     advice_social_copy,
     advice_selection,
@@ -245,6 +246,7 @@ def _prepare_template_video_social_copy(social_copy: SocialCopy) -> SocialCopy:
         title="",
         description=social_copy.description,
         hashtags=list(social_copy.hashtags[:5]),
+        hook=social_copy.hook,
     )
 
 
@@ -680,6 +682,7 @@ class VideoCreationService:
             title=social_title,
             description=social_description,
             hashtags=social_hashtags,
+            hook=ADVICE_EXTERNAL_PHRASES[language],
         )
         self.state.log_job(
             self.state.build_job_record(

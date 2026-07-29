@@ -262,44 +262,44 @@ ADVICE_EXTERNAL_PHRASES: dict[Language, str] = {
 ADVICE_SOCIAL_TITLES: dict[Language, tuple[tuple[str, ...], ...]] = {
     Language.ES: (
         (
-            "un dropshipper millonario me contó la regla número #1 para vender fácilmente",
+            "4 señales para encontrar un producto ganador",
             "el producto ganador no se elige mirando solo las visitas",
             "la mayoría busca productos ganadores en el sitio equivocado",
         ),
         (
-            "un dropshipper millonario me contó la regla número #1 para vender fácilmente",
+            "el producto ganador se valida antes de anunciarlo",
             "estas señales te avisan de un producto ganador",
             "el error que hace perder dinero antes de lanzar",
         ),
         (
-            "un dropshipper millonario me contó la regla número #1 para vender fácilmente",
+            "la pista que muchas tiendas pasan por alto",
             "lo que casi nadie revisa antes de lanzar un producto",
             "un anuncio viral no siempre es un ganador",
         ),
         (
-            "un dropshipper millonario me contó la regla número #1 para vender fácilmente",
+            "elige mejor antes de gastar en anuncios",
             "la herramienta que filtra productos por ti",
             "cómo reducir el riesgo al elegir producto",
         ),
     ),
     Language.EN: (
         (
-            "A millionaire dropshipper told me rule number #1 for selling easily",
+            "4 signals that reveal a winning product",
             "winning products are not chosen by views alone",
             "most beginners search for winning products in the wrong place",
         ),
         (
-            "A millionaire dropshipper told me rule number #1 for selling easily",
+            "validate the winner before you run ads",
             "these signals reveal a winning product",
             "the mistake that wastes money before launch",
         ),
         (
-            "A millionaire dropshipper told me rule number #1 for selling easily",
+            "the clue most stores overlook",
             "what almost nobody checks before launching",
             "a viral ad is not always a winner",
         ),
         (
-            "A millionaire dropshipper told me rule number #1 for selling easily",
+            "choose better before spending on ads",
             "the tool that filters products for you",
             "how to lower the risk of your next product",
         ),

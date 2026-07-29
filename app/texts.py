@@ -168,6 +168,7 @@ class ScriptGenerator:
                 title=package.social_copy.title.lower(),
                 description=package.social_copy.description.lower(),
                 hashtags=[tag.lower() for tag in package.social_copy.hashtags],
+                hook=package.social_copy.hook.lower(),
             ),
             choice_key=package.choice_key,
             social_choice_key=package.social_choice_key,
@@ -206,6 +207,7 @@ class ScriptGenerator:
                     package.social_copy.description
                 ),
                 hashtags=list(package.social_copy.hashtags),
+                hook=ScriptGenerator._feminize_text_es(package.social_copy.hook),
             ),
             choice_key=package.choice_key,
             social_choice_key=package.social_choice_key,
@@ -745,6 +747,7 @@ class ScriptGenerator:
             title=title,
             description=description,
             hashtags=self._prepare_social_hashtags(hashtags),
+            hook="",
         )
 
     def _choose_social_copy_for_text_choice(
@@ -764,6 +767,7 @@ class ScriptGenerator:
             title=title,
             description=description,
             hashtags=self._prepare_social_hashtags(hashtags),
+            hook="",
         )
 
     @staticmethod

@@ -7,7 +7,7 @@ from app.advice_cards import (
     advice_selection,
     advice_social_copy,
 )
-from app.models import Language
+from app.models import Language, SocialCopy
 
 
 def test_advice_packs_are_bilingual_and_promote_dropradar_winning_products():
@@ -70,7 +70,8 @@ def test_advice_external_phrases_match_requested_copy():
 def test_advice_social_copy_has_description_and_related_hashtags():
     title, description, hashtags = advice_social_copy(Language.ES, 0)
 
-    assert title == ADVICE_EXTERNAL_PHRASES[Language.ES]
+    assert title == "4 señales para encontrar un producto ganador"
+    assert title != ADVICE_EXTERNAL_PHRASES[Language.ES]
     assert "Dropradar" in description
     assert "productos ganadores" in description
     assert hashtags == [
@@ -91,3 +92,18 @@ def test_advice_social_copy_rotates_three_titles_and_descriptions_per_pack():
     assert len({copy[0] for copy in copies}) == 3
     assert len({copy[1] for copy in copies}) == 3
     assert all("Dropradar" in copy[1] for copy in copies)
+
+
+def test_social_copy_keeps_advice_hook_separate_from_title():
+    copy = SocialCopy(
+        hook=ADVICE_EXTERNAL_PHRASES[Language.ES],
+        title="4 señales para encontrar un producto ganador",
+        description="Descripción de prueba",
+        hashtags=["#dropshipping"],
+    )
+
+    assert copy.messages == [
+        ADVICE_EXTERNAL_PHRASES[Language.ES],
+        "4 señales para encontrar un producto ganador",
+        "Descripción de prueba #dropshipping",
+    ]
