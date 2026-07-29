@@ -144,6 +144,10 @@ ADVICE_ILLUSTRATED_CARD_RADIUS = 28
 ADVICE_ILLUSTRATED_CARDS_TOP = 260
 ADVICE_ILLUSTRATED_CARDS_BOTTOM = 200
 ADVICE_ILLUSTRATED_CARD_GAP = 36
+ADVICE_EDITORIAL_TOP = 280
+ADVICE_EDITORIAL_BOTTOM = 280
+ADVICE_EDITORIAL_ROW_GAP = 12
+ADVICE_EDITORIAL_SIDE_MARGIN = 72
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
 TEXT_FACE_AVOID_WEIGHT = 260.0
@@ -355,6 +359,12 @@ class VideoRenderer:
         language: Language,
         background: AdviceBackground,
     ) -> Image.Image:
+        if background == AdviceBackground.EDITORIAL:
+            if len(tips) != 5:
+                raise ValueError(
+                    "La plantilla editorial del Tipo 4 necesita cinco consejos."
+                )
+            return self._render_editorial_advice_card(tips, language)
         if len(tips) != 4:
             raise ValueError("El Tipo 4 necesita exactamente cuatro consejos.")
         if background == AdviceBackground.ILLUSTRATED:
@@ -1117,6 +1127,263 @@ class VideoRenderer:
                 line_gap=_scale_y(4, height),
             )
         return image.convert("RGB")
+
+    def _render_editorial_advice_card(
+        self,
+        tips: tuple[AdviceTip, ...],
+        language: Language,
+    ) -> Image.Image:
+        """Render the clean five-row advice layout from the supplied reference."""
+        del language  # The selected tips are already localized.
+        width, height = self.settings.width, self.settings.height
+        image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
+        top_fade_height = _scale_y(300, height)
+        image.paste(
+            self._vertical_gradient(
+                (width, top_fade_height),
+                (229, 229, 229, 255),
+                (255, 255, 255, 255),
+            ),
+            (0, 0),
+        )
+        draw = ImageDraw.Draw(image)
+        top = _scale_y(ADVICE_EDITORIAL_TOP, height)
+        bottom_margin = _scale_y(ADVICE_EDITORIAL_BOTTOM, height)
+        row_gap = _scale_y(ADVICE_EDITORIAL_ROW_GAP, height)
+        row_height = (
+            height - top - bottom_margin - row_gap * (len(tips) - 1)
+        ) // len(tips)
+        side_margin = _scale_x(ADVICE_EDITORIAL_SIDE_MARGIN, width)
+        number_center_x = side_margin + _scale_x(56, width)
+        icon_center_x = side_margin + _scale_x(215, width)
+        text_left = side_margin + _scale_x(340, width)
+        text_width = max(1, width - side_margin - text_left)
+
+        number_font = self._load_font(
+            size=self._scaled_text_size(96, minimum=32),
+            bold=True,
+        )
+        for index, tip in enumerate(tips, start=1):
+            row_top = top + (index - 1) * (row_height + row_gap)
+            row_center_y = row_top + row_height // 2
+            number = str(index)
+            number_width, number_height = self._text_size(
+                draw,
+                number,
+                number_font,
+                stroke_width=0,
+            )
+            draw.text(
+                (
+                    number_center_x - number_width // 2,
+                    row_center_y - number_height // 2,
+                ),
+                number,
+                font=number_font,
+                fill=(0, 0, 0),
+            )
+            self._draw_editorial_advice_icon(
+                image,
+                (icon_center_x, row_center_y),
+                _scale_x(150, width),
+                index,
+            )
+
+            title_font: ImageFont.ImageFont | None = None
+            body_font: ImageFont.ImageFont | None = None
+            title_lines: list[str] = []
+            body_lines: list[str] = []
+            title_height = body_height = 0
+            title_gap = _scale_y(11, height)
+            for title_size in range(
+                self._scaled_text_size(42, minimum=14),
+                self._scaled_text_size(32, minimum=11) - 1,
+                -1,
+            ):
+                body_size = max(
+                    self._scaled_text_size(23, minimum=9),
+                    int(round(title_size * 0.70)),
+                )
+                candidate_title_font = self._load_font(size=title_size, bold=True)
+                candidate_body_font = self._load_font(size=body_size, bold=False)
+                candidate_title_lines = self._wrap_text(
+                    tip.title,
+                    candidate_title_font,
+                    text_width,
+                    draw,
+                    stroke_width=0,
+                )
+                candidate_body_lines = self._wrap_text(
+                    tip.body,
+                    candidate_body_font,
+                    text_width,
+                    draw,
+                    stroke_width=0,
+                )
+                candidate_title_height = self._block_height(
+                    candidate_title_lines,
+                    candidate_title_font,
+                    draw,
+                    stroke_width=0,
+                    line_gap=_scale_y(2, height),
+                )
+                candidate_body_height = self._block_height(
+                    candidate_body_lines,
+                    candidate_body_font,
+                    draw,
+                    stroke_width=0,
+                    line_gap=_scale_y(3, height),
+                )
+                title_font = candidate_title_font
+                body_font = candidate_body_font
+                title_lines = candidate_title_lines
+                body_lines = candidate_body_lines
+                title_height = candidate_title_height
+                body_height = candidate_body_height
+                if (
+                    title_height + title_gap + body_height
+                    <= int(row_height * 0.86)
+                ):
+                    break
+
+            if title_font is None or body_font is None:
+                continue
+            text_height = title_height + title_gap + body_height
+            text_top = row_center_y - text_height // 2
+            self._draw_left_aligned_lines(
+                draw,
+                title_lines,
+                title_font,
+                x=text_left,
+                start_y=text_top,
+                fill=(4, 4, 4),
+                line_gap=_scale_y(2, height),
+            )
+            self._draw_left_aligned_lines(
+                draw,
+                body_lines,
+                body_font,
+                x=text_left,
+                start_y=text_top + title_height + title_gap,
+                fill=(22, 22, 22),
+                line_gap=_scale_y(3, height),
+            )
+        return image.convert("RGB")
+
+    def _draw_editorial_advice_icon(
+        self,
+        image: Image.Image,
+        center: tuple[int, int],
+        size: int,
+        index: int,
+    ) -> None:
+        """Draw a colorful dropshipping icon with the reference's inked style."""
+        scale = 4
+        canvas_size = max(1, size * scale)
+        shadow = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow)
+        shadow_draw.ellipse(
+            (
+                int(canvas_size * 0.18),
+                int(canvas_size * 0.72),
+                int(canvas_size * 0.84),
+                int(canvas_size * 0.91),
+            ),
+            fill=(0, 0, 0, 80),
+        )
+        shadow = shadow.filter(
+            ImageFilter.GaussianBlur(max(1, int(round(canvas_size * 0.045))))
+        )
+
+        layer = Image.new("RGBA", (canvas_size, canvas_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        unit = canvas_size / 150.0
+        dark = (9, 11, 14, 255)
+        teal = (18, 191, 174, 255)
+        pink = (255, 63, 130, 255)
+        yellow = (255, 206, 45, 255)
+        blue = (57, 151, 245, 255)
+        green = (48, 211, 132, 255)
+        orange = (255, 126, 49, 255)
+        stroke = max(2, int(round(5 * unit)))
+        thin = max(2, int(round(3 * unit)))
+
+        def p(x: float, y: float) -> tuple[int, int]:
+            return (int(round(x * unit)), int(round(y * unit)))
+
+        def b(
+            x0: float,
+            y0: float,
+            x1: float,
+            y1: float,
+        ) -> tuple[int, int, int, int]:
+            x_start, y_start = p(x0, y0)
+            x_end, y_end = p(x1, y1)
+            return (x_start, y_start, x_end, y_end)
+
+        if index == 1:
+            # Product box plus magnifier: researching a winning product.
+            draw.polygon(
+                (p(28, 54), p(74, 33), p(118, 55), p(74, 79)),
+                fill=(255, 239, 191, 255),
+                outline=dark,
+            )
+            draw.line((p(28, 54), p(29, 105), p(74, 127), p(74, 79)), fill=dark, width=stroke, joint="curve")
+            draw.line((p(74, 79), p(118, 55), p(117, 105), p(74, 127)), fill=dark, width=stroke, joint="curve")
+            draw.polygon((p(29, 57), p(74, 80), p(74, 125), p(30, 103)), fill=(255, 195, 57, 255))
+            draw.polygon((p(74, 80), p(116, 58), p(116, 103), p(74, 125)), fill=(255, 144, 45, 255))
+            draw.line((p(74, 80), p(74, 125)), fill=dark, width=thin)
+            draw.ellipse(b(87, 18, 126, 57), fill=(255, 255, 255, 245), outline=dark, width=stroke)
+            draw.arc(b(94, 25, 119, 50), 205, 335, fill=teal, width=thin)
+            draw.line((p(116, 50), p(134, 68)), fill=dark, width=stroke)
+            draw.polygon((p(18, 29), p(23, 19), p(28, 29), p(39, 34), p(28, 39), p(23, 50), p(18, 39), p(8, 34)), fill=pink)
+        elif index == 2:
+            # Customer question becoming an ad hook.
+            draw.rounded_rectangle(b(27, 24, 119, 105), radius=max(3, int(12 * unit)), fill=(255, 255, 255, 255), outline=dark, width=stroke)
+            draw.polygon((p(48, 104), p(37, 129), p(70, 105)), fill=yellow, outline=dark)
+            draw.ellipse(b(44, 51, 57, 64), fill=pink)
+            draw.ellipse(b(66, 51, 79, 64), fill=yellow)
+            draw.ellipse(b(88, 51, 101, 64), fill=teal)
+            draw.line((p(43, 80), p(100, 80)), fill=dark, width=thin)
+            draw.ellipse(b(101, 91, 135, 125), fill=green, outline=dark, width=thin)
+            draw.line((p(109, 108), p(117, 116), p(129, 100)), fill=(255, 255, 255, 255), width=thin)
+        elif index == 3:
+            # Parcel, price tag and fast delivery arrow.
+            draw.polygon((p(24, 55), p(73, 31), p(124, 55), p(74, 82)), fill=(255, 234, 172, 255), outline=dark)
+            draw.polygon((p(24, 55), p(74, 82), p(74, 132), p(24, 106)), fill=(255, 187, 56, 255), outline=dark)
+            draw.polygon((p(74, 82), p(124, 55), p(124, 106), p(74, 132)), fill=(255, 126, 48, 255), outline=dark)
+            draw.polygon((p(59, 38), p(78, 30), p(94, 39), p(74, 49)), fill=(255, 255, 255, 220))
+            draw.line((p(74, 82), p(74, 132)), fill=dark, width=thin)
+            draw.polygon((p(91, 73), p(135, 81), p(129, 111), p(88, 102)), fill=teal, outline=dark)
+            draw.ellipse(b(119, 87, 126, 94), fill=(255, 255, 255, 255))
+            draw.line((p(16, 34), p(47, 34)), fill=blue, width=stroke)
+            draw.line((p(8, 45), p(38, 45)), fill=pink, width=thin)
+        elif index == 4:
+            # A/B test panel with a rising result.
+            draw.rounded_rectangle(b(20, 25, 128, 124), radius=max(3, int(13 * unit)), fill=(255, 255, 255, 255), outline=dark, width=stroke)
+            draw.line((p(20, 52), p(128, 52)), fill=dark, width=thin)
+            for x, color in ((36, pink), (50, yellow), (64, green)):
+                draw.ellipse(b(x - 5, 34, x + 5, 44), fill=color)
+            draw.line((p(38, 101), p(61, 78), p(79, 90), p(108, 63)), fill=blue, width=stroke, joint="curve")
+            for x, y, color in ((38, 101, pink), (61, 78, yellow), (79, 90, teal), (108, 63, green)):
+                draw.ellipse(b(x - 5, y - 5, x + 5, y + 5), fill=color, outline=dark, width=thin)
+            draw.line((p(100, 63), p(109, 62), p(109, 72)), fill=dark, width=thin)
+        else:
+            # Dropradar-style radar locating a validated winner.
+            draw.rounded_rectangle(b(20, 20, 130, 130), radius=max(3, int(18 * unit)), fill=(255, 255, 255, 255), outline=dark, width=stroke)
+            draw.ellipse(b(39, 39, 111, 111), fill=(224, 247, 255, 255), outline=dark, width=thin)
+            draw.ellipse(b(54, 54, 96, 96), outline=blue, width=thin)
+            draw.line((p(75, 75), p(103, 48)), fill=teal, width=stroke)
+            draw.arc(b(46, 46, 104, 104), 215, 324, fill=teal, width=thin)
+            draw.ellipse(b(91, 44, 104, 57), fill=pink, outline=dark, width=thin)
+            draw.polygon((p(104, 91), p(112, 75), p(120, 91), p(136, 98), p(120, 105), p(112, 121), p(104, 105), p(88, 98)), fill=yellow, outline=dark)
+
+        composed = Image.alpha_composite(shadow, layer)
+        composed = composed.resize((size, size), Image.Resampling.LANCZOS)
+        image.alpha_composite(
+            composed,
+            (center[0] - size // 2, center[1] - size // 2),
+        )
 
     def _draw_left_aligned_lines(
         self,

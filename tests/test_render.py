@@ -10,7 +10,7 @@ from uuid import uuid4
 import numpy as np
 from PIL import Image, ImageDraw
 
-from app.advice_cards import ADVICE_PACKS, AdviceBackground
+from app.advice_cards import ADVICE_PACKS, AdviceBackground, advice_selection
 from app.config import get_settings
 from app.models import (
     ImageMetrics,
@@ -148,6 +148,23 @@ def test_type_4_illustrated_advice_card_draws_clean_cards_without_header():
         (pixels[..., 2] > pixels[..., 0] + 25)
         & (pixels[..., 2] > pixels[..., 1])
     ).mean() > 0.001
+
+
+def test_type_4_editorial_advice_card_matches_five_row_reference():
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+    background, tips, _pack_index = advice_selection(3, Language.EN)
+
+    result = renderer.render_advice_card(tips, Language.EN, background)
+    pixels = np.asarray(result)
+
+    assert background == AdviceBackground.EDITORIAL
+    assert len(tips) == 5
+    assert result.size == (1080, 1920)
+    assert tuple(pixels[0, 0]) == (229, 229, 229)
+    assert tuple(pixels[-1, -1]) == (255, 255, 255)
+    assert (pixels[:150].max(axis=2) < 80).mean() < 0.001
+    assert (pixels[..., :3].max(axis=2) < 35).mean() > 0.01
+    assert (pixels.max(axis=2) - pixels.min(axis=2) > 45).mean() > 0.002
 
 
 def test_numbered_titleless_tip_keeps_number_with_body_for_rendering():

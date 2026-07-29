@@ -669,6 +669,7 @@ class VideoCreationService:
         social_title, social_description, social_hashtags = advice_social_copy(
             language,
             pack_index,
+            rotation_index=phase,
         )
         social_copy = SocialCopy(
             title=social_title,
