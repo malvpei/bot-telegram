@@ -130,6 +130,30 @@ def test_type_4_flat_advice_uses_distinct_emojis_per_video():
             assert len(keys) == len(set(keys))
 
 
+def test_type_4_flat_advice_rotates_the_five_requested_emojis():
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+    tips = ADVICE_PACKS[Language.ES][0]
+
+    assert renderer._flat_advice_emoji_keys(tips, rotation_index=0) == [
+        "fire",
+        "money_wings",
+        "top",
+        "package",
+    ]
+    assert renderer._flat_advice_emoji_keys(tips, rotation_index=1) == [
+        "money_wings",
+        "top",
+        "package",
+        "laptop",
+    ]
+    assert renderer._flat_advice_emoji_keys(tips, rotation_index=4) == [
+        "laptop",
+        "fire",
+        "money_wings",
+        "top",
+    ]
+
+
 def test_type_4_illustrated_advice_card_draws_clean_cards_without_header():
     renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
 

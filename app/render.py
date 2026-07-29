@@ -140,6 +140,7 @@ ADVICE_FLAT_SAFE_BOTTOM = 300
 ADVICE_FLAT_BLOCK_GAP = 60
 ADVICE_FLAT_LINE_GAP = 10
 ADVICE_FLAT_EMOJI_GAP = 12
+ADVICE_FLAT_EMOJI_SCALE = 1.12
 ADVICE_ILLUSTRATED_CARD_RADIUS = 28
 ADVICE_ILLUSTRATED_CARDS_TOP = 260
 ADVICE_ILLUSTRATED_CARDS_BOTTOM = 200
@@ -358,6 +359,8 @@ class VideoRenderer:
         tips: tuple[AdviceTip, ...],
         language: Language,
         background: AdviceBackground,
+        *,
+        rotation_index: int = 0,
     ) -> Image.Image:
         if background == AdviceBackground.EDITORIAL:
             if len(tips) != 5:
@@ -391,6 +394,7 @@ class VideoRenderer:
             tips,
             fill=text_fill,
             stroke_fill=stroke_fill,
+            emoji_offset=rotation_index,
         )
         return image.convert("RGB")
 
@@ -401,6 +405,7 @@ class VideoRenderer:
         *,
         fill: tuple[int, int, int, int],
         stroke_fill: tuple[int, int, int, int],
+        emoji_offset: int = 0,
     ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
@@ -474,7 +479,10 @@ class VideoRenderer:
         )
         y = safe_top + max(0, (safe_height - total_height) // 2)
         x = (width - max_width) // 2
-        emoji_keys = self._flat_advice_emoji_keys(tips)
+        emoji_keys = self._flat_advice_emoji_keys(
+            tips,
+            rotation_index=emoji_offset,
+        )
         for block_index, (lines, title_line_count) in enumerate(selected_blocks):
             for line_index, line in enumerate(lines):
                 bbox = draw.textbbox(
@@ -551,61 +559,19 @@ class VideoRenderer:
             stroke_width=stroke_width,
         )
 
-    @staticmethod
-    def _flat_advice_emoji_key(tip: AdviceTip, index: int) -> str:
-        title = tip.title.lower()
-        text = f"{tip.title} {tip.body}".lower()
-        if any(word in title for word in ("analiza", "analyse")):
-            return "chart"
-        if any(
-            word in title
-            for word in (
-                "competencia",
-                "competitors",
-                "investiga",
-                "research",
-                "activas",
-                "active",
-            )
-        ):
-            return "search"
-        if any(word in title for word in ("reseñas", "reviews")):
-            return "spy"
-        if any(
-            word in title
-            for word in ("segundo", "second", "antiguos", "old ads", "viral ads")
-        ):
-            return "clock"
-        if any(word in title for word in ("pack", "bundle", "opción", "option")):
-            return "brain"
-        if any(word in title for word in ("dudas", "questions", "preguntas", "hooks")):
-            return "brain"
-        if any(word in text for word in ("producto", "product", "comments", "comentarios")):
-            return "eyes"
-        if index == 4:
-            return "chart"
-        if index == 3:
-            return "clock"
-        if index == 2:
-            return "brain"
-        return "eyes"
-
-    def _flat_advice_emoji_keys(self, tips: tuple[AdviceTip, ...]) -> list[str]:
-        """Return one distinct icon key per tip in the same advice card."""
-        fallback_order = ("chart", "search", "spy", "clock", "brain", "eyes")
-        used: set[str] = set()
-        keys: list[str] = []
-        for index, tip in enumerate(tips, start=1):
-            preferred = self._flat_advice_emoji_key(tip, index)
-            key = preferred
-            if key in used:
-                key = next(
-                    (candidate for candidate in fallback_order if candidate not in used),
-                    preferred,
-                )
-            keys.append(key)
-            used.add(key)
-        return keys
+    def _flat_advice_emoji_keys(
+        self,
+        tips: tuple[AdviceTip, ...],
+        *,
+        rotation_index: int = 0,
+    ) -> list[str]:
+        """Rotate the five requested iPhone-style emojis without duplicates."""
+        emoji_cycle = ("fire", "money_wings", "top", "package", "laptop")
+        offset = max(0, int(rotation_index)) % len(emoji_cycle)
+        return [
+            emoji_cycle[(offset + index) % len(emoji_cycle)]
+            for index in range(len(tips))
+        ]
 
     @staticmethod
     def _advice_flat_emoji_size(
@@ -615,10 +581,16 @@ class VideoRenderer:
         height: int,
     ) -> int:
         font_size = getattr(font, "size", height)
-        return max(_scale_x(34, width), int(round(max(font_size, height) * 1.0)))
+        return max(
+            _scale_x(34, width),
+            int(round(max(font_size, height) * ADVICE_FLAT_EMOJI_SCALE)),
+        )
 
     def _advice_flat_emoji_space(self, font_size: int, width: int) -> int:
-        icon_size = max(_scale_x(34, width), int(round(font_size * 1.0)))
+        icon_size = max(
+            _scale_x(34, width),
+            int(round(font_size * ADVICE_FLAT_EMOJI_SCALE)),
+        )
         return icon_size + _scale_x(ADVICE_FLAT_EMOJI_GAP, width)
 
     def _draw_flat_advice_emoji(
@@ -658,6 +630,418 @@ class VideoRenderer:
         half = size // 2
         line = max(3, size // 18)
         shadow = (0, 0, 0, 38)
+
+        def gradient_polygon(
+            points: tuple[tuple[int, int], ...],
+            top: tuple[int, int, int, int],
+            bottom: tuple[int, int, int, int],
+            *,
+            outline: tuple[int, int, int, int] | None = None,
+            width: int = 1,
+        ) -> None:
+            mask = Image.new("L", surface.size, 0)
+            ImageDraw.Draw(mask).polygon(points, fill=255)
+            surface.paste(
+                self._vertical_gradient(surface.size, top, bottom),
+                (0, 0),
+                mask,
+            )
+            if outline is not None:
+                ImageDraw.Draw(surface).line(
+                    (*points, points[0]),
+                    fill=outline,
+                    width=width,
+                    joint="curve",
+                )
+
+        if key == "fire":
+            outer = (
+                (cx - int(size * 0.05), cy - int(size * 0.48)),
+                (cx + int(size * 0.15), cy - int(size * 0.26)),
+                (cx + int(size * 0.13), cy - int(size * 0.03)),
+                (cx + int(size * 0.31), cy - int(size * 0.21)),
+                (cx + int(size * 0.43), cy + int(size * 0.05)),
+                (cx + int(size * 0.39), cy + int(size * 0.29)),
+                (cx + int(size * 0.22), cy + int(size * 0.46)),
+                (cx - int(size * 0.10), cy + int(size * 0.49)),
+                (cx - int(size * 0.36), cy + int(size * 0.32)),
+                (cx - int(size * 0.43), cy + int(size * 0.08)),
+                (cx - int(size * 0.34), cy - int(size * 0.15)),
+                (cx - int(size * 0.18), cy - int(size * 0.35)),
+                (cx - int(size * 0.17), cy - int(size * 0.08)),
+            )
+            draw.ellipse(
+                (
+                    cx - int(size * 0.36),
+                    cy + int(size * 0.31),
+                    cx + int(size * 0.36),
+                    cy + int(size * 0.53),
+                ),
+                fill=shadow,
+            )
+            gradient_polygon(
+                outer,
+                (255, 47, 37, 255),
+                (255, 132, 18, 255),
+                outline=(218, 44, 29, 255),
+                width=max(2, line // 3),
+            )
+            inner = (
+                (cx + int(size * 0.01), cy - int(size * 0.18)),
+                (cx + int(size * 0.19), cy + int(size * 0.04)),
+                (cx + int(size * 0.16), cy + int(size * 0.25)),
+                (cx + int(size * 0.02), cy + int(size * 0.40)),
+                (cx - int(size * 0.17), cy + int(size * 0.34)),
+                (cx - int(size * 0.23), cy + int(size * 0.14)),
+                (cx - int(size * 0.12), cy - int(size * 0.05)),
+                (cx - int(size * 0.08), cy + int(size * 0.15)),
+            )
+            gradient_polygon(
+                inner,
+                (255, 244, 71, 255),
+                (255, 172, 15, 255),
+                outline=(255, 196, 25, 255),
+                width=max(2, line // 4),
+            )
+            draw.ellipse(
+                (
+                    cx - int(size * 0.10),
+                    cy + int(size * 0.04),
+                    cx + int(size * 0.03),
+                    cy + int(size * 0.31),
+                ),
+                fill=(255, 252, 178, 155),
+            )
+            return
+
+        if key == "money_wings":
+            draw.ellipse(
+                (
+                    cx - int(size * 0.44),
+                    cy + int(size * 0.23),
+                    cx + int(size * 0.44),
+                    cy + int(size * 0.44),
+                ),
+                fill=shadow,
+            )
+            wing_outline = (189, 193, 190, 255)
+            for direction in (-1, 1):
+                base_x = cx + direction * int(size * 0.23)
+                wing_points = (
+                    (base_x, cy - int(size * 0.11)),
+                    (cx + direction * int(size * 0.46), cy - int(size * 0.27)),
+                    (cx + direction * int(size * 0.42), cy - int(size * 0.02)),
+                    (cx + direction * int(size * 0.50), cy + int(size * 0.03)),
+                    (cx + direction * int(size * 0.39), cy + int(size * 0.13)),
+                    (cx + direction * int(size * 0.44), cy + int(size * 0.22)),
+                    (base_x, cy + int(size * 0.17)),
+                )
+                gradient_polygon(
+                    wing_points,
+                    (255, 255, 255, 255),
+                    (211, 216, 211, 255),
+                    outline=wing_outline,
+                    width=max(2, line // 3),
+                )
+                for feather in (-10, 2, 14):
+                    start_x = cx + direction * int(size * 0.29)
+                    end_x = cx + direction * int(size * 0.44)
+                    feather_y = cy + int(size * feather / 100)
+                    draw.line(
+                        (start_x, feather_y, end_x, feather_y + int(size * 0.03)),
+                        fill=(181, 186, 183, 210),
+                        width=max(2, line // 4),
+                    )
+
+            back_note = (
+                (cx - int(size * 0.25), cy - int(size * 0.30)),
+                (cx + int(size * 0.28), cy - int(size * 0.19)),
+                (cx + int(size * 0.22), cy + int(size * 0.17)),
+                (cx - int(size * 0.31), cy + int(size * 0.07)),
+            )
+            gradient_polygon(
+                back_note,
+                (235, 245, 218, 255),
+                (155, 181, 131, 255),
+                outline=(104, 126, 86, 255),
+                width=max(2, line // 3),
+            )
+            front_note = (
+                (cx - int(size * 0.22), cy - int(size * 0.16)),
+                (cx + int(size * 0.30), cy - int(size * 0.05)),
+                (cx + int(size * 0.23), cy + int(size * 0.30)),
+                (cx - int(size * 0.29), cy + int(size * 0.20)),
+            )
+            gradient_polygon(
+                front_note,
+                (221, 238, 196, 255),
+                (126, 165, 105, 255),
+                outline=(77, 105, 65, 255),
+                width=max(2, line // 3),
+            )
+            seal_r = int(size * 0.13)
+            self._gradient_ellipse(
+                surface,
+                (
+                    cx - seal_r,
+                    cy - seal_r + int(size * 0.06),
+                    cx + seal_r,
+                    cy + seal_r + int(size * 0.06),
+                ),
+                (255, 238, 128, 255),
+                (215, 163, 36, 255),
+                outline=(139, 104, 30),
+                width=max(2, line // 3),
+            )
+            money_font = self._load_font(size=max(8, int(size * 0.22)), bold=True)
+            money_bbox = draw.textbbox((0, 0), "$", font=money_font)
+            draw.text(
+                (
+                    cx - (money_bbox[2] - money_bbox[0]) // 2,
+                    cy + int(size * 0.06) - (money_bbox[3] - money_bbox[1]) // 2,
+                ),
+                "$",
+                font=money_font,
+                fill=(107, 81, 28, 255),
+            )
+            return
+
+        if key == "top":
+            draw.ellipse(
+                (
+                    cx - int(size * 0.34),
+                    cy + int(size * 0.30),
+                    cx + int(size * 0.36),
+                    cy + int(size * 0.49),
+                ),
+                fill=shadow,
+            )
+            arrow = (
+                (cx, cy - int(size * 0.49)),
+                (cx + int(size * 0.34), cy - int(size * 0.14)),
+                (cx + int(size * 0.17), cy - int(size * 0.14)),
+                (cx + int(size * 0.17), cy + int(size * 0.11)),
+                (cx - int(size * 0.17), cy + int(size * 0.11)),
+                (cx - int(size * 0.17), cy - int(size * 0.14)),
+                (cx - int(size * 0.34), cy - int(size * 0.14)),
+            )
+            gradient_polygon(
+                arrow,
+                (104, 117, 124, 255),
+                (66, 79, 86, 255),
+                outline=(57, 68, 74, 255),
+                width=max(2, line // 3),
+            )
+            top_font = self._load_font(size=max(9, int(size * 0.29)), bold=True)
+            top_bbox = draw.textbbox((0, 0), "TOP", font=top_font)
+            top_width = top_bbox[2] - top_bbox[0]
+            top_height = top_bbox[3] - top_bbox[1]
+            draw.text(
+                (
+                    cx - top_width // 2,
+                    cy + int(size * 0.15) - top_height // 2,
+                ),
+                "TOP",
+                font=top_font,
+                fill=(89, 104, 112, 255),
+                stroke_width=max(1, line // 5),
+                stroke_fill=(59, 70, 77, 255),
+            )
+            return
+
+        if key == "package":
+            draw.ellipse(
+                (
+                    cx - int(size * 0.37),
+                    cy + int(size * 0.31),
+                    cx + int(size * 0.39),
+                    cy + int(size * 0.50),
+                ),
+                fill=shadow,
+            )
+            top_face = (
+                (cx - int(size * 0.39), cy - int(size * 0.18)),
+                (cx, cy - int(size * 0.40)),
+                (cx + int(size * 0.39), cy - int(size * 0.18)),
+                (cx, cy + int(size * 0.04)),
+            )
+            left_face = (
+                (cx - int(size * 0.39), cy - int(size * 0.18)),
+                (cx, cy + int(size * 0.04)),
+                (cx, cy + int(size * 0.45)),
+                (cx - int(size * 0.39), cy + int(size * 0.22)),
+            )
+            right_face = (
+                (cx, cy + int(size * 0.04)),
+                (cx + int(size * 0.39), cy - int(size * 0.18)),
+                (cx + int(size * 0.39), cy + int(size * 0.22)),
+                (cx, cy + int(size * 0.45)),
+            )
+            edge = (138, 84, 39, 255)
+            gradient_polygon(
+                top_face,
+                (238, 189, 125, 255),
+                (201, 135, 74, 255),
+                outline=edge,
+                width=max(2, line // 3),
+            )
+            gradient_polygon(
+                left_face,
+                (205, 139, 76, 255),
+                (172, 99, 44, 255),
+                outline=edge,
+                width=max(2, line // 3),
+            )
+            gradient_polygon(
+                right_face,
+                (230, 160, 91, 255),
+                (189, 110, 49, 255),
+                outline=edge,
+                width=max(2, line // 3),
+            )
+            tape_top = (
+                (cx - int(size * 0.09), cy - int(size * 0.35)),
+                (cx + int(size * 0.03), cy - int(size * 0.41)),
+                (cx + int(size * 0.14), cy - int(size * 0.34)),
+                (cx + int(size * 0.02), cy - int(size * 0.27)),
+            )
+            gradient_polygon(
+                tape_top,
+                (248, 219, 151, 255),
+                (220, 180, 105, 255),
+            )
+            draw.polygon(
+                (
+                    (cx + int(size * 0.02), cy - int(size * 0.27)),
+                    (cx + int(size * 0.14), cy - int(size * 0.34)),
+                    (cx + int(size * 0.14), cy - int(size * 0.03)),
+                    (cx + int(size * 0.02), cy + int(size * 0.04)),
+                ),
+                fill=(230, 191, 114, 255),
+            )
+            label = (
+                cx + int(size * 0.10),
+                cy + int(size * 0.06),
+                cx + int(size * 0.33),
+                cy + int(size * 0.21),
+            )
+            draw.rounded_rectangle(
+                label,
+                radius=max(2, size // 35),
+                fill=(238, 222, 190, 255),
+                outline=(147, 111, 70, 255),
+                width=max(2, line // 4),
+            )
+            draw.line(
+                (
+                    label[0] + int(size * 0.03),
+                    label[1] + int(size * 0.05),
+                    label[2] - int(size * 0.03),
+                    label[1] + int(size * 0.05),
+                ),
+                fill=(124, 100, 72, 255),
+                width=max(2, line // 5),
+            )
+            return
+
+        if key == "laptop":
+            draw.ellipse(
+                (
+                    cx - int(size * 0.44),
+                    cy + int(size * 0.29),
+                    cx + int(size * 0.45),
+                    cy + int(size * 0.48),
+                ),
+                fill=shadow,
+            )
+            screen_box = (
+                cx - int(size * 0.39),
+                cy - int(size * 0.39),
+                cx + int(size * 0.39),
+                cy + int(size * 0.17),
+            )
+            self._gradient_roundrect(
+                surface,
+                screen_box,
+                radius=max(3, size // 28),
+                top=(54, 59, 66, 255),
+                bottom=(16, 19, 24, 255),
+                outline=(104, 107, 111),
+                width=max(2, line // 3),
+            )
+            inner_screen = (
+                screen_box[0] + line,
+                screen_box[1] + line,
+                screen_box[2] - line,
+                screen_box[3] - line,
+            )
+            self._gradient_roundrect(
+                surface,
+                inner_screen,
+                radius=max(2, size // 40),
+                top=(5, 8, 12, 255),
+                bottom=(19, 31, 42, 255),
+            )
+            draw.polygon(
+                (
+                    (cx - int(size * 0.47), cy + int(size * 0.17)),
+                    (cx + int(size * 0.47), cy + int(size * 0.17)),
+                    (cx + int(size * 0.37), cy + int(size * 0.42)),
+                    (cx - int(size * 0.37), cy + int(size * 0.42)),
+                ),
+                fill=(194, 197, 201, 255),
+                outline=(105, 108, 112, 255),
+            )
+            keyboard_box = (
+                cx - int(size * 0.34),
+                cy + int(size * 0.21),
+                cx + int(size * 0.34),
+                cy + int(size * 0.33),
+            )
+            draw.rounded_rectangle(
+                keyboard_box,
+                radius=max(2, size // 42),
+                fill=(96, 101, 107, 255),
+            )
+            key_size = max(2, size // 30)
+            for row in range(2):
+                for column in range(7):
+                    key_x = (
+                        keyboard_box[0]
+                        + int(size * 0.045)
+                        + column * int(size * 0.09)
+                    )
+                    key_y = (
+                        keyboard_box[1]
+                        + int(size * 0.025)
+                        + row * int(size * 0.055)
+                    )
+                    draw.rounded_rectangle(
+                        (key_x, key_y, key_x + key_size, key_y + key_size),
+                        radius=max(1, key_size // 3),
+                        fill=(221, 223, 225, 230),
+                    )
+            draw.rounded_rectangle(
+                (
+                    cx - int(size * 0.10),
+                    cy + int(size * 0.35),
+                    cx + int(size * 0.10),
+                    cy + int(size * 0.39),
+                ),
+                radius=max(1, size // 45),
+                fill=(143, 146, 150, 255),
+            )
+            draw.line(
+                (
+                    cx - int(size * 0.37),
+                    cy + int(size * 0.42),
+                    cx + int(size * 0.37),
+                    cy + int(size * 0.42),
+                ),
+                fill=(244, 245, 246, 255),
+                width=max(2, line // 4),
+            )
+            return
 
         if key == "eyes":
             eye_w = max(6, int(size * 0.34))

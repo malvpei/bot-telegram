@@ -633,7 +633,12 @@ class VideoCreationService:
         output_path = slides_dir / "slide_01.jpg"
         script_text = format_advice_script(tips)
 
-        image = self.renderer.render_advice_card(tips, language, background)
+        image = self.renderer.render_advice_card(
+            tips,
+            language,
+            background,
+            rotation_index=phase,
+        )
         image.convert("RGB").save(
             output_path,
             format="JPEG",

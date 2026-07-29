@@ -30,6 +30,7 @@ class FakeRenderer:
         self.render_slide_still_sources: list[Path] = []
         self.render_slide_still_texts: list[str] = []
         self.advice_card_calls: list[tuple[Language, AdviceBackground]] = []
+        self.advice_card_rotation_indices: list[int] = []
         self.written_plan: VideoPlan | None = None
 
     def render(self, plan: VideoPlan, job_dir: Path):
@@ -50,8 +51,16 @@ class FakeRenderer:
         self.render_slide_still_texts.append(slide.text)
         return Image.new("RGB", (72, 128), (40, 80, 120))
 
-    def render_advice_card(self, tips, language, background) -> Image.Image:
+    def render_advice_card(
+        self,
+        tips,
+        language,
+        background,
+        *,
+        rotation_index=0,
+    ) -> Image.Image:
         self.advice_card_calls.append((language, background))
+        self.advice_card_rotation_indices.append(rotation_index)
         return Image.new("RGB", (72, 128), (20, 30, 40))
 
     def render_template_video(self, input_video: Path, job_dir: Path, language=None) -> Path:
@@ -526,6 +535,7 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
             (Language.ES, AdviceBackground.BLACK),
             (Language.EN, AdviceBackground.WHITE),
         ]
+        assert service.renderer.advice_card_rotation_indices == [0, 1]
         assert spanish.video_type == VideoType.ADVICE
         assert spanish.slides[0].media.local_path.exists()
         assert spanish.social_copy.title == (
