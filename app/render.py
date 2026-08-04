@@ -165,6 +165,12 @@ ADVICE_EDITORIAL_TOP = 280
 ADVICE_EDITORIAL_BOTTOM = 280
 ADVICE_EDITORIAL_ROW_GAP = 12
 ADVICE_EDITORIAL_SIDE_MARGIN = 72
+ADVICE_FONT_FILES: dict[int, str] = {
+    400: "Inter-Regular.ttf",
+    500: "Inter-Medium.ttf",
+    600: "Inter-SemiBold.ttf",
+    700: "Inter-Bold.ttf",
+}
 ADVICE_BROWN_BACKGROUND = (99, 70, 54, 255)
 ADVICE_BROWN_TEXT = (255, 255, 255, 255)
 ADVICE_BROWN_SIDE_MARGIN = 98
@@ -291,7 +297,7 @@ class VideoRenderer:
         self._text_overlay_cache: dict[tuple[object, ...], Image.Image] = {}
         self._type_4_overlay_cache: dict[Language, Image.Image] = {}
         self._fixed_canvas_cache: dict[tuple[object, ...], Image.Image] = {}
-        self._font_cache: dict[tuple[str, int, bool], ImageFont.ImageFont] = {}
+        self._font_cache: dict[tuple[object, ...], ImageFont.ImageFont] = {}
         self._advice_emoji_cache: dict[str, Image.Image] = {}
 
     def render(self, plan: VideoPlan, job_dir: Path) -> tuple[Path, Path]:
@@ -448,23 +454,28 @@ class VideoRenderer:
         line_gap = _scale_y(ADVICE_FLAT_LINE_GAP, height)
         stroke_width = max(1, _scale_x(1, width))
 
-        selected_font: ImageFont.ImageFont | None = None
-        selected_blocks: list[tuple[list[str], int]] = []
+        selected_title_font: ImageFont.ImageFont | None = None
+        selected_body_font: ImageFont.ImageFont | None = None
+        selected_blocks: list[tuple[list[str], list[str]]] = []
         selected_heights: list[int] = []
         for font_size in range(
             self._scaled_text_size(ADVICE_FLAT_TEXT_SIZE, minimum=20),
             self._scaled_text_size(ADVICE_FLAT_MIN_TEXT_SIZE, minimum=16) - 1,
             -2,
         ):
-            font = self._load_font(size=font_size, bold=False)
+            title_font = self._load_advice_font(size=font_size, weight=600)
+            body_font = self._load_advice_font(
+                size=max(16, int(round(font_size * 0.88))),
+                weight=400,
+            )
             emoji_space = self._advice_flat_emoji_space(font_size, width)
-            blocks: list[tuple[list[str], int]] = []
+            blocks: list[tuple[list[str], list[str]]] = []
             heights: list[int] = []
             titles_fit_one_line = True
             for index, tip in enumerate(tips, start=1):
                 title_lines = self._wrap_flat_advice_title(
-                    f"{index}. {tip.title}",
-                    font,
+                    f"{index}. {self._advice_display_title(tip.title)}",
+                    title_font,
                     max_width,
                     emoji_space,
                     draw,
@@ -477,30 +488,38 @@ class VideoRenderer:
                     titles_fit_one_line = False
                 body_lines = self._wrap_text(
                     tip.body,
-                    font,
+                    body_font,
                     max_width,
                     draw,
                     stroke_width=stroke_width,
                 )
-                lines = [*title_lines, *body_lines]
-                blocks.append((lines, len(title_lines)))
+                blocks.append((title_lines, body_lines))
+                title_height = self._block_height(
+                    title_lines,
+                    title_font,
+                    draw,
+                    stroke_width=stroke_width,
+                    line_gap=line_gap,
+                )
+                body_height = self._block_height(
+                    body_lines,
+                    body_font,
+                    draw,
+                    stroke_width=stroke_width,
+                    line_gap=line_gap,
+                )
                 heights.append(
-                    self._block_height(
-                        lines,
-                        font,
-                        draw,
-                        stroke_width=stroke_width,
-                        line_gap=line_gap,
-                    )
+                    title_height + _scale_y(8, height) + body_height
                 )
             total_height = sum(heights) + block_gap * (len(blocks) - 1)
-            selected_font = font
+            selected_title_font = title_font
+            selected_body_font = body_font
             selected_blocks = blocks
             selected_heights = heights
             if titles_fit_one_line and total_height <= int(height * 0.72):
                 break
 
-        if selected_font is None:
+        if selected_title_font is None or selected_body_font is None:
             return
         total_height = sum(selected_heights) + block_gap * (len(selected_blocks) - 1)
         safe_top = _scale_y(ADVICE_FLAT_SAFE_TOP, height)
@@ -514,27 +533,33 @@ class VideoRenderer:
             tips,
             rotation_index=emoji_offset,
         )
-        for block_index, (lines, title_line_count) in enumerate(selected_blocks):
-            for line_index, line in enumerate(lines):
+        body_fill = (
+            (220, 220, 224, fill[3])
+            if sum(fill[:3]) > 500
+            else (64, 64, 70, fill[3])
+        )
+        title_body_gap = _scale_y(8, height)
+        for block_index, (title_lines, body_lines) in enumerate(selected_blocks):
+            for line_index, line in enumerate(title_lines):
                 bbox = draw.textbbox(
                     (0, 0),
                     line or "A",
-                    font=selected_font,
+                    font=selected_title_font,
                     stroke_width=stroke_width,
                 )
                 draw.text(
                     (x - bbox[0], y - bbox[1]),
                     line,
-                    font=selected_font,
+                    font=selected_title_font,
                     fill=fill,
                     stroke_width=stroke_width,
                     stroke_fill=stroke_fill,
                 )
-                if line_index == title_line_count - 1:
+                if line_index == len(title_lines) - 1:
                     line_width = bbox[2] - bbox[0]
                     line_height = bbox[3] - bbox[1]
                     icon_size = self._advice_flat_emoji_size(
-                        selected_font,
+                        selected_title_font,
                         width,
                         height=line_height,
                     )
@@ -550,7 +575,26 @@ class VideoRenderer:
                         stroke_fill[:3],
                     )
                 y += (bbox[3] - bbox[1]) + line_gap
-            if lines:
+            if title_lines:
+                y -= line_gap
+            y += title_body_gap
+            for line in body_lines:
+                bbox = draw.textbbox(
+                    (0, 0),
+                    line or "A",
+                    font=selected_body_font,
+                    stroke_width=stroke_width,
+                )
+                draw.text(
+                    (x - bbox[0], y - bbox[1]),
+                    line,
+                    font=selected_body_font,
+                    fill=body_fill,
+                    stroke_width=stroke_width,
+                    stroke_fill=stroke_fill,
+                )
+                y += (bbox[3] - bbox[1]) + line_gap
+            if body_lines:
                 y -= line_gap
             if block_index < len(selected_blocks) - 1:
                 y += block_gap
@@ -1407,6 +1451,7 @@ class VideoRenderer:
         tips: tuple[AdviceTip, ...],
         language: Language,
     ) -> Image.Image:
+        del language  # The selected tips are already localized.
         width, height = self.settings.width, self.settings.height
         image = Image.new("RGBA", (width, height), (247, 247, 245, 255))
         draw = ImageDraw.Draw(image)
@@ -1427,8 +1472,9 @@ class VideoRenderer:
         for index, tip in enumerate(tips, start=1):
             top = cards_top + (index - 1) * (card_height + card_gap)
             bottom = top + card_height
-            shadow_offset = _scale_y(9, height)
-            draw.rounded_rectangle(
+            shadow_offset = _scale_y(12, height)
+            shadow = Image.new("RGBA", image.size, (0, 0, 0, 0))
+            ImageDraw.Draw(shadow).rounded_rectangle(
                 (
                     card_left,
                     top + shadow_offset,
@@ -1436,19 +1482,24 @@ class VideoRenderer:
                     bottom + shadow_offset,
                 ),
                 radius=radius,
-                fill=(30, 35, 40, 28),
+                fill=(18, 21, 26, 34),
             )
+            shadow = shadow.filter(
+                ImageFilter.GaussianBlur(max(1, _scale_x(15, width)))
+            )
+            image.alpha_composite(shadow)
+            draw = ImageDraw.Draw(image)
             draw.rounded_rectangle(
                 (card_left, top, card_right, bottom),
                 radius=radius,
                 fill=(255, 255, 255, 255),
-                outline=(230, 231, 232, 255),
-                width=max(1, _scale_x(2, width)),
+                outline=(224, 224, 229, 255),
+                width=max(1, _scale_x(1, width)),
             )
 
-            number_font = self._load_font(
-                size=self._scaled_text_size(96, minimum=44),
-                bold=True,
+            number_font = self._load_advice_font(
+                size=self._scaled_text_size(88, minimum=42),
+                weight=700,
             )
             number = str(index)
             number_width, number_height = self._text_size(
@@ -1465,7 +1516,7 @@ class VideoRenderer:
                 ),
                 number,
                 font=number_font,
-                fill=(8, 10, 12),
+                fill=(20, 20, 23),
             )
 
             icon_center = (
@@ -1482,16 +1533,16 @@ class VideoRenderer:
             text_left = card_left + _scale_x(315, width)
             text_right = card_right - _scale_x(40, width)
             text_width = max(1, text_right - text_left)
-            title_font = self._load_font(
-                size=self._scaled_text_size(39, minimum=20),
-                bold=True,
+            title_font = self._load_advice_font(
+                size=self._scaled_text_size(40, minimum=20),
+                weight=600,
             )
-            body_font = self._load_font(
-                size=self._scaled_text_size(30, minimum=17),
-                bold=False,
+            body_font = self._load_advice_font(
+                size=self._scaled_text_size(29, minimum=17),
+                weight=400,
             )
             title_lines = self._wrap_text(
-                tip.title,
+                self._advice_display_title(tip.title),
                 title_font,
                 text_width,
                 draw,
@@ -1509,7 +1560,7 @@ class VideoRenderer:
                 title_font,
                 draw,
                 stroke_width=0,
-                line_gap=_scale_y(3, height),
+                line_gap=_scale_y(1, height),
             )
             body_block_height = self._block_height(
                 body_lines,
@@ -1518,9 +1569,9 @@ class VideoRenderer:
                 stroke_width=0,
                 line_gap=_scale_y(4, height),
             )
-            text_gap = _scale_y(22, height)
-            divider_height = max(2, _scale_y(4, height))
-            divider_width = _scale_x(34, width)
+            text_gap = _scale_y(20, height)
+            divider_height = max(2, _scale_y(3, height))
+            divider_width = _scale_x(36, width)
             text_top = top + max(
                 _scale_y(24, height),
                 (
@@ -1538,8 +1589,8 @@ class VideoRenderer:
                 title_font,
                 x=text_left,
                 start_y=text_top,
-                fill=(15, 18, 21),
-                line_gap=_scale_y(3, height),
+                fill=(20, 20, 23),
+                line_gap=_scale_y(1, height),
             )
             divider_y = text_top + title_block_height + _scale_y(9, height)
             draw.rounded_rectangle(
@@ -1558,7 +1609,7 @@ class VideoRenderer:
                 body_font,
                 x=text_left,
                 start_y=text_top + title_block_height + text_gap + divider_height,
-                fill=(70, 74, 79),
+                fill=(83, 83, 92),
                 line_gap=_scale_y(4, height),
             )
         return image.convert("RGB")
@@ -1713,9 +1764,9 @@ class VideoRenderer:
         text_left = side_margin + _scale_x(340, width)
         text_width = max(1, width - side_margin - text_left)
 
-        number_font = self._load_font(
-            size=self._scaled_text_size(96, minimum=32),
-            bold=True,
+        number_font = self._load_advice_font(
+            size=self._scaled_text_size(90, minimum=32),
+            weight=700,
         )
         for index, tip in enumerate(tips, start=1):
             row_top = top + (index - 1) * (row_height + row_gap)
@@ -1734,7 +1785,7 @@ class VideoRenderer:
                 ),
                 number,
                 font=number_font,
-                fill=(0, 0, 0),
+                fill=(20, 20, 23),
             )
             self._draw_editorial_advice_icon(
                 image,
@@ -1756,12 +1807,18 @@ class VideoRenderer:
             ):
                 body_size = max(
                     self._scaled_text_size(23, minimum=9),
-                    int(round(title_size * 0.70)),
+                    int(round(title_size * 0.68)),
                 )
-                candidate_title_font = self._load_font(size=title_size, bold=True)
-                candidate_body_font = self._load_font(size=body_size, bold=False)
+                candidate_title_font = self._load_advice_font(
+                    size=title_size,
+                    weight=600,
+                )
+                candidate_body_font = self._load_advice_font(
+                    size=body_size,
+                    weight=400,
+                )
                 candidate_title_lines = self._wrap_text(
-                    tip.title,
+                    self._advice_display_title(tip.title),
                     candidate_title_font,
                     text_width,
                     draw,
@@ -1779,7 +1836,7 @@ class VideoRenderer:
                     candidate_title_font,
                     draw,
                     stroke_width=0,
-                    line_gap=_scale_y(2, height),
+                    line_gap=_scale_y(1, height),
                 )
                 candidate_body_height = self._block_height(
                     candidate_body_lines,
@@ -1810,8 +1867,8 @@ class VideoRenderer:
                 title_font,
                 x=text_left,
                 start_y=text_top,
-                fill=(4, 4, 4),
-                line_gap=_scale_y(2, height),
+                fill=(20, 20, 23),
+                line_gap=_scale_y(1, height),
             )
             self._draw_left_aligned_lines(
                 draw,
@@ -1819,8 +1876,8 @@ class VideoRenderer:
                 body_font,
                 x=text_left,
                 start_y=text_top + title_height + title_gap,
-                fill=(22, 22, 22),
-                line_gap=_scale_y(3, height),
+                fill=(78, 78, 86),
+                line_gap=_scale_y(4, height),
             )
         return image.convert("RGB")
 
@@ -5151,6 +5208,46 @@ class VideoRenderer:
         bbox = draw.textbbox((0, 0), text or "A", font=font, stroke_width=stroke_width)
         return bbox[2] - bbox[0], bbox[3] - bbox[1]
 
+    @staticmethod
+    def _advice_display_title(title: str) -> str:
+        """Use sentence case without altering acronyms or branded words."""
+        stripped = title.strip()
+        if not stripped:
+            return stripped
+        return f"{stripped[0].upper()}{stripped[1:]}"
+
+    def _load_advice_font(
+        self,
+        *,
+        size: int,
+        weight: int,
+    ) -> ImageFont.ImageFont:
+        """Load the bundled mobile-first family used only by Type 4 cards."""
+        normalized_weight = min(
+            ADVICE_FONT_FILES,
+            key=lambda candidate: abs(candidate - weight),
+        )
+        cache_key = ("advice", size, normalized_weight)
+        cached = self._font_cache.get(cache_key)
+        if cached is not None:
+            return cached
+
+        font_path = (
+            self._font_dir
+            / "advice"
+            / ADVICE_FONT_FILES[normalized_weight]
+        )
+        try:
+            font = ImageFont.truetype(str(font_path), size=size)
+        except OSError:
+            LOGGER.warning(
+                "Type 4 font %s is unavailable; using the standard fallback.",
+                font_path,
+            )
+            font = self._load_font(size=size, bold=normalized_weight >= 600)
+        self._remember_font(cache_key, font)
+        return font
+
     def _load_font(self, *, size: int, bold: bool) -> ImageFont.ImageFont:
         cache_key = ("base", size, bold)
         cached = self._font_cache.get(cache_key)
@@ -5292,7 +5389,7 @@ class VideoRenderer:
 
     def _remember_font(
         self,
-        cache_key: tuple[str, int, bool],
+        cache_key: tuple[object, ...],
         font: ImageFont.ImageFont,
     ) -> None:
         self._font_cache[cache_key] = font

@@ -15,3 +15,11 @@ Sugerencias libres y compatibles:
 - Inter (regular + bold) — https://rsms.me/inter/
 - Manrope (regular + bold) — https://manropefont.com/
 - Roboto (regular + bold) — https://fonts.google.com/specimen/Roboto
+
+## Tipografía de las tarjetas Tipo 4
+
+`advice/` contiene Inter 4.1 en cuatro pesos (Regular, Medium, SemiBold y
+Bold). El renderer la carga exclusivamente para las tarjetas de consejos, de
+modo que este rediseño no altera las tipografías de los demás tipos de vídeo.
+Inter se distribuye bajo la SIL Open Font License incluida en
+`advice/LICENSE.txt`.

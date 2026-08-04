@@ -186,6 +186,31 @@ def test_type_4_illustrated_advice_card_draws_clean_cards_without_header():
     ).mean() > 0.001
 
 
+def test_type_4_advice_cards_use_the_bundled_inter_weight_hierarchy():
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+
+    regular = renderer._load_advice_font(size=30, weight=400)
+    semibold = renderer._load_advice_font(size=40, weight=600)
+    bold = renderer._load_advice_font(size=88, weight=700)
+
+    assert regular.getname()[0] == "Inter"
+    assert regular.getname()[1] == "Regular"
+    assert semibold.getname()[0] == "Inter"
+    assert semibold.getname()[1] == "SemiBold"
+    assert bold.getname()[0] == "Inter"
+    assert bold.getname()[1] == "Bold"
+
+
+def test_type_4_advice_titles_use_clean_sentence_case():
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+
+    assert (
+        renderer._advice_display_title("elige un producto ganador")
+        == "Elige un producto ganador"
+    )
+    assert renderer._advice_display_title("Dropradar valida") == "Dropradar valida"
+
+
 def test_type_4_editorial_advice_card_matches_five_row_reference():
     renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
     background, tips, _pack_index = advice_selection(3, Language.EN)
