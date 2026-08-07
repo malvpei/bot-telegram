@@ -538,8 +538,8 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
         assert service.renderer.advice_card_rotation_indices == [0, 1]
         assert spanish.video_type == VideoType.ADVICE
         assert spanish.slides[0].media.local_path.exists()
-        assert spanish.social_copy.title == "4 señales para encontrar un producto ganador"
-        assert english.social_copy.title == "validate the winner before you run ads"
+        assert spanish.social_copy.title == "la regla #1 no es perseguir visitas"
+        assert english.social_copy.title == "before launching, separate signal from noise"
         assert spanish.social_copy.hook == (
             "un dropshipper millonario me contó la regla número #1 para vender fácilmente"
         )
@@ -547,8 +547,9 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
             "A millionaire dropshipper told me rule number #1 for selling easily"
         )
         assert spanish.social_copy.description
+        assert len(spanish.social_copy.description) >= 1500
+        assert "hook" in spanish.social_copy.description.lower()
         assert "Dropradar" in spanish.social_copy.description
-        assert "productos ganadores" in spanish.social_copy.description
         assert spanish.social_copy.hashtags == [
             "#dropshipping",
             "#productosganadores",
