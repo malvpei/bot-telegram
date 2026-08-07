@@ -137,7 +137,9 @@ ADVICE_FLAT_MIN_TEXT_SIZE = 30
 ADVICE_FLAT_SIDE_MARGIN = 150
 ADVICE_FLAT_SAFE_TOP = 220
 ADVICE_FLAT_SAFE_BOTTOM = 300
-ADVICE_FLAT_BLOCK_GAP = 60
+ADVICE_FLAT_BLOCK_GAP = 72
+ADVICE_FLAT_VERTICAL_NUDGE = 24
+ADVICE_FLAT_TITLE_WEIGHT = 400
 ADVICE_FLAT_LINE_GAP = 10
 ADVICE_FLAT_EMOJI_GAP = 12
 ADVICE_FLAT_EMOJI_SCALE = 1.12
@@ -436,7 +438,10 @@ class VideoRenderer:
             self._scaled_text_size(ADVICE_FLAT_MIN_TEXT_SIZE, minimum=16) - 1,
             -2,
         ):
-            title_font = self._load_advice_font(size=font_size, weight=600)
+            title_font = self._load_advice_font(
+                size=font_size,
+                weight=ADVICE_FLAT_TITLE_WEIGHT,
+            )
             body_font = self._load_advice_font(
                 size=max(16, int(round(font_size * 0.88))),
                 weight=400,
@@ -501,6 +506,7 @@ class VideoRenderer:
             height - safe_top - _scale_y(ADVICE_FLAT_SAFE_BOTTOM, height),
         )
         y = safe_top + max(0, (safe_height - total_height) // 2)
+        y += _scale_y(ADVICE_FLAT_VERTICAL_NUDGE, height)
         x = (width - max_width) // 2
         emoji_keys = self._flat_advice_emoji_keys(
             tips,

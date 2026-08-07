@@ -58,6 +58,9 @@ from app.render import (
     TYPE_4_STORY_CAPTION_PRIMARY_CENTER,
     TYPE_4_TEXT_STROKE_WIDTH,
     TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH,
+    ADVICE_FLAT_BLOCK_GAP,
+    ADVICE_FLAT_TITLE_WEIGHT,
+    ADVICE_FLAT_VERTICAL_NUDGE,
     VideoRenderer,
 )
 
@@ -199,6 +202,12 @@ def test_type_4_advice_cards_use_the_bundled_inter_weight_hierarchy():
     assert semibold.getname()[1] == "SemiBold"
     assert bold.getname()[0] == "Inter"
     assert bold.getname()[1] == "Bold"
+
+
+def test_type_4_flat_advice_titles_use_regular_weight_and_looser_lower_layout():
+    assert ADVICE_FLAT_TITLE_WEIGHT == 400
+    assert ADVICE_FLAT_BLOCK_GAP == 72
+    assert ADVICE_FLAT_VERTICAL_NUDGE == 24
 
 
 def test_type_4_advice_titles_use_clean_sentence_case():

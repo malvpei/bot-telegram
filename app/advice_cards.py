@@ -36,7 +36,7 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "distintos por cómo explican el problema.",
             ),
             AdviceTip(
-                "automatiza los pedidos con ChatGPT",
+                "automatiza la gestión de pedidos",
                 "usa ChatGPT para clasificar pedidos, preparar respuestas y detectar "
                 "incidencias; revisa cada acción antes de enviarla.",
             ),
@@ -58,9 +58,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "tiendas vendiéndolos.",
             ),
             AdviceTip(
-                "delega la gestión repetitiva en ChatGPT",
-                "puede resumir consultas, priorizar pedidos y dejar respuestas listas "
-                "para revisar, para que atiendas más clientes sin perder el control.",
+                "delega la gestión repetitiva",
+                "ChatGPT puede resumir consultas, priorizar pedidos y dejar respuestas "
+                "listas para revisar, para que atiendas más clientes sin perder el control.",
             ),
             AdviceTip(
                 "añade un pack bastante más caro",
@@ -80,7 +80,7 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "probablemente está consiguiendo resultados.",
             ),
             AdviceTip(
-                "convierte tu bandeja en un flujo de trabajo",
+                "convierte pedidos en un flujo de trabajo",
                 "conecta ChatGPT a tus herramientas para extraer datos de pedidos, "
                 "avisar de retrasos y crear tareas de seguimiento.",
             ),
@@ -102,9 +102,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "visitas durante un solo día.",
             ),
             AdviceTip(
-                "usa ChatGPT como asistente de operaciones",
-                "te ayuda a organizar pedidos, redactar mensajes y mantener el "
-                "seguimiento al día, mientras tú supervisas las decisiones importantes.",
+                "usa un asistente para tus operaciones",
+                "ChatGPT te ayuda a organizar pedidos, redactar mensajes y mantener "
+                "el seguimiento al día, mientras tú supervisas las decisiones importantes.",
             ),
             AdviceTip(
                 "haz que un pack destaque claramente",
@@ -126,7 +126,7 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "because of how they explain the problem.",
             ),
             AdviceTip(
-                "automate order admin with ChatGPT",
+                "automate your order admin",
                 "use ChatGPT to sort orders, draft replies and flag issues; review "
                 "every action before it is sent.",
             ),
@@ -148,8 +148,8 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "stores selling them.",
             ),
             AdviceTip(
-                "delegate repetitive admin to ChatGPT",
-                "it can summarize questions, prioritize orders and prepare replies "
+                "delegate repetitive admin",
+                "ChatGPT can summarize questions, prioritize orders and prepare replies "
                 "for review, so you can serve more customers without losing control.",
             ),
             AdviceTip(
@@ -170,7 +170,7 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "results.",
             ),
             AdviceTip(
-                "turn your inbox into a workflow",
+                "turn orders into a workflow",
                 "connect ChatGPT to your tools to extract order details, flag delays "
                 "and create follow-up tasks.",
             ),
@@ -192,9 +192,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "views for a single day.",
             ),
             AdviceTip(
-                "use ChatGPT as an operations assistant",
-                "it can organize orders, draft messages and keep follow-up on track "
-                "while you supervise the important decisions.",
+                "use an operations assistant",
+                "ChatGPT can organize orders, draft messages and keep follow-up on "
+                "track while you supervise the important decisions.",
             ),
             AdviceTip(
                 "make one bundle look clearly better",

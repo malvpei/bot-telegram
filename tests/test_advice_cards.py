@@ -26,6 +26,7 @@ def test_every_type_4_pack_recommends_chatgpt_for_order_operations():
         for tips in ADVICE_PACKS[language]:
             chatgpt_tip = tips[1]
             assert "chatgpt" in f"{chatgpt_tip.title} {chatgpt_tip.body}".lower()
+            assert "chatgpt" not in chatgpt_tip.title.lower()
             assert any(
                 term in chatgpt_tip.body.lower()
                 for term in ("pedido", "orders", "order")
