@@ -12,7 +12,6 @@ class AdviceBackground(str, Enum):
     WHITE = "white"
     ILLUSTRATED = "illustrated"
     EDITORIAL = "editorial"
-    BROWN = "brown"
 
 
 @dataclass(frozen=True)
@@ -26,7 +25,6 @@ ADVICE_BACKGROUNDS: tuple[AdviceBackground, ...] = (
     AdviceBackground.WHITE,
     AdviceBackground.ILLUSTRATED,
     AdviceBackground.EDITORIAL,
-    AdviceBackground.BROWN,
 )
 
 ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
@@ -38,9 +36,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "distintos por cómo explican el problema.",
             ),
             AdviceTip(
-                "convierte las dudas en anuncios",
-                "las preguntas frecuentes de los clientes pueden darte mejores "
-                "guiones que cualquier plantilla viral.",
+                "automatiza los pedidos con ChatGPT",
+                "usa ChatGPT para clasificar pedidos, preparar respuestas y detectar "
+                "incidencias; revisa cada acción antes de enviarla.",
             ),
             AdviceTip(
                 "muestra el producto antes del segundo 2",
@@ -60,8 +58,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "tiendas vendiéndolos.",
             ),
             AdviceTip(
-                "lee las reseñas de 2 estrellas",
-                "suelen explicar los problemas reales que tu oferta puede solucionar.",
+                "delega la gestión repetitiva en ChatGPT",
+                "puede resumir consultas, priorizar pedidos y dejar respuestas listas "
+                "para revisar, para que atiendas más clientes sin perder el control.",
             ),
             AdviceTip(
                 "añade un pack bastante más caro",
@@ -81,9 +80,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "probablemente está consiguiendo resultados.",
             ),
             AdviceTip(
-                "crea packs con nombres distintos",
-                "básico, más vendido y completo funcionan mejor que mostrar solo "
-                "cantidades y precios.",
+                "convierte tu bandeja en un flujo de trabajo",
+                "conecta ChatGPT a tus herramientas para extraer datos de pedidos, "
+                "avisar de retrasos y crear tareas de seguimiento.",
             ),
             AdviceTip(
                 "lee los comentarios antes de elegir",
@@ -103,9 +102,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "visitas durante un solo día.",
             ),
             AdviceTip(
-                "convierte preguntas en hooks",
-                "si todos preguntan lo mismo, usa esa pregunta exacta al principio "
-                "de tu próximo anuncio.",
+                "usa ChatGPT como asistente de operaciones",
+                "te ayuda a organizar pedidos, redactar mensajes y mantener el "
+                "seguimiento al día, mientras tú supervisas las decisiones importantes.",
             ),
             AdviceTip(
                 "haz que un pack destaque claramente",
@@ -127,9 +126,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "because of how they explain the problem.",
             ),
             AdviceTip(
-                "turn customer doubts into ads",
-                "frequent questions can give you better scripts than any viral "
-                "template.",
+                "automate order admin with ChatGPT",
+                "use ChatGPT to sort orders, draft replies and flag issues; review "
+                "every action before it is sent.",
             ),
             AdviceTip(
                 "show the product before second 2",
@@ -149,8 +148,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "stores selling them.",
             ),
             AdviceTip(
-                "read the 2-star reviews",
-                "they often reveal the real problems your offer can solve.",
+                "delegate repetitive admin to ChatGPT",
+                "it can summarize questions, prioritize orders and prepare replies "
+                "for review, so you can serve more customers without losing control.",
             ),
             AdviceTip(
                 "add a much more expensive bundle",
@@ -170,9 +170,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "results.",
             ),
             AdviceTip(
-                "give your bundles different names",
-                "basic, best seller and complete work better than showing only "
-                "quantities and prices.",
+                "turn your inbox into a workflow",
+                "connect ChatGPT to your tools to extract order details, flag delays "
+                "and create follow-up tasks.",
             ),
             AdviceTip(
                 "read comments before choosing",
@@ -192,9 +192,9 @@ ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
                 "views for a single day.",
             ),
             AdviceTip(
-                "turn customer questions into hooks",
-                "if people keep asking the same thing, open your next ad with that "
-                "exact question.",
+                "use ChatGPT as an operations assistant",
+                "it can organize orders, draft messages and keep follow-up on track "
+                "while you supervise the important decisions.",
             ),
             AdviceTip(
                 "make one bundle look clearly better",
@@ -453,11 +453,14 @@ def advice_selection(
     packs = ADVICE_PACKS[language]
     background_count = len(ADVICE_BACKGROUNDS)
     background = ADVICE_BACKGROUNDS[normalized_phase % background_count]
-    # Five backgrounds and four packs are coprime, so advancing both on every
-    # video makes every template meet every advice pack in the visual cycle.
-    pack_index = normalized_phase % len(packs)
+    # Four backgrounds and four packs would otherwise remain locked together.
+    # Shifting the pack after every complete background lap makes every visual
+    # template meet every advice pack during the 16-step visual cycle.
+    pack_index = (
+        normalized_phase + normalized_phase // background_count
+    ) % len(packs)
     tips = packs[pack_index]
-    if background in {AdviceBackground.EDITORIAL, AdviceBackground.BROWN}:
+    if background == AdviceBackground.EDITORIAL:
         tips = (
             *tips[:-1],
             ADVICE_EDITORIAL_EXTRA_TIPS[language][pack_index],

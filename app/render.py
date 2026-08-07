@@ -36,22 +36,6 @@ SYSTEM_FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
-ADVICE_BROWN_FONT_CANDIDATES: dict[bool, tuple[str, ...]] = {
-    True: (
-        "georgiab.ttf",
-        "Georgia Bold.ttf",
-        "DejaVuSerif-Bold.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf",
-        "timesbd.ttf",
-    ),
-    False: (
-        "georgia.ttf",
-        "Georgia.ttf",
-        "DejaVuSerif.ttf",
-        "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf",
-        "times.ttf",
-    ),
-}
 TIKTOK_OVERLAY_FONT_CANDIDATES = (
     "TikTokSans-Bold.ttf",
     "TikTokDisplay-Bold.ttf",
@@ -171,14 +155,6 @@ ADVICE_FONT_FILES: dict[int, str] = {
     600: "Inter-SemiBold.ttf",
     700: "Inter-Bold.ttf",
 }
-ADVICE_BROWN_BACKGROUND = (99, 70, 54, 255)
-ADVICE_BROWN_TEXT = (255, 255, 255, 255)
-ADVICE_BROWN_SIDE_MARGIN = 98
-ADVICE_BROWN_SAFE_TOP = 205
-ADVICE_BROWN_SAFE_BOTTOM = 215
-ADVICE_BROWN_BLOCK_GAP = 78
-ADVICE_BROWN_TITLE_GAP = 17
-ADVICE_BROWN_LINE_GAP = 11
 TEXT_CARD_FILL = (255, 255, 255, 246)
 TEXT_CARD_TEXT = (0, 0, 0)
 TEXT_FACE_AVOID_WEIGHT = 260.0
@@ -396,14 +372,11 @@ class VideoRenderer:
         *,
         rotation_index: int = 0,
     ) -> Image.Image:
-        if background in {AdviceBackground.EDITORIAL, AdviceBackground.BROWN}:
+        if background == AdviceBackground.EDITORIAL:
             if len(tips) != 5:
                 raise ValueError(
-                    "Las plantillas de cinco filas del Tipo 4 necesitan cinco consejos."
+                    "La plantilla editorial del Tipo 4 necesita cinco consejos."
                 )
-        if background == AdviceBackground.BROWN:
-            return self._render_brown_advice_card(tips, language)
-        if background == AdviceBackground.EDITORIAL:
             return self._render_editorial_advice_card(tips, language)
         if len(tips) != 4:
             raise ValueError("El Tipo 4 necesita exactamente cuatro consejos.")
@@ -1612,125 +1585,6 @@ class VideoRenderer:
                 fill=(83, 83, 92),
                 line_gap=_scale_y(4, height),
             )
-        return image.convert("RGB")
-
-    def _render_brown_advice_card(
-        self,
-        tips: tuple[AdviceTip, ...],
-        language: Language,
-    ) -> Image.Image:
-        """Render the five-tip brown serif layout from the supplied reference."""
-        del language  # The selected tips are already localized.
-        width, height = self.settings.width, self.settings.height
-        image = Image.new("RGBA", (width, height), ADVICE_BROWN_BACKGROUND)
-        draw = ImageDraw.Draw(image)
-        side_margin = _scale_x(ADVICE_BROWN_SIDE_MARGIN, width)
-        max_width = max(1, width - side_margin * 2)
-        safe_top = _scale_y(ADVICE_BROWN_SAFE_TOP, height)
-        safe_bottom = _scale_y(ADVICE_BROWN_SAFE_BOTTOM, height)
-        safe_height = max(1, height - safe_top - safe_bottom)
-        block_gap = _scale_y(ADVICE_BROWN_BLOCK_GAP, height)
-        title_gap = _scale_y(ADVICE_BROWN_TITLE_GAP, height)
-        line_gap = _scale_y(ADVICE_BROWN_LINE_GAP, height)
-
-        selected_title_font: ImageFont.ImageFont | None = None
-        selected_body_font: ImageFont.ImageFont | None = None
-        selected_blocks: list[tuple[list[str], list[str], int, int]] = []
-        selected_total_height = 0
-        for title_size in range(
-            self._scaled_text_size(48, minimum=16),
-            self._scaled_text_size(34, minimum=12) - 1,
-            -1,
-        ):
-            body_size = max(
-                self._scaled_text_size(30, minimum=11),
-                int(round(title_size * 0.86)),
-            )
-            title_font = self._load_brown_advice_font(title_size, bold=True)
-            body_font = self._load_brown_advice_font(body_size, bold=False)
-            blocks: list[tuple[list[str], list[str], int, int]] = []
-            titles_fit_one_line = True
-            for index, tip in enumerate(tips, start=1):
-                title_lines = self._wrap_text(
-                    f"{index}. {tip.title}",
-                    title_font,
-                    max_width,
-                    draw,
-                    stroke_width=0,
-                )
-                if len(title_lines) != 1:
-                    titles_fit_one_line = False
-                body_lines = self._wrap_text(
-                    tip.body,
-                    body_font,
-                    max_width,
-                    draw,
-                    stroke_width=0,
-                )
-                title_height = self._block_height(
-                    title_lines,
-                    title_font,
-                    draw,
-                    stroke_width=0,
-                    line_gap=line_gap,
-                )
-                body_height = self._block_height(
-                    body_lines,
-                    body_font,
-                    draw,
-                    stroke_width=0,
-                    line_gap=line_gap,
-                )
-                blocks.append(
-                    (title_lines, body_lines, title_height, body_height)
-                )
-            total_height = (
-                sum(
-                    title_height + title_gap + body_height
-                    for _, _, title_height, body_height in blocks
-                )
-                + block_gap * (len(blocks) - 1)
-            )
-            selected_title_font = title_font
-            selected_body_font = body_font
-            selected_blocks = blocks
-            selected_total_height = total_height
-            if titles_fit_one_line and total_height <= safe_height:
-                break
-
-        if selected_title_font is None or selected_body_font is None:
-            return image.convert("RGB")
-
-        x = side_margin
-        y = safe_top + max(0, (safe_height - selected_total_height) // 2)
-        for block_index, (
-            title_lines,
-            body_lines,
-            title_height,
-            body_height,
-        ) in enumerate(selected_blocks):
-            self._draw_left_aligned_lines(
-                draw,
-                title_lines,
-                selected_title_font,
-                x=x,
-                start_y=y,
-                fill=ADVICE_BROWN_TEXT[:3],
-                line_gap=line_gap,
-            )
-            y += title_height + title_gap
-            self._draw_left_aligned_lines(
-                draw,
-                body_lines,
-                selected_body_font,
-                x=x,
-                start_y=y,
-                fill=ADVICE_BROWN_TEXT[:3],
-                line_gap=line_gap,
-            )
-            y += body_height
-            if block_index < len(selected_blocks) - 1:
-                y += block_gap
         return image.convert("RGB")
 
     def _render_editorial_advice_card(
@@ -5254,27 +5108,6 @@ class VideoRenderer:
         if cached is not None:
             return cached
         font = self._load_font_uncached(size=size, bold=bold)
-        self._remember_font(cache_key, font)
-        return font
-
-    def _load_brown_advice_font(
-        self,
-        size: int,
-        *,
-        bold: bool,
-    ) -> ImageFont.ImageFont:
-        cache_key = ("brown-advice", size, bold)
-        cached = self._font_cache.get(cache_key)
-        if cached is not None:
-            return cached
-        for candidate in ADVICE_BROWN_FONT_CANDIDATES[bold]:
-            try:
-                font = ImageFont.truetype(candidate, size=size)
-                self._remember_font(cache_key, font)
-                return font
-            except OSError:
-                continue
-        font = self._load_font(size=size, bold=bold)
         self._remember_font(cache_key, font)
         return font
 

@@ -228,22 +228,6 @@ def test_type_4_editorial_advice_card_matches_five_row_reference():
     assert (pixels.max(axis=2) - pixels.min(axis=2) > 45).mean() > 0.002
 
 
-def test_type_4_brown_advice_card_matches_reference_colors_and_five_rows():
-    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
-    background, tips, _pack_index = advice_selection(4, Language.ES)
-
-    result = renderer.render_advice_card(tips, Language.ES, background)
-    pixels = np.asarray(result)
-
-    assert background == AdviceBackground.BROWN
-    assert len(tips) == 5
-    assert result.size == (1080, 1920)
-    assert tuple(pixels[0, 0]) == (99, 70, 54)
-    assert tuple(pixels[-1, -1]) == (99, 70, 54)
-    assert (pixels[:150] == np.array([99, 70, 54])).all(axis=2).mean() > 0.999
-    assert (pixels == np.array([255, 255, 255])).all(axis=2).mean() > 0.002
-
-
 def test_numbered_titleless_tip_keeps_number_with_body_for_rendering():
     renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
 
