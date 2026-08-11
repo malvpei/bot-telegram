@@ -45,7 +45,7 @@ from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.state import StateStore
 from app.story_images import StoryCarouselImageGenerator
 from app.texts import ScriptGenerator
-from app.type_5 import TYPE_5_SLIDE_TEXTS, type_5_social_copies
+from app.type_5 import type_5_slide_texts, type_5_social_copies
 
 
 LOGGER = logging.getLogger(__name__)
@@ -724,8 +724,8 @@ class VideoCreationService:
         )
 
     def _create_type_5_carousel_locked(self, request: VideoRequest) -> GenerationResult:
-        if request.language != Language.ES:
-            raise ValueError("El Tipo 5 esta disponible de momento solo en español.")
+        language = Language(request.language)
+        slide_texts = type_5_slide_texts(language)
 
         job_id = self._build_job_id()
         job_dir = self._job_output_dir(job_id, request.user_id)
@@ -734,7 +734,7 @@ class VideoCreationService:
             SlidePlan(
                 index=index,
                 role=role,
-                text=TYPE_5_SLIDE_TEXTS[role],
+                text=slide_texts[role],
                 media=slide_media,
                 fixed_asset=False,
             )
@@ -746,7 +746,7 @@ class VideoCreationService:
         plan = VideoPlan(
             chosen_account=f"r2:{self.settings.r2_type_5_image_prefix}",
             video_type=VideoType.TYPE_5,
-            language=Language.ES,
+            language=language,
             slides=slides,
             used_media_ids=[],
             fallback_accounts=[],
@@ -756,7 +756,7 @@ class VideoCreationService:
             job_dir,
             embed_slide_text=False,
         )
-        social_copies = type_5_social_copies()
+        social_copies = type_5_social_copies(language)
         social_copy_ids = [f"type5-{index:02d}" for index in range(len(social_copies))]
         selected_social_id, social_queue_restarted = (
             self.state.get_next_type_5_social_copy_id(social_copy_ids)
@@ -774,7 +774,7 @@ class VideoCreationService:
                 requested_accounts=[item.source_id for item in media],
                 fallback_accounts=[],
                 video_type=VideoType.TYPE_5,
-                language=Language.ES,
+                language=language,
                 video_path=str(video_path) if video_path is not None else None,
                 script_path=str(script_path),
                 gender=request.gender.value,
@@ -790,11 +790,11 @@ class VideoCreationService:
         return GenerationResult(
             video_path=video_path,
             script_path=script_path,
-            preview_text="\n\n".join(TYPE_5_SLIDE_TEXTS[role] for role in TYPE_5_ROLES),
+            preview_text="\n\n".join(slide_texts[role] for role in TYPE_5_ROLES),
             social_copy=social_copy,
             chosen_account=plan.chosen_account,
             video_type=VideoType.TYPE_5,
-            language=Language.ES,
+            language=language,
             fallback_accounts=[],
             slides=list(plan.slides),
             pool_remaining=0,

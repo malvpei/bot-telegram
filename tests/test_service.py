@@ -896,6 +896,51 @@ def test_type_5_uses_clean_photos_and_rotates_one_social_copy_per_video():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_5_generates_english_chat_text_and_social_copy():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            r2_type_5_image_prefix="tipo4/imagenstipo4",
+            width=72,
+            height=128,
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.renderer = FakeRenderer()
+        service.r2_storage = Type5R2Storage()
+
+        result = service._create_type_5_carousel_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=1,
+                video_type=VideoType.TYPE_5,
+                language=Language.EN,
+                account_inputs=[],
+            )
+        )
+
+        assert result.language == Language.EN
+        assert result.slides[0].text == (
+            "Best businesses to help your parents retire 🫡"
+        )
+        assert result.slides[1].text.startswith("Trading 2/10 ❌")
+        assert result.slides[2].text.startswith("Clipping 4/10 ❌")
+        assert result.slides[3].text.startswith("AI + Dropshipping ✅")
+        assert result.social_copy.title == "Three online businesses compared honestly"
+        assert "#onlinebusiness" in result.social_copy.hashtags
+        assert result.separate_slide_text is True
+        assert service.renderer.render_slide_still_texts == ["", "", "", ""]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_type_5_requires_four_images_in_its_own_prefix():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)

@@ -149,6 +149,10 @@ def run_bot() -> None:
                     wizard_advice_language,
                     pattern=r"^wizard:advicelang:",
                 ),
+                CallbackQueryHandler(
+                    wizard_type_5_language,
+                    pattern=r"^wizard:type5lang:",
+                ),
                 CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:"),
             ],
             LOWERCASE_STATE: [
@@ -1529,21 +1533,10 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     if raw_type == VideoType.TYPE_5.value:
         context.user_data["separate_slide_text"] = True
         await query.edit_message_text(
-            "Perfecto. Cojo las siguientes cuatro imagenes de la cola R2 del Tipo 5."
+            "Perfecto. Elige el idioma del Tipo 5.",
+            reply_markup=_type_5_language_keyboard(),
         )
-        request = VideoRequest(
-            chat_id=update.effective_chat.id,
-            user_id=update.effective_user.id,
-            video_type=VideoType.TYPE_5,
-            language=Language.ES,
-            account_inputs=[],
-            gender=VideoGender.MALE,
-            lowercase_text=False,
-            separate_slide_text=True,
-        )
-        await _execute_job(update, context, request)
-        _clear_wizard_state(context)
-        return ConversationHandler.END
+        return LANGUAGE_STATE
 
     keyboard = InlineKeyboardMarkup(
         [
@@ -1692,6 +1685,46 @@ async def wizard_advice_language(
         gender=gender,
         lowercase_text=False,
         separate_slide_text=False,
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
+
+
+async def wizard_type_5_language(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> int:
+    query = update.callback_query
+    await query.answer()
+    raw_lang = query.data.rsplit(":", maxsplit=1)[-1]
+    try:
+        language = Language(raw_lang)
+    except ValueError:
+        await query.edit_message_text("Idioma no reconocido. Lanza /create otra vez.")
+        return ConversationHandler.END
+    context.user_data["language"] = language.value
+
+    raw_gender = context.user_data.get("video_gender", VideoGender.MALE.value)
+    try:
+        gender = VideoGender(raw_gender)
+    except ValueError:
+        gender = VideoGender.MALE
+    confirmation = (
+        "Perfect. I will use the next four images from the Type 5 R2 queue."
+        if language == Language.EN
+        else "Perfecto. Cojo las siguientes cuatro imagenes de la cola R2 del Tipo 5."
+    )
+    await query.edit_message_text(confirmation)
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.TYPE_5,
+        language=language,
+        account_inputs=[],
+        gender=gender,
+        lowercase_text=False,
+        separate_slide_text=True,
     )
     await _execute_job(update, context, request)
     _clear_wizard_state(context)
@@ -1944,7 +1977,11 @@ async def _execute_job(
             "Estoy generando el carrusel IA. Esto puede tardar porque son 6 escenas."
         )
     elif request.video_type == VideoType.TYPE_5:
-        status_text = "Estoy preparando el Tipo 5 con las siguientes cuatro fotos de R2."
+        status_text = (
+            "I am preparing Type 5 with the next four R2 images."
+            if request.language == Language.EN
+            else "Estoy preparando el Tipo 5 con las siguientes cuatro fotos de R2."
+        )
     else:
         status_text = (
             "Estoy seleccionando imagenes. Uso el pool si hay stock; "
@@ -1983,9 +2020,15 @@ async def _execute_job(
         )
     elif result.video_type == VideoType.TYPE_5:
         header = (
-            "Tipo 5 listo\n"
-            "Idioma: ES\n"
-            "Entrega: 4 imágenes limpias + textos separados"
+            "Type 5 ready\n"
+            "Language: EN\n"
+            "Delivery: 4 clean images + separate text"
+            if result.language == Language.EN
+            else (
+                "Tipo 5 listo\n"
+                "Idioma: ES\n"
+                "Entrega: 4 imágenes limpias + textos separados"
+            )
         )
     else:
         header = (
@@ -1994,11 +2037,18 @@ async def _execute_job(
             f"Tipo: {result.video_type.value}\n"
             f"Idioma: {result.language.value}"
         )
-    send_status = (
-        "Enviando imágenes y textos por separado."
-        if result.separate_slide_text
-        else "Enviando imágenes con su texto."
-    )
+    if result.language == Language.EN:
+        send_status = (
+            "Sending images and text separately."
+            if result.separate_slide_text
+            else "Sending images with their text."
+        )
+    else:
+        send_status = (
+            "Enviando imágenes y textos por separado."
+            if result.separate_slide_text
+            else "Enviando imágenes con su texto."
+        )
     await status_message.edit_text(send_status)
     try:
         await _send_message(context, chat.id, header)
@@ -2328,6 +2378,23 @@ def _advice_language_keyboard() -> InlineKeyboardMarkup:
                 InlineKeyboardButton(
                     "English",
                     callback_data="wizard:advicelang:en",
+                ),
+            ]
+        ]
+    )
+
+
+def _type_5_language_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Español",
+                    callback_data="wizard:type5lang:es",
+                ),
+                InlineKeyboardButton(
+                    "English",
+                    callback_data="wizard:type5lang:en",
                 ),
             ]
         ]

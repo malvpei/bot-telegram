@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from app.models import SlideRole, SocialCopy
+from app.models import Language, SlideRole, SocialCopy
 
 
 TYPE_5_SLIDE_TEXTS: dict[SlideRole, str] = {
@@ -23,11 +23,44 @@ TYPE_5_SLIDE_TEXTS: dict[SlideRole, str] = {
     ),
 }
 
+TYPE_5_SLIDE_TEXTS_EN: dict[SlideRole, str] = {
+    SlideRole.HOOK: "Best businesses to help your parents retire 🫡",
+    SlideRole.TYPE_5_TRADING: (
+        "Trading 2/10 ❌\n"
+        "-Hard to get started\n"
+        "-You can lose everything in an instant"
+    ),
+    SlideRole.TYPE_5_CLIPPING: (
+        "Clipping 4/10 ❌\n"
+        "-Too much competition\n"
+        "-Low returns\n"
+        "-Takes too much time for too little reward"
+    ),
+    SlideRole.TYPE_5_AI_DROPSHIPPING: (
+        "AI + Dropshipping ✅\n"
+        "-Infinitely scalable\n"
+        "-Dropradar for winning products and DeepSeek for ideas"
+    ),
+}
+
+TYPE_5_SLIDE_TEXTS_BY_LANGUAGE: dict[Language, dict[SlideRole, str]] = {
+    Language.ES: TYPE_5_SLIDE_TEXTS,
+    Language.EN: TYPE_5_SLIDE_TEXTS_EN,
+}
+
 
 _TYPE_5_HASHTAGS = [
     "#negociosonline",
     "#dropshipping",
     "#inteligenciaartificial",
+    "#ecommerce",
+    "#dropradar",
+]
+
+_TYPE_5_HASHTAGS_EN = [
+    "#onlinebusiness",
+    "#dropshipping",
+    "#artificialintelligence",
     "#ecommerce",
     "#dropradar",
 ]
@@ -157,7 +190,140 @@ TYPE_5_SOCIAL_COPIES: tuple[SocialCopy, ...] = (
 )
 
 
-def type_5_social_copies() -> list[SocialCopy]:
+TYPE_5_SOCIAL_COPIES_EN: tuple[SocialCopy, ...] = (
+    SocialCopy(
+        title="Three online businesses compared honestly",
+        description=(
+            "Trading, clipping, and AI-powered dropshipping can look similar from "
+            "the outside, but they demand very different levels of risk, time, and "
+            "scalability. This comparison gives you a practical starting point for "
+            "deciding which model fits you best."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="Which online business makes sense for a beginner",
+        description=(
+            "Before choosing an opportunity, compare how much capital you could lose, "
+            "how many hours you must trade for results, and whether the system can grow "
+            "without always depending on you. Trading, clipping, and AI + Dropshipping "
+            "answer those three questions very differently."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="Trading, clipping, or AI + Dropshipping",
+        description=(
+            "Not every digital business offers the same balance of difficulty, return, "
+            "and scalability. Trading concentrates risk, clipping often depends on volume "
+            "and time, while AI-powered dropshipping can create a more repeatable process "
+            "for researching products and developing ideas."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="Selling your time versus building a system",
+        description=(
+            "A business can generate income and still be difficult to sustain. The key is "
+            "whether every result requires more of your hours or whether the work can become "
+            "a system. Tools such as Dropradar and DeepSeek can reduce research time and help "
+            "you test ideas faster."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="Compare these three things before starting online",
+        description=(
+            "Measure the risk of losing capital, the likely return for every hour invested, "
+            "and how easily results can grow without multiplying your workload. Using those "
+            "criteria helps you look past quick promises and choose a model with a more "
+            "reasonable foundation."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="Not every online business scales the same way",
+        description=(
+            "A popular idea is not automatically the right one for you. Trading can punish "
+            "mistakes quickly, clipping competes for attention in a crowded market, and AI + "
+            "Dropshipping lets you use data and ideas to validate opportunities before "
+            "committing more budget."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="Three business models with very different outcomes",
+        description=(
+            "Comparing online businesses means looking beyond their promises. Trading, "
+            "clipping, and AI + Dropshipping differ greatly in risk, time requirements, and "
+            "room to grow. The best choice depends on what you can invest, which skills you "
+            "want to build, and what kind of system you want to create."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="The online business I would build for the long term",
+        description=(
+            "Finding a way to make money is not enough; it should also be sustainable and "
+            "scalable. While some models concentrate risk or consume too many hours, AI + "
+            "Dropshipping can use Dropradar for product research and DeepSeek for developing "
+            "new angles and ideas."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="How to compare online businesses before choosing one",
+        description=(
+            "Judge every option by the same criteria: difficulty to start, risk of loss, "
+            "return per hour, and ability to scale. This makes it easier to understand why "
+            "trading, clipping, and AI + Dropshipping do not offer the same starting point "
+            "or require the same kind of work."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="Risk, time, and scalability in digital business",
+        description=(
+            "Each model has a different limitation. Trading can expose your capital, clipping "
+            "usually demands a high volume of work, and AI + Dropshipping aims to turn product "
+            "research and idea generation into a process you can repeat, measure, and improve."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="What changes between trading, clipping, and dropshipping",
+        description=(
+            "Although all three are presented as online businesses, they work very differently. "
+            "One depends on managing financial risk, another on producing content constantly, "
+            "and the third on validating products, preparing offers, and using tools to speed "
+            "up research and ideation."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+    SocialCopy(
+        title="The most scalable option is not always the obvious one",
+        description=(
+            "Before following a trend, check how much the outcome depends on your time and how "
+            "much of the work can become a system. Dropradar can help identify products with "
+            "interesting signals, while DeepSeek can help explore creative angles for the ideas "
+            "you decide to test."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS_EN),
+    ),
+)
+
+TYPE_5_SOCIAL_COPIES_BY_LANGUAGE: dict[Language, tuple[SocialCopy, ...]] = {
+    Language.ES: TYPE_5_SOCIAL_COPIES,
+    Language.EN: TYPE_5_SOCIAL_COPIES_EN,
+}
+
+
+def type_5_slide_texts(language: Language) -> dict[SlideRole, str]:
+    """Return the four separate chat messages for the requested language."""
+    return dict(TYPE_5_SLIDE_TEXTS_BY_LANGUAGE[language])
+
+
+def type_5_social_copies(language: Language = Language.ES) -> list[SocialCopy]:
     """Return independent copies so callers can safely format or reorder them."""
     return [
         SocialCopy(
@@ -166,5 +332,5 @@ def type_5_social_copies() -> list[SocialCopy]:
             hashtags=list(copy.hashtags),
             hook=copy.hook,
         )
-        for copy in TYPE_5_SOCIAL_COPIES
+        for copy in TYPE_5_SOCIAL_COPIES_BY_LANGUAGE[language]
     ]

@@ -40,6 +40,7 @@ from app.bot import (
     wizard_gender,
     wizard_story_language,
     wizard_type,
+    wizard_type_5_language,
 )
 from app.config import get_settings
 from app.batches import BatchItem, BatchItemKind
@@ -1202,7 +1203,7 @@ def test_type_4_button_asks_language_then_uses_r2_without_waiting_for_photo():
     assert context.user_data == {}
 
 
-def test_type_5_button_starts_spanish_r2_carousel_directly():
+def test_type_5_button_asks_language_and_starts_spanish_r2_carousel():
     captured: dict[str, VideoRequest] = {}
 
     async def capture_execute_job(update, context, request):
@@ -1215,10 +1216,45 @@ def test_type_5_button_starts_spanish_r2_carousel_directly():
     with patch("app.bot._execute_job", capture_execute_job):
         state = asyncio.run(wizard_type(update, context))
 
+        assert state == LANGUAGE_STATE
+        assert "idioma" in query.edited_text
+        assert [button.callback_data for button in query.reply_markup.inline_keyboard[0]] == [
+            "wizard:type5lang:es",
+            "wizard:type5lang:en",
+        ]
+
+        language_query = FakeRegenerateQuery("wizard:type5lang:es")
+        language_update = FakeRegenerateUpdate(language_query)
+        state = asyncio.run(wizard_type_5_language(language_update, context))
+
     assert state == ConversationHandler.END
-    assert "cuatro imagenes" in query.edited_text
+    assert "cuatro imagenes" in language_query.edited_text
     assert captured["request"].video_type == VideoType.TYPE_5
     assert captured["request"].language == Language.ES
+    assert captured["request"].account_inputs == []
+    assert captured["request"].separate_slide_text is True
+    assert context.user_data == {}
+
+
+def test_type_5_language_button_starts_english_r2_carousel():
+    captured: dict[str, VideoRequest] = {}
+
+    async def capture_execute_job(update, context, request):
+        captured["request"] = request
+
+    context = FakeContext()
+    context.user_data["video_type"] = VideoType.TYPE_5.value
+    context.user_data["separate_slide_text"] = True
+    query = FakeRegenerateQuery("wizard:type5lang:en")
+    update = FakeRegenerateUpdate(query)
+
+    with patch("app.bot._execute_job", capture_execute_job):
+        state = asyncio.run(wizard_type_5_language(update, context))
+
+    assert state == ConversationHandler.END
+    assert "next four images" in query.edited_text
+    assert captured["request"].video_type == VideoType.TYPE_5
+    assert captured["request"].language == Language.EN
     assert captured["request"].account_inputs == []
     assert captured["request"].separate_slide_text is True
     assert context.user_data == {}
