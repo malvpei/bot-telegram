@@ -43,9 +43,7 @@ def test_type_5_provides_english_chat_text_and_social_copy():
     copies = type_5_social_copies(Language.EN)
 
     assert texts == TYPE_5_SLIDE_TEXTS_EN
-    assert texts[SlideRole.HOOK] == (
-        "Best businesses to help your parents retire 🫡"
-    )
+    assert texts[SlideRole.HOOK] == "Top businesses to retire your parents"
     assert texts[SlideRole.TYPE_5_TRADING].startswith("Trading 2/10 ❌")
     assert texts[SlideRole.TYPE_5_CLIPPING].startswith("Clipping 4/10 ❌")
     assert texts[SlideRole.TYPE_5_AI_DROPSHIPPING].startswith(

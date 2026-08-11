@@ -927,9 +927,7 @@ def test_type_5_generates_english_chat_text_and_social_copy():
         )
 
         assert result.language == Language.EN
-        assert result.slides[0].text == (
-            "Best businesses to help your parents retire 🫡"
-        )
+        assert result.slides[0].text == "Top businesses to retire your parents"
         assert result.slides[1].text.startswith("Trading 2/10 ❌")
         assert result.slides[2].text.startswith("Clipping 4/10 ❌")
         assert result.slides[3].text.startswith("AI + Dropshipping ✅")

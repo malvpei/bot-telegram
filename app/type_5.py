@@ -24,7 +24,7 @@ TYPE_5_SLIDE_TEXTS: dict[SlideRole, str] = {
 }
 
 TYPE_5_SLIDE_TEXTS_EN: dict[SlideRole, str] = {
-    SlideRole.HOOK: "Best businesses to help your parents retire 🫡",
+    SlideRole.HOOK: "Top businesses to retire your parents",
     SlideRole.TYPE_5_TRADING: (
         "Trading 2/10 ❌\n"
         "-Hard to get started\n"
