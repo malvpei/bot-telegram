@@ -122,6 +122,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `OUTPUT_RETENTION_DAYS` | 7 | días que se guardan outputs |
 | `ACCOUNT_CACHE_TTL_HOURS` | 0 | 0 = cache permanente; las cuentas ya descargadas se leen de `data/downloads/<cuenta>` |
 | `ACCOUNT_PICK_ATTEMPTS` | 0 | objetivo inicial heredado; el selector puede seguir probando más cuentas para evitar falsos "sin imágenes" |
+| `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 usada por la cola de cuatro imágenes del Tipo 5 |
 
 ### Instagram y 2FA
 
@@ -165,6 +166,14 @@ ilustrado con tarjetas e iconos de dropshipping. También rota cuatro guiones en
 español e inglés; el cuarto consejo siempre recomienda Dropradar. Cada entrega
 incluye fuera de la imagen la frase de apertura correspondiente al idioma.
 La **Historia IA** continúa disponible como una opción independiente.
+
+El **Tipo 5** toma directamente cuatro imágenes diferentes del prefijo R2
+`tipo4/imagenstipo4`, las recorre con una cola persistente independiente y
+no borra objetos del bucket. Genera el hook «Top negocios para jubilar a tus
+padres 🫡», las comparaciones de Trading, Clipping y AI + Dropshipping, y
+entrega seis combinaciones diferentes de título y descripción para publicar.
+La rotación se guarda en `DATA_DIR/state/type5_image_queue.json` y se reanuda
+después de reinicios o redeploys.
 
 Flujo recomendado: ejecuta **/download_pool** para poblar un lote de fotos aptas
 en `data/state/media_pool.json`. El comando revisa cuentas una por una, descarga

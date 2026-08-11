@@ -188,6 +188,42 @@ class PrefixFallbackR2Storage(FakeR2Storage):
         return []
 
 
+class Type5R2Storage(FakeR2Storage):
+    def __init__(self, count: int = 6) -> None:
+        super().__init__()
+        self.count = count
+        self.listed_image_prefixes: list[str] = []
+        self.downloaded_keys: list[str] = []
+
+    def list_images(self, prefix: str):
+        self.listed_image_prefixes.append(prefix)
+        return [
+            R2Object(
+                key=f"tipo4/imagenstipo4/{index:02d}.jpg",
+                size=123,
+            )
+            for index in range(1, self.count + 1)
+        ]
+
+    def download(self, key: str, destination: Path) -> Path:
+        self.downloaded_keys.append(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (90, 160), (20, 40, 60)).save(destination)
+        return destination
+
+
+class DuplicateType5R2Storage(Type5R2Storage):
+    def list_images(self, prefix: str):
+        self.listed_image_prefixes.append(prefix)
+        return [
+            R2Object(key="tipo4/imagenstipo4/a.jpg", size=100, etag="same"),
+            R2Object(key="tipo4/imagenstipo4/a (1).jpg", size=100, etag="same"),
+            R2Object(key="tipo4/imagenstipo4/b.jpg", size=110, etag="b"),
+            R2Object(key="tipo4/imagenstipo4/c.jpg", size=120, etag="c"),
+            R2Object(key="tipo4/imagenstipo4/d.jpg", size=130, etag="d"),
+        ]
+
+
 class DuplicateTemplateR2Storage(FakeR2Storage):
     def list_videos(self, prefix: str):
         self.listed_prefix = prefix
@@ -793,6 +829,111 @@ def test_type_4_falls_back_to_any_r2_image_when_configured_prefix_is_empty():
         assert r2_storage.listed_image_prefixes == ["videos/imagenes", ""]
         assert r2_storage.downloaded_key == "otra/carpeta/reference.jpg"
         assert result.chosen_account == "r2:otra/carpeta/reference.jpg"
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_5_uses_four_r2_images_and_returns_six_social_copies():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            r2_type_5_image_prefix="tipo4/imagenstipo4",
+            width=72,
+            height=128,
+        )
+        r2_storage = Type5R2Storage()
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.renderer = FakeRenderer()
+        service.r2_storage = r2_storage
+
+        result = service._create_type_5_carousel_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=1,
+                video_type=VideoType.TYPE_5,
+                language=Language.ES,
+                account_inputs=[],
+            )
+        )
+
+        assert result.video_type == VideoType.TYPE_5
+        assert r2_storage.listed_image_prefixes == ["tipo4/imagenstipo4"]
+        assert r2_storage.downloaded_keys == [
+            f"tipo4/imagenstipo4/{index:02d}.jpg"
+            for index in range(1, 5)
+        ]
+        assert len(result.slides) == 4
+        assert result.slides[0].text == "Top negocios para jubilar a tus padres 🫡"
+        assert result.slides[1].text.startswith("Trading 2/10 ❌")
+        assert result.slides[2].text.startswith("Clipping 4/10 ❌")
+        assert result.slides[3].text.startswith("AI + Dropshipping ✅")
+        assert all(slide.media.local_path.exists() for slide in result.slides)
+        assert len(result.social_copies) == 6
+        assert len({copy.title for copy in result.social_copies}) == 6
+        assert len({copy.description for copy in result.social_copies}) == 6
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_5_requires_four_images_in_its_own_prefix():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            r2_type_5_image_prefix="tipo4/imagenstipo4",
+        )
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.r2_storage = Type5R2Storage(count=3)
+
+        with pytest.raises(ValueError, match="al menos cuatro imagenes diferentes"):
+            service._download_type_5_images_from_r2(root / "job")
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_5_deduplicates_identical_r2_copies_by_etag():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            r2_type_5_image_prefix="tipo4/imagenstipo4",
+        )
+        storage = DuplicateType5R2Storage()
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.r2_storage = storage
+
+        media, _restarted = service._download_type_5_images_from_r2(root / "job")
+
+        assert len(media) == 4
+        assert "tipo4/imagenstipo4/a (1).jpg" not in storage.downloaded_keys
+        assert storage.downloaded_keys == [
+            "tipo4/imagenstipo4/a.jpg",
+            "tipo4/imagenstipo4/b.jpg",
+            "tipo4/imagenstipo4/c.jpg",
+            "tipo4/imagenstipo4/d.jpg",
+        ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

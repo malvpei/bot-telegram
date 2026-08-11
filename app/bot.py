@@ -128,7 +128,7 @@ def run_bot() -> None:
         states={
             GENDER_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:4|advice)$"),
+                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:4|5|advice)$"),
                 CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:"),
             ],
             TYPE_STATE: [
@@ -941,7 +941,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "Flujo:\n"
         "1. /create\n"
         "2. elige Hombres o Mujeres\n"
-        "3. elige Tipo 1, Tipo 2, Tipo 3, Tipo 4 o la Historia IA\n"
+        "3. elige Tipo 1, Tipo 2, Tipo 3, Tipo 4, Tipo 5 o la Historia IA\n"
         "4. elige si quieres texto incrustado en la imagen o separado\n"
         "5. elige Español o English\n"
         "6. elige si quieres textos normales o todo en minúscula\n"
@@ -951,6 +951,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "2 = 4 consejos + hook (slide 3 = tip3_dropradar.jpg, tip3)\n"
         "3 = hook + herramientas para empezar dropshipping en 2026\n"
         "4 = cuatro consejos rotativos sobre fondo negro, blanco o ilustrado\n"
+        "5 = comparación de negocios con cuatro fotos tomadas de una cola R2\n"
         "IA = historia vertical de 6 escenas + la foto original, con el texto "
         "compuesto fuera de la IA para que siempre se lea bien\n\n"
         "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
@@ -1371,13 +1372,19 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         callback_data="wizard:type:4",
                     ),
                 ],
+                [
+                    InlineKeyboardButton(
+                        "Tipo 5 - Negocios",
+                        callback_data="wizard:type:5",
+                    ),
+                ],
             ]
         )
         await update.effective_message.reply_text(
             (
                 "Que quieres crear?\n\n"
                 "No encontre cuentas cargadas, asi que puedes crear el video "
-                "de herramientas R2, el Tipo 4 o la historia IA desde R2."
+                "de herramientas R2, el Tipo 4, el Tipo 5 o la historia IA desde R2."
             ),
             reply_markup=keyboard,
         )
@@ -1413,6 +1420,12 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 InlineKeyboardButton(
                     "Historia IA desde R2",
                     callback_data="wizard:type:4",
+                ),
+            ],
+            [
+                InlineKeyboardButton(
+                    "Tipo 5 - Negocios",
+                    callback_data="wizard:type:5",
                 ),
             ],
         ]
@@ -1470,6 +1483,12 @@ async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     callback_data="wizard:type:4",
                 ),
             ],
+            [
+                InlineKeyboardButton(
+                    "Tipo 5 - Negocios",
+                    callback_data="wizard:type:5",
+                ),
+            ],
         ]
     )
     await query.edit_message_text(
@@ -1506,6 +1525,25 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             reply_markup=_story_language_keyboard(),
         )
         return LANGUAGE_STATE
+
+    if raw_type == VideoType.TYPE_5.value:
+        context.user_data["separate_slide_text"] = False
+        await query.edit_message_text(
+            "Perfecto. Cojo las siguientes cuatro imagenes de la cola R2 del Tipo 5."
+        )
+        request = VideoRequest(
+            chat_id=update.effective_chat.id,
+            user_id=update.effective_user.id,
+            video_type=VideoType.TYPE_5,
+            language=Language.ES,
+            account_inputs=[],
+            gender=VideoGender.MALE,
+            lowercase_text=False,
+            separate_slide_text=False,
+        )
+        await _execute_job(update, context, request)
+        _clear_wizard_state(context)
+        return ConversationHandler.END
 
     keyboard = InlineKeyboardMarkup(
         [
@@ -1905,6 +1943,8 @@ async def _execute_job(
         status_text = (
             "Estoy generando el carrusel IA. Esto puede tardar porque son 6 escenas."
         )
+    elif request.video_type == VideoType.TYPE_5:
+        status_text = "Estoy preparando el Tipo 5 con las siguientes cuatro fotos de R2."
     else:
         status_text = (
             "Estoy seleccionando imagenes. Uso el pool si hay stock; "
@@ -1941,6 +1981,12 @@ async def _execute_job(
             f"Fuente: {source_label}\n"
             "Entrega: 6 escenas generadas + foto original"
         )
+    elif result.video_type == VideoType.TYPE_5:
+        header = (
+            "Tipo 5 listo\n"
+            "Idioma: ES\n"
+            "Entrega: 4 imágenes + 6 opciones de título y descripción"
+        )
     else:
         header = (
             f"Cuenta elegida: @{result.chosen_account}\n"
@@ -1956,8 +2002,24 @@ async def _execute_job(
     await status_message.edit_text(send_status)
     try:
         await _send_message(context, chat.id, header)
-        for message in result.social_copy.messages:
-            await _send_message(context, chat.id, message)
+        if result.social_copies:
+            await _send_message(context, chat.id, "Opciones de publicación:")
+            for index, social_copy in enumerate(result.social_copies, start=1):
+                description = social_copy.description.strip()
+                hashtags = social_copy.hashtag_line.strip()
+                description_block = f"{description} {hashtags}".strip()
+                await _send_message(
+                    context,
+                    chat.id,
+                    (
+                        f"Opción {index}/{len(result.social_copies)}\n"
+                        f"{social_copy.title}\n\n"
+                        f"{description_block}"
+                    ),
+                )
+        else:
+            for message in result.social_copy.messages:
+                await _send_message(context, chat.id, message)
         await _send_slides_text_then_image(
             context,
             chat.id,
@@ -1965,7 +2027,11 @@ async def _execute_job(
             video_type=result.video_type,
             separate_slide_text=result.separate_slide_text,
         )
-        if result.video_type in {VideoType.TYPE_4, VideoType.ADVICE}:
+        if result.video_type in {
+            VideoType.TYPE_4,
+            VideoType.TYPE_5,
+            VideoType.ADVICE,
+        }:
             return
         context.user_data["repeat_request"] = {
             "chosen_account": result.chosen_account,

@@ -616,6 +616,101 @@ def test_manual_create_sends_regular_carousel_as_one_album():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_manual_type_5_sends_six_social_options_and_one_four_photo_album():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        slides = []
+        for index in range(1, 5):
+            image_path = root / f"type5_{index}.jpg"
+            Image.new("RGB", (10, 16), (index, 20, 30)).save(image_path)
+            slides.append(
+                SlidePlan(
+                    index=index,
+                    role=SlideRole.HOOK,
+                    text=f"Texto {index}",
+                    media=MediaCandidate(
+                        source_account="r2_type_5",
+                        source_id=f"type5:{index}",
+                        local_path=image_path,
+                        permalink="",
+                        caption="",
+                        width=10,
+                        height=16,
+                        created_at="",
+                    ),
+                )
+            )
+        social_copies = [
+            SocialCopy(
+                title=f"Titulo {index}",
+                description=f"Descripcion {index}",
+                hashtags=["#tipo5"],
+            )
+            for index in range(1, 7)
+        ]
+
+        class FakeType5Service:
+            def create_video(self, request):
+                return GenerationResult(
+                    video_path=None,
+                    script_path=root / "script.txt",
+                    preview_text="",
+                    social_copy=social_copies[0],
+                    social_copies=social_copies,
+                    chosen_account="r2:tipo4/imagenstipo4",
+                    video_type=VideoType.TYPE_5,
+                    language=Language.ES,
+                    fallback_accounts=[],
+                    slides=slides,
+                )
+
+        class FakeType5Bot(FakeTelegramBot):
+            async def send_message(
+                self,
+                *,
+                chat_id: int,
+                text: str,
+                reply_markup=None,
+            ):
+                await super().send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                )
+                return FakeStatusMessage()
+
+        context = FakeContext()
+        context.bot = FakeType5Bot()
+        context.application = FakeApplication(FakeType5Service())
+        update = FakeUpdate()
+        update.effective_chat = FakeChat()
+        request = VideoRequest(
+            chat_id=123,
+            user_id=456,
+            video_type=VideoType.TYPE_5,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        asyncio.run(_execute_job(update, context, request))
+
+        option_messages = [
+            text
+            for event, text in context.bot.events
+            if event == "message" and text.startswith("Opción ")
+        ]
+        assert len(option_messages) == 6
+        assert option_messages[0].startswith("Opción 1/6\nTitulo 1")
+        assert option_messages[-1].startswith("Opción 6/6\nTitulo 6")
+        assert context.bot.events[-1] == (
+            "album",
+            "type5_1.jpg,type5_2.jpg,type5_3.jpg,type5_4.jpg",
+        )
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_type_4_album_reopens_files_and_retries_network_read_errors():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -1012,7 +1107,7 @@ def test_create_command_offers_template_video_without_accounts():
 
     assert state == GENDER_STATE
     buttons = update.effective_message.reply_markup.inline_keyboard
-    assert len(buttons) == 2
+    assert len(buttons) == 3
     assert buttons[0][0].text == "Video herramientas R2 ES"
     assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
     assert buttons[0][1].text == "Video tools R2 EN"
@@ -1021,6 +1116,8 @@ def test_create_command_offers_template_video_without_accounts():
     assert buttons[1][0].callback_data == "wizard:type:advice"
     assert buttons[1][1].text == "Historia IA desde R2"
     assert buttons[1][1].callback_data == "wizard:type:4"
+    assert buttons[2][0].text == "Tipo 5 - Negocios"
+    assert buttons[2][0].callback_data == "wizard:type:5"
 
 
 def test_wizard_gender_offers_type_4_and_story_as_separate_options():
@@ -1040,6 +1137,8 @@ def test_wizard_gender_offers_type_4_and_story_as_separate_options():
     assert buttons[1][0].callback_data == "wizard:type:advice"
     assert buttons[1][1].text == "Historia IA"
     assert buttons[1][1].callback_data == "wizard:type:4"
+    assert buttons[2][0].text == "Tipo 5 - Negocios"
+    assert buttons[2][0].callback_data == "wizard:type:5"
 
 
 def test_wizard_type_asks_how_to_deliver_slide_text():
@@ -1106,6 +1205,28 @@ def test_type_4_button_asks_language_then_uses_r2_without_waiting_for_photo():
     assert captured["request"].language == Language.EN
     assert captured["request"].reference_image_path is None
     assert captured["request"].account_inputs == []
+    assert context.user_data == {}
+
+
+def test_type_5_button_starts_spanish_r2_carousel_directly():
+    captured: dict[str, VideoRequest] = {}
+
+    async def capture_execute_job(update, context, request):
+        captured["request"] = request
+
+    context = FakeContext()
+    query = FakeRegenerateQuery("wizard:type:5")
+    update = FakeRegenerateUpdate(query)
+
+    with patch("app.bot._execute_job", capture_execute_job):
+        state = asyncio.run(wizard_type(update, context))
+
+    assert state == ConversationHandler.END
+    assert "cuatro imagenes" in query.edited_text
+    assert captured["request"].video_type == VideoType.TYPE_5
+    assert captured["request"].language == Language.ES
+    assert captured["request"].account_inputs == []
+    assert captured["request"].separate_slide_text is False
     assert context.user_data == {}
 
 

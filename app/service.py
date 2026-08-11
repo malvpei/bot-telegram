@@ -4,6 +4,7 @@ import hashlib
 import logging
 import os
 import random
+import re
 import shutil
 import time
 from dataclasses import replace
@@ -31,6 +32,7 @@ from app.models import (
     SocialCopy,
     TemplateVideoResult,
     TYPE_4_ROLES,
+    TYPE_5_ROLES,
     VideoPlan,
     VideoRequest,
     VideoType,
@@ -43,6 +45,7 @@ from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.state import StateStore
 from app.story_images import StoryCarouselImageGenerator
 from app.texts import ScriptGenerator
+from app.type_5 import TYPE_5_SLIDE_TEXTS, type_5_social_copies
 
 
 LOGGER = logging.getLogger(__name__)
@@ -506,6 +509,8 @@ class VideoCreationService:
             return self._create_advice_card_locked(request)
         if request.video_type == VideoType.TYPE_4:
             return self._create_story_carousel_locked(request)
+        if request.video_type == VideoType.TYPE_5:
+            return self._create_type_5_carousel_locked(request)
 
         usernames = extract_usernames(
             request.account_inputs, len(request.account_inputs) or 1
@@ -717,6 +722,141 @@ class VideoCreationService:
             pool_low_stock=False,
             separate_slide_text=False,
         )
+
+    def _create_type_5_carousel_locked(self, request: VideoRequest) -> GenerationResult:
+        if request.language != Language.ES:
+            raise ValueError("El Tipo 5 esta disponible de momento solo en español.")
+
+        job_id = self._build_job_id()
+        job_dir = self._job_output_dir(job_id, request.user_id)
+        media, queue_restarted = self._download_type_5_images_from_r2(job_dir)
+        slides = [
+            SlidePlan(
+                index=index,
+                role=role,
+                text=TYPE_5_SLIDE_TEXTS[role],
+                media=slide_media,
+                fixed_asset=False,
+            )
+            for index, (role, slide_media) in enumerate(
+                zip(TYPE_5_ROLES, media, strict=True),
+                start=1,
+            )
+        ]
+        plan = VideoPlan(
+            chosen_account=f"r2:{self.settings.r2_type_5_image_prefix}",
+            video_type=VideoType.TYPE_5,
+            language=Language.ES,
+            slides=slides,
+            used_media_ids=[],
+            fallback_accounts=[],
+        )
+        video_path, script_path = self._render_outputs(plan, job_dir)
+        social_copies = type_5_social_copies()
+
+        self.state.log_job(
+            self.state.build_job_record(
+                job_id=job_id,
+                chosen_account=plan.chosen_account,
+                requested_accounts=[item.source_id for item in media],
+                fallback_accounts=[],
+                video_type=VideoType.TYPE_5,
+                language=Language.ES,
+                video_path=str(video_path) if video_path is not None else None,
+                script_path=str(script_path),
+                gender=request.gender.value,
+                user_id=request.user_id,
+                chat_id=request.chat_id,
+            )
+        )
+        if queue_restarted:
+            LOGGER.info("R2 Type 5 image queue restarted after completing a cycle")
+        self._cleanup_old_outputs()
+        return GenerationResult(
+            video_path=video_path,
+            script_path=script_path,
+            preview_text="\n\n".join(TYPE_5_SLIDE_TEXTS[role] for role in TYPE_5_ROLES),
+            social_copy=social_copies[0],
+            social_copies=social_copies,
+            chosen_account=plan.chosen_account,
+            video_type=VideoType.TYPE_5,
+            language=Language.ES,
+            fallback_accounts=[],
+            slides=list(plan.slides),
+            pool_remaining=0,
+            pool_low_stock=False,
+            separate_slide_text=False,
+        )
+
+    def _download_type_5_images_from_r2(
+        self,
+        job_dir: Path,
+    ) -> tuple[list[MediaCandidate], bool]:
+        if getattr(self, "r2_storage", None) is None or not self.r2_storage.is_configured:
+            raise ValueError(
+                "El Tipo 5 necesita Cloudflare R2 configurado. Sube las imagenes al "
+                f"prefijo {self.settings.r2_type_5_image_prefix!r}."
+            )
+        prefix = self.settings.r2_type_5_image_prefix
+        listed_images = sorted(
+            self.r2_storage.list_images(prefix),
+            key=lambda item: (
+                bool(re.search(r"\s\(\d+\)$", Path(item.key).stem)),
+                item.key,
+            ),
+        )
+        images = []
+        seen_content: set[str] = set()
+        for image in listed_images:
+            etag = str(getattr(image, "etag", "") or "").strip().strip('"').lower()
+            identity = (
+                f"etag:{etag}:{int(getattr(image, 'size', 0) or 0)}"
+                if etag
+                else f"key:{image.key}"
+            )
+            if identity in seen_content:
+                continue
+            seen_content.add(identity)
+            images.append(image)
+        if len(images) < len(TYPE_5_ROLES):
+            raise ValueError(
+                "El Tipo 5 necesita al menos cuatro imagenes diferentes en R2 bajo "
+                f"el prefijo {prefix!r}; encontre {len(images)} imagenes unicas."
+            )
+
+        selected_keys, queue_restarted = self.state.get_next_type_5_image_ids(
+            f"r2:{prefix}",
+            [image.key for image in images],
+            count=len(TYPE_5_ROLES),
+        )
+        inputs_dir = job_dir / "type_5_inputs"
+        media: list[MediaCandidate] = []
+        for index, key in enumerate(selected_keys, start=1):
+            suffix = Path(key).suffix.lower()
+            if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif"}:
+                suffix = ".jpg"
+            local_path = inputs_dir / f"source_{index:02d}{suffix}"
+            downloaded = self.r2_storage.download(key, local_path)
+            try:
+                with Image.open(downloaded) as image:
+                    width, height = image.size
+            except OSError as error:
+                raise ValueError(
+                    f"La imagen {key!r} no se pudo abrir como imagen compatible."
+                ) from error
+            media.append(
+                MediaCandidate(
+                    source_account="r2_type_5",
+                    source_id=f"r2-type5:{key}",
+                    local_path=downloaded,
+                    permalink=f"r2:{key}",
+                    caption="type 5 source image",
+                    width=width,
+                    height=height,
+                    created_at="r2",
+                )
+            )
+        return media, queue_restarted
 
     def _create_story_carousel_locked(self, request: VideoRequest) -> GenerationResult:
         try:

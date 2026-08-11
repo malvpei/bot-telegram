@@ -63,6 +63,48 @@ from app.render import (
     ADVICE_FLAT_VERTICAL_NUDGE,
     VideoRenderer,
 )
+from app.type_5 import TYPE_5_SLIDE_TEXTS
+
+
+def test_type_5_draws_portable_status_and_salute_icons(tmp_path):
+    source_path = tmp_path / "source.jpg"
+    Image.new("RGB", (360, 640), (45, 60, 90)).save(source_path)
+    media = MediaCandidate(
+        source_account="type5-preview",
+        source_id="type5-preview",
+        local_path=source_path,
+        permalink="",
+        caption="",
+        width=360,
+        height=640,
+        created_at="",
+    )
+    renderer = VideoRenderer(replace(get_settings(), width=360, height=640))
+
+    rendered = {}
+    for role in (
+        SlideRole.HOOK,
+        SlideRole.TYPE_5_TRADING,
+        SlideRole.TYPE_5_AI_DROPSHIPPING,
+    ):
+        rendered[role] = np.asarray(
+            renderer.render_slide_still(
+                SlidePlan(
+                    index=1,
+                    role=role,
+                    text=TYPE_5_SLIDE_TEXTS[role],
+                    media=media,
+                ),
+                VideoType.TYPE_5,
+            )
+        )
+
+    hook = rendered[SlideRole.HOOK]
+    negative = rendered[SlideRole.TYPE_5_TRADING]
+    positive = rendered[SlideRole.TYPE_5_AI_DROPSHIPPING]
+    assert ((hook[..., 0] > 220) & (hook[..., 1] > 140) & (hook[..., 2] < 110)).mean() > 0.001
+    assert ((negative[..., 0] > 220) & (negative[..., 1] < 110) & (negative[..., 2] < 110)).mean() > 0.001
+    assert ((positive[..., 0] < 100) & (positive[..., 1] > 150) & (positive[..., 2] < 130)).mean() > 0.001
 
 
 def test_type_4_flat_advice_cards_invert_background_and_text_colors():

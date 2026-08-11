@@ -3294,12 +3294,21 @@ class VideoRenderer:
 
         overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
 
+        display_text = slide.text
+        if video_type == VideoType.TYPE_5:
+            display_text = (
+                display_text.replace("🫡", "")
+                .replace("❌", "")
+                .replace("✅", "")
+                .rstrip()
+            )
+
         if slide.role == SlideRole.HOOK:
             if video_type == VideoType.TYPE_3:
                 return
             self._draw_hook_text(
                 overlay,
-                slide.text,
+                display_text,
                 video_type=video_type,
                 slide=slide,
                 layout_image=image,
@@ -3308,7 +3317,7 @@ class VideoRenderer:
         elif self._uses_hook_paragraph_style(slide, video_type):
             self._draw_hook_paragraph_text(
                 overlay,
-                slide.text,
+                display_text,
                 slide=slide,
                 layout_image=image,
                 avoid_regions=avoid_regions,
@@ -3316,13 +3325,166 @@ class VideoRenderer:
         else:
             self._draw_caption_card_text(
                 overlay,
-                slide.text,
+                display_text,
                 slide=slide,
                 layout_image=image,
                 avoid_regions=avoid_regions,
             )
+        if video_type == VideoType.TYPE_5:
+            self._draw_type_5_marker(overlay, slide.role)
         self._remember_text_overlay(cache_key, overlay)
         image.alpha_composite(overlay)
+
+    def _draw_type_5_marker(
+        self,
+        image: Image.Image,
+        role: SlideRole,
+    ) -> None:
+        marker_by_role = {
+            SlideRole.HOOK: "salute",
+            SlideRole.TYPE_5_TRADING: "negative",
+            SlideRole.TYPE_5_CLIPPING: "negative",
+            SlideRole.TYPE_5_AI_DROPSHIPPING: "positive",
+        }
+        marker = marker_by_role.get(role)
+        if marker is None:
+            return
+
+        width, height = image.size
+        size = max(56, _scale_x(126, width))
+        margin_x = max(size // 2 + 12, _scale_x(92, width))
+        center = (width - margin_x, max(size // 2 + 12, _scale_y(190, height)))
+        scale = 4
+        layer_size = size * scale
+        layer = Image.new("RGBA", (layer_size, layer_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(layer)
+        cx = cy = layer_size // 2
+        radius = int(layer_size * 0.39)
+        shadow_offset = max(4, layer_size // 30)
+        draw.ellipse(
+            (
+                cx - radius + shadow_offset,
+                cy - radius + shadow_offset,
+                cx + radius + shadow_offset,
+                cy + radius + shadow_offset,
+            ),
+            fill=(0, 0, 0, 70),
+        )
+
+        if marker == "salute":
+            self._draw_type_5_salute_icon(draw, cx, cy, radius)
+        else:
+            color = (255, 59, 48, 255) if marker == "negative" else (52, 199, 89, 255)
+            draw.ellipse(
+                (cx - radius, cy - radius, cx + radius, cy + radius),
+                fill=color,
+                outline=(255, 255, 255, 235),
+                width=max(5, layer_size // 34),
+            )
+            line_width = max(10, layer_size // 18)
+            if marker == "negative":
+                offset = int(radius * 0.46)
+                draw.line(
+                    (cx - offset, cy - offset, cx + offset, cy + offset),
+                    fill=(255, 255, 255, 255),
+                    width=line_width,
+                )
+                draw.line(
+                    (cx + offset, cy - offset, cx - offset, cy + offset),
+                    fill=(255, 255, 255, 255),
+                    width=line_width,
+                )
+            else:
+                draw.line(
+                    (
+                        cx - int(radius * 0.52),
+                        cy,
+                        cx - int(radius * 0.12),
+                        cy + int(radius * 0.38),
+                        cx + int(radius * 0.58),
+                        cy - int(radius * 0.42),
+                    ),
+                    fill=(255, 255, 255, 255),
+                    width=line_width,
+                    joint="curve",
+                )
+
+        layer = layer.resize((size, size), Image.Resampling.LANCZOS)
+        image.alpha_composite(
+            layer,
+            (center[0] - size // 2, center[1] - size // 2),
+        )
+
+    @staticmethod
+    def _draw_type_5_salute_icon(
+        draw: ImageDraw.ImageDraw,
+        cx: int,
+        cy: int,
+        radius: int,
+    ) -> None:
+        outline_width = max(5, radius // 10)
+        face_fill = (255, 204, 61, 255)
+        face_outline = (225, 153, 25, 255)
+        draw.ellipse(
+            (cx - radius, cy - radius, cx + radius, cy + radius),
+            fill=face_fill,
+            outline=face_outline,
+            width=outline_width,
+        )
+        eye_y = cy - int(radius * 0.17)
+        eye_radius = max(4, radius // 12)
+        for eye_x in (cx - int(radius * 0.31), cx + int(radius * 0.20)):
+            draw.ellipse(
+                (
+                    eye_x - eye_radius,
+                    eye_y - eye_radius,
+                    eye_x + eye_radius,
+                    eye_y + eye_radius,
+                ),
+                fill=(70, 47, 33, 255),
+            )
+        mouth_y = cy + int(radius * 0.30)
+        draw.arc(
+            (
+                cx - int(radius * 0.25),
+                mouth_y - int(radius * 0.12),
+                cx + int(radius * 0.25),
+                mouth_y + int(radius * 0.14),
+            ),
+            start=10,
+            end=170,
+            fill=(110, 66, 35, 255),
+            width=max(4, radius // 13),
+        )
+
+        hand_fill = (255, 213, 79, 255)
+        hand_outline = (214, 139, 25, 255)
+        palm_box = (
+            cx + int(radius * 0.12),
+            cy - int(radius * 0.78),
+            cx + int(radius * 0.90),
+            cy - int(radius * 0.34),
+        )
+        draw.rounded_rectangle(
+            palm_box,
+            radius=max(5, radius // 7),
+            fill=hand_fill,
+            outline=hand_outline,
+            width=max(4, radius // 14),
+        )
+        finger_width = max(4, radius // 14)
+        for offset in (0, 1, 2):
+            finger_y = cy - int(radius * (0.70 - offset * 0.13))
+            draw.line(
+                (
+                    cx + int(radius * 0.25),
+                    finger_y,
+                    cx + int(radius * 0.78),
+                    finger_y,
+                ),
+                fill=(255, 231, 132, 255),
+                width=finger_width,
+            )
 
     def _slide_overlay_cache_key(
         self,

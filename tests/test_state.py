@@ -380,3 +380,35 @@ def test_interrupted_running_schedule_slot_can_be_reclaimed(state_dir):
         batch_id="recovery-batch",
         status="completed",
     )
+
+
+def test_type_5_queue_returns_four_unique_images_and_survives_restart(state_dir):
+    image_ids = [f"tipo4/imagenstipo4/{letter}.jpg" for letter in "abcdef"]
+    store = StateStore(state_dir)
+
+    first, first_restarted = store.get_next_type_5_image_ids(
+        "r2:tipo4/imagenstipo4",
+        image_ids,
+    )
+    restored = StateStore(state_dir)
+    second, second_restarted = restored.get_next_type_5_image_ids(
+        "r2:tipo4/imagenstipo4",
+        image_ids,
+    )
+
+    assert first == image_ids[:4]
+    assert first_restarted is False
+    assert second == [image_ids[4], image_ids[5], image_ids[0], image_ids[1]]
+    assert second_restarted is True
+    assert len(set(first)) == 4
+    assert len(set(second)) == 4
+
+
+def test_type_5_queue_requires_at_least_four_images(state_dir):
+    store = StateStore(state_dir)
+
+    with pytest.raises(ValueError, match="al menos 4 imagenes diferentes"):
+        store.get_next_type_5_image_ids(
+            "r2:tipo4/imagenstipo4",
+            ["a.jpg", "b.jpg", "c.jpg"],
+        )

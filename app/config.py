@@ -14,6 +14,7 @@ DEFAULT_POOL_PLAN_MAX_ACCOUNTS = 8
 DEFAULT_POOL_REFILL_MAX_ACCOUNTS = 12
 DEFAULT_POOL_REFILL_MAX_FRESH_ACCOUNTS = 8
 DEFAULT_R2_IMAGE_PREFIX = "imagenes"
+DEFAULT_R2_TYPE_5_IMAGE_PREFIX = "tipo4/imagenstipo4"
 DEFAULT_UPLOAD_SITE_ENABLED = True
 DEFAULT_UPLOAD_SITE_HOST = "0.0.0.0"
 DEFAULT_UPLOAD_SITE_PORT = 8000
@@ -164,6 +165,7 @@ class Settings:
     r2_endpoint_url: str
     r2_input_prefix: str
     r2_image_prefix: str
+    r2_type_5_image_prefix: str
     upload_site_enabled: bool
     upload_site_host: str
     upload_site_port: int
@@ -300,6 +302,12 @@ def get_settings() -> Settings:
         r2_endpoint_url=os.getenv("R2_ENDPOINT_URL", "").strip(),
         r2_input_prefix=os.getenv("R2_INPUT_PREFIX", "").strip().lstrip("/"),
         r2_image_prefix=os.getenv("R2_IMAGE_PREFIX", DEFAULT_R2_IMAGE_PREFIX)
+        .strip()
+        .lstrip("/"),
+        r2_type_5_image_prefix=os.getenv(
+            "R2_TYPE_5_IMAGE_PREFIX",
+            DEFAULT_R2_TYPE_5_IMAGE_PREFIX,
+        )
         .strip()
         .lstrip("/"),
         upload_site_enabled=_env_bool(

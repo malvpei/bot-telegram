@@ -227,7 +227,11 @@ class ScriptGenerator:
             return self._build_type_2_es if language == Language.ES else self._build_type_2_en
         if video_type == VideoType.TYPE_4:
             return self._build_type_4_es if language == Language.ES else self._build_type_4_en
-        return self._build_type_3_es if language == Language.ES else self._build_type_3_en
+        if video_type == VideoType.TYPE_3:
+            return self._build_type_3_es if language == Language.ES else self._build_type_3_en
+        raise ValueError(
+            f"El tipo {video_type.value!r} usa un flujo de contenido independiente."
+        )
 
     # ------------------------------------------------------------------
     # Type 1 — narrative October → March

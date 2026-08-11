@@ -10,6 +10,7 @@ class VideoType(str, Enum):
     TYPE_2 = "2"
     TYPE_3 = "3"
     TYPE_4 = "4"
+    TYPE_5 = "5"
     ADVICE = "advice"
 
 
@@ -48,6 +49,9 @@ class SlideRole(str, Enum):
     STORY_DROPRADAR = "story_dropradar"
     STORY_SUCCESS_COMIC = "story_success_comic"
     STORY_ORIGINAL_REFERENCE = "story_original_reference"
+    TYPE_5_TRADING = "type_5_trading"
+    TYPE_5_CLIPPING = "type_5_clipping"
+    TYPE_5_AI_DROPSHIPPING = "type_5_ai_dropshipping"
     ADVICE_CARD = "advice_card"
 
 
@@ -87,6 +91,13 @@ TYPE_4_ROLES: tuple[SlideRole, ...] = (
     SlideRole.STORY_DROPRADAR,
     SlideRole.STORY_SUCCESS_COMIC,
     SlideRole.STORY_ORIGINAL_REFERENCE,
+)
+
+TYPE_5_ROLES: tuple[SlideRole, ...] = (
+    SlideRole.HOOK,
+    SlideRole.TYPE_5_TRADING,
+    SlideRole.TYPE_5_CLIPPING,
+    SlideRole.TYPE_5_AI_DROPSHIPPING,
 )
 
 FIXED_ROLE_BY_TYPE: dict[VideoType, SlideRole] = {
@@ -228,3 +239,4 @@ class GenerationResult:
     pool_remaining: int = 0
     pool_low_stock: bool = False
     separate_slide_text: bool = False
+    social_copies: list[SocialCopy] = field(default_factory=list)
