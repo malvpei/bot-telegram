@@ -1616,7 +1616,7 @@ def test_fixed_asset_is_fit_without_cropping_sides():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_5_image_is_fit_without_cropping_sides():
+def test_type_5_image_covers_canvas_without_blurred_bands():
     root = (
         Path(__file__).resolve().parents[1]
         / "data"
@@ -1647,10 +1647,12 @@ def test_type_5_image_is_fit_without_cropping_sides():
 
         still = renderer.render_slide_still(slide, VideoType.TYPE_5)
         pixels = np.asarray(still)
-        fitted_rows = pixels[140:500]
 
-        assert fitted_rows[:, :12, 0].mean() > 150
-        assert fitted_rows[:, -12:, 2].mean() > 150
+        assert still.size == (360, 640)
+        assert pixels[..., 1].mean() > pixels[..., 0].mean() * 2
+        assert pixels[..., 1].mean() > pixels[..., 2].mean() * 2
+        assert pixels[:80].mean(axis=(0, 1))[1] > 60
+        assert pixels[-80:].mean(axis=(0, 1))[1] > 60
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

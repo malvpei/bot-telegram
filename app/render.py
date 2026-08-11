@@ -2149,12 +2149,12 @@ class VideoRenderer:
         if video_type == VideoType.TYPE_3:
             return self._render_type_3_slide_frame(slide, source_image, progress)
         image_progress = 0.0 if slide.fixed_asset else progress
-        preserve_full_image = slide.fixed_asset or video_type == VideoType.TYPE_5
-        canvas = (
-            self._fit_fixed_image(source_image)
-            if preserve_full_image
-            else self._cover_image(source_image, image_progress)
-        )
+        if slide.fixed_asset:
+            canvas = self._fit_fixed_image(source_image)
+        elif video_type == VideoType.TYPE_5:
+            canvas = self._cover_image(source_image, 0.0)
+        else:
+            canvas = self._cover_image(source_image, image_progress)
         composed = canvas.convert("RGBA")
         self._draw_story_screen_brand(composed, slide)
         self._draw_text(composed, slide, video_type)
