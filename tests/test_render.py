@@ -1616,6 +1616,75 @@ def test_fixed_asset_is_fit_without_cropping_sides():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_type_5_image_is_fit_without_cropping_sides():
+    root = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "_test_tmp"
+        / f"render-{uuid4().hex}"
+    )
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "square_type_5.png"
+        canvas = np.full((500, 500, 3), (30, 80, 30), dtype=np.uint8)
+        canvas[:, :40, :] = (230, 20, 20)
+        canvas[:, -40:, :] = (20, 20, 230)
+        Image.fromarray(canvas).save(image_path)
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            width=360,
+            height=640,
+            fonts_dir=root / "fonts",
+        )
+        renderer = VideoRenderer(settings)
+        slide = SlidePlan(
+            index=1,
+            role=SlideRole.HOOK,
+            text="",
+            media=_candidate(image_path),
+        )
+
+        still = renderer.render_slide_still(slide, VideoType.TYPE_5)
+        pixels = np.asarray(still)
+        fitted_rows = pixels[140:500]
+
+        assert fitted_rows[:, :12, 0].mean() > 150
+        assert fitted_rows[:, -12:, 2].mean() > 150
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_source_image_respects_exif_orientation():
+    root = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "_test_tmp"
+        / f"render-{uuid4().hex}"
+    )
+    root.mkdir(parents=True)
+    try:
+        image_path = root / "rotated.jpg"
+        exif = Image.Exif()
+        exif[274] = 6
+        Image.new("RGB", (40, 20), (10, 20, 30)).save(image_path, exif=exif)
+        renderer = VideoRenderer(
+            replace(
+                get_settings(),
+                root_dir=root,
+                width=360,
+                height=640,
+                fonts_dir=root / "fonts",
+            )
+        )
+
+        loaded = renderer._load_source_image(image_path)
+
+        assert loaded.size == (20, 40)
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_safe_text_position_avoids_face_region(monkeypatch):
     settings = replace(get_settings(), width=360, height=640)
     renderer = VideoRenderer(settings)

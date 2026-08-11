@@ -11,7 +11,7 @@ import cv2
 import imageio.v2 as imageio
 import imageio_ffmpeg
 import numpy as np
-from PIL import Image, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from app.advice_cards import (
     AdviceBackground,
@@ -2149,9 +2149,10 @@ class VideoRenderer:
         if video_type == VideoType.TYPE_3:
             return self._render_type_3_slide_frame(slide, source_image, progress)
         image_progress = 0.0 if slide.fixed_asset else progress
+        preserve_full_image = slide.fixed_asset or video_type == VideoType.TYPE_5
         canvas = (
             self._fit_fixed_image(source_image)
-            if slide.fixed_asset
+            if preserve_full_image
             else self._cover_image(source_image, image_progress)
         )
         composed = canvas.convert("RGBA")
@@ -3269,7 +3270,7 @@ class VideoRenderer:
 
     def _load_source_image(self, image_path: Path) -> Image.Image:
         with Image.open(image_path) as image:
-            return image.convert("RGB").copy()
+            return ImageOps.exif_transpose(image).convert("RGB").copy()
 
     # ------------------------------------------------------------------
     # Text rendering

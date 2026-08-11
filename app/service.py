@@ -13,7 +13,7 @@ from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
-from PIL import Image
+from PIL import Image, ImageOps
 
 from app.advice_cards import (
     ADVICE_EXTERNAL_PHRASES,
@@ -853,7 +853,7 @@ class VideoCreationService:
             downloaded = self.r2_storage.download(key, local_path)
             try:
                 with Image.open(downloaded) as image:
-                    width, height = image.size
+                    width, height = ImageOps.exif_transpose(image).size
             except OSError as error:
                 raise ValueError(
                     f"La imagen {key!r} no se pudo abrir como imagen compatible."
