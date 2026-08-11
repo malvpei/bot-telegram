@@ -6,20 +6,20 @@ from app.models import SlideRole, SocialCopy
 TYPE_5_SLIDE_TEXTS: dict[SlideRole, str] = {
     SlideRole.HOOK: "Top negocios para jubilar a tus padres 🫡",
     SlideRole.TYPE_5_TRADING: (
-        "Trading 2/10 ❌\n"
-        "• Difícil de empezar\n"
-        "• Puedes perderlo todo en un momento"
+        "Traiding 2/10 ❌\n"
+        "-Dificil de empezar\n"
+        "-Puedes perderlo todo en un momento"
     ),
     SlideRole.TYPE_5_CLIPPING: (
         "Clipping 4/10 ❌\n"
-        "• Mucha competencia\n"
-        "• Poco retorno\n"
-        "• Consume demasiado de tu tiempo por poco"
+        "-Mucha competencia\n"
+        "-Poco retorno\n"
+        "-Consume demasiado de tu tiempo por poco"
     ),
     SlideRole.TYPE_5_AI_DROPSHIPPING: (
         "AI + Dropshipping ✅\n"
-        "• Infinitamente escalable\n"
-        "• Dropradar para productos ganadores y DeepSeek para ideas"
+        "-Infinitamente escalable\n"
+        "-Dropradar para productos ganadores y DeepSeek para ideas"
     ),
 }
 
@@ -91,6 +91,66 @@ TYPE_5_SOCIAL_COPIES: tuple[SocialCopy, ...] = (
             "castigar los errores con rapidez, clipping compite por atención en un mercado "
             "saturado y AI + Dropshipping permite apoyarse en datos e ideas para validar "
             "antes de dedicar más presupuesto."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS),
+    ),
+    SocialCopy(
+        title="Tres modelos de negocio y tres resultados muy diferentes",
+        description=(
+            "Comparar negocios online exige mirar algo más que sus promesas. Trading, "
+            "clipping y AI + Dropshipping cambian mucho en riesgo, tiempo necesario y "
+            "posibilidad de crecer. La mejor elección depende de cuánto puedes invertir, "
+            "qué habilidades quieres desarrollar y qué sistema quieres construir."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS),
+    ),
+    SocialCopy(
+        title="El negocio online que elegiría para construir a largo plazo",
+        description=(
+            "No basta con encontrar una forma de ganar dinero: conviene pensar si puede "
+            "mantenerse y escalar con el tiempo. Mientras algunos modelos concentran riesgo "
+            "o consumen demasiadas horas, AI + Dropshipping permite apoyarse en Dropradar "
+            "para investigar productos y en DeepSeek para desarrollar ideas."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS),
+    ),
+    SocialCopy(
+        title="Cómo comparar negocios online antes de elegir uno",
+        description=(
+            "Pon cada opción frente a los mismos criterios: dificultad para empezar, riesgo "
+            "de pérdida, retorno por hora y capacidad de escalar. Así resulta más sencillo "
+            "entender por qué trading, clipping y AI + Dropshipping no ofrecen el mismo "
+            "punto de partida ni requieren el mismo tipo de trabajo."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS),
+    ),
+    SocialCopy(
+        title="Riesgo, tiempo y escalabilidad en tres negocios digitales",
+        description=(
+            "Cada modelo tiene una limitación diferente. El trading puede exponer tu capital, "
+            "el clipping suele exigir mucho volumen de trabajo y AI + Dropshipping busca "
+            "convertir la investigación y la creación de ideas en un proceso que puedas "
+            "repetir, medir y mejorar con el tiempo."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS),
+    ),
+    SocialCopy(
+        title="Qué cambia realmente entre trading, clipping y dropshipping",
+        description=(
+            "Aunque los tres se presentan como negocios online, su funcionamiento es muy "
+            "distinto. Uno depende de gestionar riesgo financiero, otro de producir contenido "
+            "constantemente y el tercero de validar productos, preparar ofertas y usar "
+            "herramientas para acelerar la investigación y las ideas."
+        ),
+        hashtags=list(_TYPE_5_HASHTAGS),
+    ),
+    SocialCopy(
+        title="La opción más escalable no siempre es la más evidente",
+        description=(
+            "Antes de seguir una tendencia, revisa cuánto depende el resultado de tu tiempo y "
+            "cuánto puede convertirse en un sistema. Dropradar ayuda a localizar productos con "
+            "señales interesantes y DeepSeek puede servir para explorar enfoques creativos, "
+            "mientras tú decides qué probar y cómo medirlo."
         ),
         hashtags=list(_TYPE_5_HASHTAGS),
     ),

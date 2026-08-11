@@ -169,11 +169,14 @@ La **Historia IA** continúa disponible como una opción independiente.
 
 El **Tipo 5** toma directamente cuatro imágenes diferentes del prefijo R2
 `tipo4/imagenstipo4`, las recorre con una cola persistente independiente y
-no borra objetos del bucket. Genera el hook «Top negocios para jubilar a tus
-padres 🫡», las comparaciones de Trading, Clipping y AI + Dropshipping, y
-entrega seis combinaciones diferentes de título y descripción para publicar.
-La rotación se guarda en `DATA_DIR/state/type5_image_queue.json` y se reanuda
-después de reinicios o redeploys.
+no borra objetos del bucket. Entrega las cuatro imágenes limpias, sin texto ni
+iconos, y manda el hook «Top negocios para jubilar a tus padres 🫡» y las
+comparaciones de Traiding, Clipping y AI + Dropshipping como cuatro mensajes
+separados. Cada vídeo recibe un único título y una única descripción con
+hashtags, en mensajes distintos, rotando entre doce parejas. Las rotaciones se
+guardan en `DATA_DIR/state/type5_image_queue.json` y
+`DATA_DIR/state/type5_social_queue.json`, por lo que continúan después de
+reinicios o redeploys.
 
 Flujo recomendado: ejecuta **/download_pool** para poblar un lote de fotos aptas
 en `data/state/media_pool.json`. El comando revisa cuentas una por una, descarga

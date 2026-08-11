@@ -239,4 +239,3 @@ class GenerationResult:
     pool_remaining: int = 0
     pool_low_stock: bool = False
     separate_slide_text: bool = False
-    social_copies: list[SocialCopy] = field(default_factory=list)

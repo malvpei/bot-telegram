@@ -1527,7 +1527,7 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return LANGUAGE_STATE
 
     if raw_type == VideoType.TYPE_5.value:
-        context.user_data["separate_slide_text"] = False
+        context.user_data["separate_slide_text"] = True
         await query.edit_message_text(
             "Perfecto. Cojo las siguientes cuatro imagenes de la cola R2 del Tipo 5."
         )
@@ -1539,7 +1539,7 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
             account_inputs=[],
             gender=VideoGender.MALE,
             lowercase_text=False,
-            separate_slide_text=False,
+            separate_slide_text=True,
         )
         await _execute_job(update, context, request)
         _clear_wizard_state(context)
@@ -1985,7 +1985,7 @@ async def _execute_job(
         header = (
             "Tipo 5 listo\n"
             "Idioma: ES\n"
-            "Entrega: 4 imágenes + 6 opciones de título y descripción"
+            "Entrega: 4 imágenes limpias + textos separados"
         )
     else:
         header = (
@@ -2002,24 +2002,8 @@ async def _execute_job(
     await status_message.edit_text(send_status)
     try:
         await _send_message(context, chat.id, header)
-        if result.social_copies:
-            await _send_message(context, chat.id, "Opciones de publicación:")
-            for index, social_copy in enumerate(result.social_copies, start=1):
-                description = social_copy.description.strip()
-                hashtags = social_copy.hashtag_line.strip()
-                description_block = f"{description} {hashtags}".strip()
-                await _send_message(
-                    context,
-                    chat.id,
-                    (
-                        f"Opción {index}/{len(result.social_copies)}\n"
-                        f"{social_copy.title}\n\n"
-                        f"{description_block}"
-                    ),
-                )
-        else:
-            for message in result.social_copy.messages:
-                await _send_message(context, chat.id, message)
+        for message in result.social_copy.messages:
+            await _send_message(context, chat.id, message)
         await _send_slides_text_then_image(
             context,
             chat.id,

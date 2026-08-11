@@ -412,3 +412,17 @@ def test_type_5_queue_requires_at_least_four_images(state_dir):
             "r2:tipo4/imagenstipo4",
             ["a.jpg", "b.jpg", "c.jpg"],
         )
+
+
+def test_type_5_social_copy_rotates_one_pair_and_survives_restart(state_dir):
+    copy_ids = [f"type5-{index:02d}" for index in range(12)]
+    store = StateStore(state_dir)
+
+    first, first_restarted = store.get_next_type_5_social_copy_id(copy_ids)
+    restored = StateStore(state_dir)
+    second, second_restarted = restored.get_next_type_5_social_copy_id(copy_ids)
+
+    assert first == "type5-00"
+    assert second == "type5-01"
+    assert first_restarted is False
+    assert second_restarted is False

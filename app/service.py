@@ -751,8 +751,21 @@ class VideoCreationService:
             used_media_ids=[],
             fallback_accounts=[],
         )
-        video_path, script_path = self._render_outputs(plan, job_dir)
+        video_path, script_path = self._render_outputs(
+            plan,
+            job_dir,
+            embed_slide_text=False,
+        )
         social_copies = type_5_social_copies()
+        social_copy_ids = [f"type5-{index:02d}" for index in range(len(social_copies))]
+        selected_social_id, social_queue_restarted = (
+            self.state.get_next_type_5_social_copy_id(social_copy_ids)
+        )
+        try:
+            selected_social_index = social_copy_ids.index(str(selected_social_id))
+        except ValueError:
+            selected_social_index = 0
+        social_copy = social_copies[selected_social_index]
 
         self.state.log_job(
             self.state.build_job_record(
@@ -771,13 +784,14 @@ class VideoCreationService:
         )
         if queue_restarted:
             LOGGER.info("R2 Type 5 image queue restarted after completing a cycle")
+        if social_queue_restarted:
+            LOGGER.info("Type 5 social copy queue restarted after completing a cycle")
         self._cleanup_old_outputs()
         return GenerationResult(
             video_path=video_path,
             script_path=script_path,
             preview_text="\n\n".join(TYPE_5_SLIDE_TEXTS[role] for role in TYPE_5_ROLES),
-            social_copy=social_copies[0],
-            social_copies=social_copies,
+            social_copy=social_copy,
             chosen_account=plan.chosen_account,
             video_type=VideoType.TYPE_5,
             language=Language.ES,
@@ -785,7 +799,7 @@ class VideoCreationService:
             slides=list(plan.slides),
             pool_remaining=0,
             pool_low_stock=False,
-            separate_slide_text=False,
+            separate_slide_text=True,
         )
 
     def _download_type_5_images_from_r2(

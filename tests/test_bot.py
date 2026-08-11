@@ -616,7 +616,7 @@ def test_manual_create_sends_regular_carousel_as_one_album():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_manual_type_5_sends_six_social_options_and_one_four_photo_album():
+def test_manual_type_5_sends_one_title_description_four_texts_and_clean_album():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -641,14 +641,11 @@ def test_manual_type_5_sends_six_social_options_and_one_four_photo_album():
                     ),
                 )
             )
-        social_copies = [
-            SocialCopy(
-                title=f"Titulo {index}",
-                description=f"Descripcion {index}",
-                hashtags=["#tipo5"],
-            )
-            for index in range(1, 7)
-        ]
+        social_copy = SocialCopy(
+            title="Titulo elegido",
+            description="Descripcion elegida",
+            hashtags=["#tipo5"],
+        )
 
         class FakeType5Service:
             def create_video(self, request):
@@ -656,13 +653,13 @@ def test_manual_type_5_sends_six_social_options_and_one_four_photo_album():
                     video_path=None,
                     script_path=root / "script.txt",
                     preview_text="",
-                    social_copy=social_copies[0],
-                    social_copies=social_copies,
+                    social_copy=social_copy,
                     chosen_account="r2:tipo4/imagenstipo4",
                     video_type=VideoType.TYPE_5,
                     language=Language.ES,
                     fallback_accounts=[],
                     slides=slides,
+                    separate_slide_text=True,
                 )
 
         class FakeType5Bot(FakeTelegramBot):
@@ -695,14 +692,11 @@ def test_manual_type_5_sends_six_social_options_and_one_four_photo_album():
 
         asyncio.run(_execute_job(update, context, request))
 
-        option_messages = [
-            text
-            for event, text in context.bot.events
-            if event == "message" and text.startswith("Opción ")
-        ]
-        assert len(option_messages) == 6
-        assert option_messages[0].startswith("Opción 1/6\nTitulo 1")
-        assert option_messages[-1].startswith("Opción 6/6\nTitulo 6")
+        messages = [text for event, text in context.bot.events if event == "message"]
+        assert "Titulo elegido" in messages
+        assert "Descripcion elegida #tipo5" in messages
+        for index in range(1, 5):
+            assert f"Texto {index}" in messages
         assert context.bot.events[-1] == (
             "album",
             "type5_1.jpg,type5_2.jpg,type5_3.jpg,type5_4.jpg",
@@ -1226,7 +1220,7 @@ def test_type_5_button_starts_spanish_r2_carousel_directly():
     assert captured["request"].video_type == VideoType.TYPE_5
     assert captured["request"].language == Language.ES
     assert captured["request"].account_inputs == []
-    assert captured["request"].separate_slide_text is False
+    assert captured["request"].separate_slide_text is True
     assert context.user_data == {}
 
 

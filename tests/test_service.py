@@ -833,7 +833,7 @@ def test_type_4_falls_back_to_any_r2_image_when_configured_prefix_is_empty():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_5_uses_four_r2_images_and_returns_six_social_copies():
+def test_type_5_uses_clean_photos_and_rotates_one_social_copy_per_video():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -851,7 +851,8 @@ def test_type_5_uses_four_r2_images_and_returns_six_social_copies():
         service = VideoCreationService.__new__(VideoCreationService)
         service.settings = settings
         service.state = StateStore(settings.state_dir)
-        service.renderer = FakeRenderer()
+        renderer = FakeRenderer()
+        service.renderer = renderer
         service.r2_storage = r2_storage
 
         result = service._create_type_5_carousel_locked(
@@ -872,13 +873,25 @@ def test_type_5_uses_four_r2_images_and_returns_six_social_copies():
         ]
         assert len(result.slides) == 4
         assert result.slides[0].text == "Top negocios para jubilar a tus padres 🫡"
-        assert result.slides[1].text.startswith("Trading 2/10 ❌")
+        assert result.slides[1].text.startswith("Traiding 2/10 ❌")
         assert result.slides[2].text.startswith("Clipping 4/10 ❌")
         assert result.slides[3].text.startswith("AI + Dropshipping ✅")
         assert all(slide.media.local_path.exists() for slide in result.slides)
-        assert len(result.social_copies) == 6
-        assert len({copy.title for copy in result.social_copies}) == 6
-        assert len({copy.description for copy in result.social_copies}) == 6
+        assert result.separate_slide_text is True
+        assert renderer.render_slide_still_texts == ["", "", "", ""]
+
+        second = service._create_type_5_carousel_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=1,
+                video_type=VideoType.TYPE_5,
+                language=Language.ES,
+                account_inputs=[],
+            )
+        )
+
+        assert second.social_copy.title != result.social_copy.title
+        assert second.social_copy.description != result.social_copy.description
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

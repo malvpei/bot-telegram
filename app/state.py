@@ -48,6 +48,7 @@ class StateStore:
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
         self._type_5_image_queue_path = self.state_dir / "type5_image_queue.json"
+        self._type_5_social_queue_path = self.state_dir / "type5_social_queue.json"
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
@@ -627,6 +628,16 @@ class StateStore:
             }
             self._write_json(self._type_5_image_queue_path, {"scopes": scopes})
         return selected, restarted
+
+    def get_next_type_5_social_copy_id(
+        self,
+        copy_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        """Rotate one Type 5 title/description pair per generated carousel."""
+        return self._get_next_simple_cycle_id(
+            self._type_5_social_queue_path,
+            copy_ids,
+        )
 
     def read_media_pool(self) -> dict[str, Any]:
         with self._exclusive():
