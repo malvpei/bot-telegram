@@ -730,7 +730,7 @@ class VideoCreationService:
 
         job_id = self._build_job_id()
         job_dir = self._job_output_dir(job_id, request.user_id)
-        r2_media, queue_restarted = self._download_type_5_images_from_r2(job_dir)
+        r2_media = self._download_type_5_images_from_r2(job_dir)
         media = [*r2_media, self._build_type_5_dropradar_media()]
         slides = [
             SlidePlan(
@@ -784,8 +784,6 @@ class VideoCreationService:
                 chat_id=request.chat_id,
             )
         )
-        if queue_restarted:
-            LOGGER.info("R2 Type 5 image queue restarted after completing a cycle")
         if social_queue_restarted:
             LOGGER.info("Type 5 social copy queue restarted after completing a cycle")
         self._cleanup_old_outputs()
@@ -807,7 +805,7 @@ class VideoCreationService:
     def _download_type_5_images_from_r2(
         self,
         job_dir: Path,
-    ) -> tuple[list[MediaCandidate], bool]:
+    ) -> list[MediaCandidate]:
         if getattr(self, "r2_storage", None) is None or not self.r2_storage.is_configured:
             raise ValueError(
                 "El Tipo 5 necesita Cloudflare R2 configurado. Sube las imagenes al "
@@ -841,11 +839,7 @@ class VideoCreationService:
                 f"el prefijo {prefix!r}; encontre {len(images)} imagenes unicas."
             )
 
-        selected_keys, queue_restarted = self.state.get_next_type_5_image_ids(
-            f"r2:{prefix}",
-            [image.key for image in images],
-            count=r2_image_count,
-        )
+        selected_keys = [image.key for image in random.sample(images, k=r2_image_count)]
         inputs_dir = job_dir / "type_5_inputs"
         media: list[MediaCandidate] = []
         for index, key in enumerate(selected_keys, start=1):
@@ -873,7 +867,7 @@ class VideoCreationService:
                     created_at="r2",
                 )
             )
-        return media, queue_restarted
+        return media
 
     def _build_type_5_dropradar_media(self) -> MediaCandidate:
         fixed_path = (

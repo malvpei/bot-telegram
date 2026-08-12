@@ -47,7 +47,6 @@ class StateStore:
         self._type_4_advice_rotation_path = self.state_dir / "type4_advice_rotation.json"
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
-        self._type_5_image_queue_path = self.state_dir / "type5_image_queue.json"
         self._type_5_social_queue_path = self.state_dir / "type5_social_queue.json"
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
@@ -563,70 +562,6 @@ class StateStore:
                 "cursor": cursor + 1,
             }
             self._write_json(self._story_reference_queue_path, {"scopes": scopes})
-        return selected, restarted
-
-    def get_next_type_5_image_ids(
-        self,
-        scope: str,
-        image_ids: list[str],
-        *,
-        count: int = 3,
-    ) -> tuple[list[str], bool]:
-        """Take a persistent batch of unique images from the Type 5 queue."""
-        required = max(1, int(count))
-        scope_key = str(scope or "default").strip() or "default"
-        with self._exclusive():
-            payload = self._read_json(self._type_5_image_queue_path, {})
-            if not isinstance(payload, dict):
-                payload = {}
-            scopes = payload.get("scopes")
-            if not isinstance(scopes, dict):
-                scopes = {}
-            queue = scopes.get(scope_key)
-            if not isinstance(queue, dict):
-                queue = {}
-
-            order = self._normalize_template_video_order(queue, image_ids)
-            if len(order) < required:
-                raise ValueError(
-                    f"El Tipo 5 necesita al menos {required} imagenes diferentes; "
-                    f"solo encontre {len(order)}."
-                )
-
-            remaining_raw = queue.get("remaining")
-            if isinstance(remaining_raw, list):
-                remaining = self._normalize_template_video_order(
-                    {},
-                    [item for item in remaining_raw if item in order],
-                )
-                seen_remaining = set(remaining)
-                old_order = set(queue.get("order", []))
-                remaining.extend(
-                    item
-                    for item in order
-                    if item not in old_order and item not in seen_remaining
-                )
-                started = bool(queue.get("started", True))
-            else:
-                remaining = list(order)
-                started = False
-
-            selected: list[str] = []
-            restarted = False
-            while len(selected) < required:
-                if not remaining:
-                    remaining = [item for item in order if item not in selected]
-                    restarted = restarted or started
-                selected.append(remaining.pop(0))
-                started = True
-
-            scopes[scope_key] = {
-                "order": order,
-                "remaining": remaining,
-                "last_selected": selected,
-                "started": True,
-            }
-            self._write_json(self._type_5_image_queue_path, {"scopes": scopes})
         return selected, restarted
 
     def get_next_type_5_social_copy_id(

@@ -833,7 +833,7 @@ def test_type_4_falls_back_to_any_r2_image_when_configured_prefix_is_empty():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_5_uses_clean_photos_and_rotates_one_social_copy_per_video():
+def test_type_5_uses_three_random_clean_photos_and_rotates_social_copy(monkeypatch):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -855,6 +855,13 @@ def test_type_5_uses_clean_photos_and_rotates_one_social_copy_per_video():
         service.renderer = renderer
         service.r2_storage = r2_storage
         fixed_media = service._build_type_5_dropradar_media()
+        sampled_batches: list[tuple[list[str], int]] = []
+
+        def choose_last_three(images, *, k):
+            sampled_batches.append(([image.key for image in images], k))
+            return list(images[-k:])
+
+        monkeypatch.setattr("app.service.random.sample", choose_last_three)
 
         assert fixed_media.width == 1344
         assert fixed_media.height == 2390
@@ -873,8 +880,10 @@ def test_type_5_uses_clean_photos_and_rotates_one_social_copy_per_video():
         assert r2_storage.listed_image_prefixes == ["tipo4/imagenstipo4"]
         assert r2_storage.downloaded_keys == [
             f"tipo4/imagenstipo4/{index:02d}.jpg"
-            for index in range(1, 4)
+            for index in range(4, 7)
         ]
+        assert sampled_batches[0][1] == 3
+        assert len(sampled_batches[0][0]) == 6
         assert len(result.slides) == 4
         assert [slide.media.source_account for slide in result.slides] == [
             "r2_type_5",
@@ -994,15 +1003,18 @@ def test_type_5_deduplicates_identical_r2_copies_by_etag():
         service.state = StateStore(settings.state_dir)
         service.r2_storage = storage
 
-        media, _restarted = service._download_type_5_images_from_r2(root / "job")
+        media = service._download_type_5_images_from_r2(root / "job")
 
         assert len(media) == 3
         assert "tipo4/imagenstipo4/a (1).jpg" not in storage.downloaded_keys
-        assert storage.downloaded_keys == [
+        assert len(storage.downloaded_keys) == 3
+        assert len(set(storage.downloaded_keys)) == 3
+        assert set(storage.downloaded_keys) <= {
             "tipo4/imagenstipo4/a.jpg",
             "tipo4/imagenstipo4/b.jpg",
             "tipo4/imagenstipo4/c.jpg",
-        ]
+            "tipo4/imagenstipo4/d.jpg",
+        }
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

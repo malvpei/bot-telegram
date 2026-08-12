@@ -382,38 +382,6 @@ def test_interrupted_running_schedule_slot_can_be_reclaimed(state_dir):
     )
 
 
-def test_type_5_queue_returns_three_unique_images_and_survives_restart(state_dir):
-    image_ids = [f"tipo4/imagenstipo4/{letter}.jpg" for letter in "abcdef"]
-    store = StateStore(state_dir)
-
-    first, first_restarted = store.get_next_type_5_image_ids(
-        "r2:tipo4/imagenstipo4",
-        image_ids,
-    )
-    restored = StateStore(state_dir)
-    second, second_restarted = restored.get_next_type_5_image_ids(
-        "r2:tipo4/imagenstipo4",
-        image_ids,
-    )
-
-    assert first == image_ids[:3]
-    assert first_restarted is False
-    assert second == image_ids[3:]
-    assert second_restarted is False
-    assert len(set(first)) == 3
-    assert len(set(second)) == 3
-
-
-def test_type_5_queue_requires_at_least_three_images(state_dir):
-    store = StateStore(state_dir)
-
-    with pytest.raises(ValueError, match="al menos 3 imagenes diferentes"):
-        store.get_next_type_5_image_ids(
-            "r2:tipo4/imagenstipo4",
-            ["a.jpg", "b.jpg"],
-        )
-
-
 def test_type_5_social_copy_rotates_one_pair_and_survives_restart(state_dir):
     copy_ids = [f"type5-{index:02d}" for index in range(12)]
     store = StateStore(state_dir)
