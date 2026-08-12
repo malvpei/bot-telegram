@@ -1711,9 +1711,12 @@ async def wizard_type_5_language(
     except ValueError:
         gender = VideoGender.MALE
     confirmation = (
-        "Perfect. I will use the next four images from the Type 5 R2 queue."
+        "Perfect. I will use the next three R2 images and finish with the fixed Dropradar image."
         if language == Language.EN
-        else "Perfecto. Cojo las siguientes cuatro imagenes de la cola R2 del Tipo 5."
+        else (
+            "Perfecto. Cojo las siguientes tres imagenes de R2 y termino con "
+            "la imagen fija de Dropradar."
+        )
     )
     await query.edit_message_text(confirmation)
     request = VideoRequest(
@@ -1978,9 +1981,12 @@ async def _execute_job(
         )
     elif request.video_type == VideoType.TYPE_5:
         status_text = (
-            "I am preparing Type 5 with the next four R2 images."
+            "I am preparing Type 5 with three R2 images and the fixed Dropradar image."
             if request.language == Language.EN
-            else "Estoy preparando el Tipo 5 con las siguientes cuatro fotos de R2."
+            else (
+                "Estoy preparando el Tipo 5 con tres fotos de R2 y la imagen "
+                "fija de Dropradar."
+            )
         )
     else:
         status_text = (

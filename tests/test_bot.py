@@ -1228,7 +1228,8 @@ def test_type_5_button_asks_language_and_starts_spanish_r2_carousel():
         state = asyncio.run(wizard_type_5_language(language_update, context))
 
     assert state == ConversationHandler.END
-    assert "cuatro imagenes" in language_query.edited_text
+    assert "tres imagenes" in language_query.edited_text
+    assert "imagen fija de Dropradar" in language_query.edited_text
     assert captured["request"].video_type == VideoType.TYPE_5
     assert captured["request"].language == Language.ES
     assert captured["request"].account_inputs == []
@@ -1252,7 +1253,8 @@ def test_type_5_language_button_starts_english_r2_carousel():
         state = asyncio.run(wizard_type_5_language(update, context))
 
     assert state == ConversationHandler.END
-    assert "next four images" in query.edited_text
+    assert "next three R2 images" in query.edited_text
+    assert "fixed Dropradar image" in query.edited_text
     assert captured["request"].video_type == VideoType.TYPE_5
     assert captured["request"].language == Language.EN
     assert captured["request"].account_inputs == []

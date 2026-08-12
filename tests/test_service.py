@@ -15,6 +15,7 @@ from app.advice_cards import AdviceBackground
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoRequest, VideoType
 from app.r2_storage import R2Object
+from app.selector import TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.service import VideoCreationService
 from app.state import StateStore
 from app.texts import ScriptGenerator
@@ -869,9 +870,17 @@ def test_type_5_uses_clean_photos_and_rotates_one_social_copy_per_video():
         assert r2_storage.listed_image_prefixes == ["tipo4/imagenstipo4"]
         assert r2_storage.downloaded_keys == [
             f"tipo4/imagenstipo4/{index:02d}.jpg"
-            for index in range(1, 5)
+            for index in range(1, 4)
         ]
         assert len(result.slides) == 4
+        assert [slide.media.source_account for slide in result.slides] == [
+            "r2_type_5",
+            "r2_type_5",
+            "r2_type_5",
+            "fixed",
+        ]
+        assert result.slides[3].media.source_id == "fixed:tip3_dropradar"
+        assert result.slides[3].media.caption == TYPE_2_TIP3_FIXED_IMAGE_NAME
         assert result.slides[0].text == "Top negocios para jubilar a tus padres 🫡"
         assert result.slides[1].text.startswith("Traiding 2/10 ❌")
         assert result.slides[2].text.startswith("Clipping 4/10 ❌")
@@ -939,7 +948,7 @@ def test_type_5_generates_english_chat_text_and_social_copy():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_type_5_requires_four_images_in_its_own_prefix():
+def test_type_5_requires_three_images_in_its_own_prefix():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -954,9 +963,9 @@ def test_type_5_requires_four_images_in_its_own_prefix():
         service = VideoCreationService.__new__(VideoCreationService)
         service.settings = settings
         service.state = StateStore(settings.state_dir)
-        service.r2_storage = Type5R2Storage(count=3)
+        service.r2_storage = Type5R2Storage(count=2)
 
-        with pytest.raises(ValueError, match="al menos cuatro imagenes diferentes"):
+        with pytest.raises(ValueError, match="al menos tres imagenes diferentes"):
             service._download_type_5_images_from_r2(root / "job")
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -982,13 +991,12 @@ def test_type_5_deduplicates_identical_r2_copies_by_etag():
 
         media, _restarted = service._download_type_5_images_from_r2(root / "job")
 
-        assert len(media) == 4
+        assert len(media) == 3
         assert "tipo4/imagenstipo4/a (1).jpg" not in storage.downloaded_keys
         assert storage.downloaded_keys == [
             "tipo4/imagenstipo4/a.jpg",
             "tipo4/imagenstipo4/b.jpg",
             "tipo4/imagenstipo4/c.jpg",
-            "tipo4/imagenstipo4/d.jpg",
         ]
     finally:
         shutil.rmtree(root, ignore_errors=True)

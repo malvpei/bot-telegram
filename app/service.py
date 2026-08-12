@@ -729,7 +729,8 @@ class VideoCreationService:
 
         job_id = self._build_job_id()
         job_dir = self._job_output_dir(job_id, request.user_id)
-        media, queue_restarted = self._download_type_5_images_from_r2(job_dir)
+        r2_media, queue_restarted = self._download_type_5_images_from_r2(job_dir)
+        media = [*r2_media, self._build_type_5_dropradar_media()]
         slides = [
             SlidePlan(
                 index=index,
@@ -771,7 +772,7 @@ class VideoCreationService:
             self.state.build_job_record(
                 job_id=job_id,
                 chosen_account=plan.chosen_account,
-                requested_accounts=[item.source_id for item in media],
+                requested_accounts=[item.source_id for item in r2_media],
                 fallback_accounts=[],
                 video_type=VideoType.TYPE_5,
                 language=language,
@@ -832,16 +833,17 @@ class VideoCreationService:
                 continue
             seen_content.add(identity)
             images.append(image)
-        if len(images) < len(TYPE_5_ROLES):
+        r2_image_count = len(TYPE_5_ROLES) - 1
+        if len(images) < r2_image_count:
             raise ValueError(
-                "El Tipo 5 necesita al menos cuatro imagenes diferentes en R2 bajo "
+                "El Tipo 5 necesita al menos tres imagenes diferentes en R2 bajo "
                 f"el prefijo {prefix!r}; encontre {len(images)} imagenes unicas."
             )
 
         selected_keys, queue_restarted = self.state.get_next_type_5_image_ids(
             f"r2:{prefix}",
             [image.key for image in images],
-            count=len(TYPE_5_ROLES),
+            count=r2_image_count,
         )
         inputs_dir = job_dir / "type_5_inputs"
         media: list[MediaCandidate] = []
@@ -871,6 +873,31 @@ class VideoCreationService:
                 )
             )
         return media, queue_restarted
+
+    def _build_type_5_dropradar_media(self) -> MediaCandidate:
+        fixed_path = self.settings.fixed_assets_dir / TYPE_2_TIP3_FIXED_IMAGE_NAME
+        if not fixed_path.exists():
+            raise FileNotFoundError(
+                "No encuentro la imagen fija de Dropradar para la cuarta imagen "
+                f"del Tipo 5: {fixed_path}."
+            )
+        try:
+            with Image.open(fixed_path) as image:
+                width, height = ImageOps.exif_transpose(image).size
+        except OSError as error:
+            raise ValueError(
+                f"La imagen fija de Dropradar {fixed_path} no se pudo abrir."
+            ) from error
+        return MediaCandidate(
+            source_account="fixed",
+            source_id="fixed:tip3_dropradar",
+            local_path=fixed_path,
+            permalink="fixed://tip3_dropradar",
+            caption=TYPE_2_TIP3_FIXED_IMAGE_NAME,
+            width=width,
+            height=height,
+            created_at="fixed",
+        )
 
     def _create_story_carousel_locked(self, request: VideoRequest) -> GenerationResult:
         try:

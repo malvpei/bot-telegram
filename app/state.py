@@ -570,7 +570,7 @@ class StateStore:
         scope: str,
         image_ids: list[str],
         *,
-        count: int = 4,
+        count: int = 3,
     ) -> tuple[list[str], bool]:
         """Take a persistent batch of unique images from the Type 5 queue."""
         required = max(1, int(count))
