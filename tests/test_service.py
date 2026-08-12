@@ -15,8 +15,7 @@ from app.advice_cards import AdviceBackground
 from app.config import get_settings
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoRequest, VideoType
 from app.r2_storage import R2Object
-from app.selector import TYPE_2_TIP3_FIXED_IMAGE_NAME
-from app.service import VideoCreationService
+from app.service import TYPE_5_DROPRADAR_FIXED_IMAGE_NAME, VideoCreationService
 from app.state import StateStore
 from app.texts import ScriptGenerator
 
@@ -855,6 +854,10 @@ def test_type_5_uses_clean_photos_and_rotates_one_social_copy_per_video():
         renderer = FakeRenderer()
         service.renderer = renderer
         service.r2_storage = r2_storage
+        fixed_media = service._build_type_5_dropradar_media()
+
+        assert fixed_media.width == 1344
+        assert fixed_media.height == 2390
 
         result = service._create_type_5_carousel_locked(
             VideoRequest(
@@ -879,8 +882,10 @@ def test_type_5_uses_clean_photos_and_rotates_one_social_copy_per_video():
             "r2_type_5",
             "fixed",
         ]
-        assert result.slides[3].media.source_id == "fixed:tip3_dropradar"
-        assert result.slides[3].media.caption == TYPE_2_TIP3_FIXED_IMAGE_NAME
+        assert result.slides[3].media.source_id == "fixed:imagen6"
+        assert result.slides[3].media.caption == TYPE_5_DROPRADAR_FIXED_IMAGE_NAME
+        assert result.slides[3].media.width == 72
+        assert result.slides[3].media.height == 128
         assert result.slides[0].text == "Top negocios para jubilar a tus padres 🫡"
         assert result.slides[1].text.startswith("Traiding 2/10 ❌")
         assert result.slides[2].text.startswith("Clipping 4/10 ❌")

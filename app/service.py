@@ -49,6 +49,7 @@ from app.type_5 import type_5_slide_texts, type_5_social_copies
 
 
 LOGGER = logging.getLogger(__name__)
+TYPE_5_DROPRADAR_FIXED_IMAGE_NAME = "imagen6.png"
 VIDEO_TEMPLATE_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 R2_TEMPLATE_CACHE_MAX_ITEMS = 8
 R2_TEMPLATE_CACHE_MAX_BYTES = 512 * 1024 * 1024
@@ -875,7 +876,9 @@ class VideoCreationService:
         return media, queue_restarted
 
     def _build_type_5_dropradar_media(self) -> MediaCandidate:
-        fixed_path = self.settings.fixed_assets_dir / TYPE_2_TIP3_FIXED_IMAGE_NAME
+        fixed_path = (
+            self.settings.fixed_assets_dir / TYPE_5_DROPRADAR_FIXED_IMAGE_NAME
+        )
         if not fixed_path.exists():
             raise FileNotFoundError(
                 "No encuentro la imagen fija de Dropradar para la cuarta imagen "
@@ -890,10 +893,10 @@ class VideoCreationService:
             ) from error
         return MediaCandidate(
             source_account="fixed",
-            source_id="fixed:tip3_dropradar",
+            source_id="fixed:imagen6",
             local_path=fixed_path,
-            permalink="fixed://tip3_dropradar",
-            caption=TYPE_2_TIP3_FIXED_IMAGE_NAME,
+            permalink="fixed://imagen6",
+            caption=TYPE_5_DROPRADAR_FIXED_IMAGE_NAME,
             width=width,
             height=height,
             created_at="fixed",
