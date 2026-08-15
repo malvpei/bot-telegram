@@ -19,11 +19,10 @@ def test_type_5_has_exact_hook_and_requested_business_content():
     assert TYPE_5_SLIDE_TEXTS[SlideRole.TYPE_5_CLIPPING] == (
         "Clipping 4/10 ❌\n"
         "-Mucha competencia\n"
-        "-Poco retorno\n"
         "-Consume demasiado de tu tiempo por poco"
     )
     assert TYPE_5_SLIDE_TEXTS[SlideRole.TYPE_5_AI_DROPSHIPPING] == (
-        "AI + Dropshipping ✅\n"
+        "AI + Dropshipping 10/10 ✅\n"
         "-Infinitamente escalable\n"
         "-Dropradar para productos ganadores y DeepSeek para ideas"
     )
@@ -43,11 +42,12 @@ def test_type_5_provides_english_chat_text_and_social_copy():
     copies = type_5_social_copies(Language.EN)
 
     assert texts == TYPE_5_SLIDE_TEXTS_EN
-    assert texts[SlideRole.HOOK] == "Top businesses to retire your parents"
+    assert texts[SlideRole.HOOK] == "Top businesses to retire your parents 🫡"
     assert texts[SlideRole.TYPE_5_TRADING].startswith("Trading 2/10 ❌")
     assert texts[SlideRole.TYPE_5_CLIPPING].startswith("Clipping 4/10 ❌")
+    assert "-Low returns" not in texts[SlideRole.TYPE_5_CLIPPING]
     assert texts[SlideRole.TYPE_5_AI_DROPSHIPPING].startswith(
-        "AI + Dropshipping ✅"
+        "AI + Dropshipping 10/10 ✅"
     )
     assert len(copies) == 12
     assert len({copy.title for copy in copies}) == 12

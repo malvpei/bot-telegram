@@ -13,18 +13,17 @@ TYPE_5_SLIDE_TEXTS: dict[SlideRole, str] = {
     SlideRole.TYPE_5_CLIPPING: (
         "Clipping 4/10 ❌\n"
         "-Mucha competencia\n"
-        "-Poco retorno\n"
         "-Consume demasiado de tu tiempo por poco"
     ),
     SlideRole.TYPE_5_AI_DROPSHIPPING: (
-        "AI + Dropshipping ✅\n"
+        "AI + Dropshipping 10/10 ✅\n"
         "-Infinitamente escalable\n"
         "-Dropradar para productos ganadores y DeepSeek para ideas"
     ),
 }
 
 TYPE_5_SLIDE_TEXTS_EN: dict[SlideRole, str] = {
-    SlideRole.HOOK: "Top businesses to retire your parents",
+    SlideRole.HOOK: "Top businesses to retire your parents 🫡",
     SlideRole.TYPE_5_TRADING: (
         "Trading 2/10 ❌\n"
         "-Hard to get started\n"
@@ -33,11 +32,10 @@ TYPE_5_SLIDE_TEXTS_EN: dict[SlideRole, str] = {
     SlideRole.TYPE_5_CLIPPING: (
         "Clipping 4/10 ❌\n"
         "-Too much competition\n"
-        "-Low returns\n"
         "-Takes too much time for too little reward"
     ),
     SlideRole.TYPE_5_AI_DROPSHIPPING: (
-        "AI + Dropshipping ✅\n"
+        "AI + Dropshipping 10/10 ✅\n"
         "-Infinitely scalable\n"
         "-Dropradar for winning products and DeepSeek for ideas"
     ),

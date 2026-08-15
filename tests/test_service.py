@@ -898,7 +898,7 @@ def test_type_5_uses_three_random_clean_photos_and_rotates_social_copy(monkeypat
         assert result.slides[0].text == "Top negocios para jubilar a tus padres 🫡"
         assert result.slides[1].text.startswith("Traiding 2/10 ❌")
         assert result.slides[2].text.startswith("Clipping 4/10 ❌")
-        assert result.slides[3].text.startswith("AI + Dropshipping ✅")
+        assert result.slides[3].text.startswith("AI + Dropshipping 10/10 ✅")
         assert all(slide.media.local_path.exists() for slide in result.slides)
         assert result.separate_slide_text is True
         assert renderer.render_slide_still_texts == ["", "", "", ""]
@@ -950,10 +950,10 @@ def test_type_5_generates_english_chat_text_and_social_copy():
         )
 
         assert result.language == Language.EN
-        assert result.slides[0].text == "Top businesses to retire your parents"
+        assert result.slides[0].text == "Top businesses to retire your parents 🫡"
         assert result.slides[1].text.startswith("Trading 2/10 ❌")
         assert result.slides[2].text.startswith("Clipping 4/10 ❌")
-        assert result.slides[3].text.startswith("AI + Dropshipping ✅")
+        assert result.slides[3].text.startswith("AI + Dropshipping 10/10 ✅")
         assert result.social_copy.title == "Three online businesses compared honestly"
         assert "#onlinebusiness" in result.social_copy.hashtags
         assert result.separate_slide_text is True
