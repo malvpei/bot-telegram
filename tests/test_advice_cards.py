@@ -39,25 +39,39 @@ def test_advice_backgrounds_and_scripts_complete_full_rotation():
         AdviceBackground.WHITE,
         AdviceBackground.ILLUSTRATED,
         AdviceBackground.EDITORIAL,
+        AdviceBackground.BROWN,
     )
-    assert ADVICE_ROTATION_CYCLE_LENGTH == 48
+    assert ADVICE_ROTATION_CYCLE_LENGTH == 60
 
     selections = [
         advice_selection(phase, Language.ES)
         for phase in range(ADVICE_ROTATION_CYCLE_LENGTH)
     ]
-    assert [selection[0] for selection in selections[:8]] == [
+    assert [selection[0] for selection in selections[:10]] == [
         AdviceBackground.BLACK,
         AdviceBackground.WHITE,
         AdviceBackground.ILLUSTRATED,
         AdviceBackground.EDITORIAL,
+        AdviceBackground.BROWN,
         AdviceBackground.BLACK,
         AdviceBackground.WHITE,
         AdviceBackground.ILLUSTRATED,
         AdviceBackground.EDITORIAL,
+        AdviceBackground.BROWN,
     ]
-    assert [selection[2] for selection in selections[:8]] == [0, 1, 2, 3, 1, 2, 3, 0]
-    assert advice_selection(48, Language.ES) == advice_selection(0, Language.ES)
+    assert [selection[2] for selection in selections[:10]] == [
+        0,
+        1,
+        2,
+        3,
+        0,
+        1,
+        2,
+        3,
+        0,
+        1,
+    ]
+    assert advice_selection(60, Language.ES) == advice_selection(0, Language.ES)
 
 
 def test_editorial_advice_background_adds_a_fifth_dropshipping_tip():
@@ -67,6 +81,16 @@ def test_editorial_advice_background_adds_a_fifth_dropshipping_tip():
     assert pack_index == 3
     assert len(tips) == 5
     assert tips[-2].title == "compara tres ángulos"
+    assert "Dropradar" in tips[-1].body
+
+
+def test_brown_advice_background_adds_a_fifth_dropshipping_tip():
+    background, tips, pack_index = advice_selection(4, Language.ES)
+
+    assert background == AdviceBackground.BROWN
+    assert pack_index == 0
+    assert len(tips) == 5
+    assert tips[-2].title == "prueba la oferta antes de escalar"
     assert "Dropradar" in tips[-1].body
 
 

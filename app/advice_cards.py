@@ -12,6 +12,7 @@ class AdviceBackground(str, Enum):
     WHITE = "white"
     ILLUSTRATED = "illustrated"
     EDITORIAL = "editorial"
+    BROWN = "brown"
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,7 @@ ADVICE_BACKGROUNDS: tuple[AdviceBackground, ...] = (
     AdviceBackground.WHITE,
     AdviceBackground.ILLUSTRATED,
     AdviceBackground.EDITORIAL,
+    AdviceBackground.BROWN,
 )
 
 ADVICE_PACKS: dict[Language, tuple[tuple[AdviceTip, ...], ...]] = {
@@ -686,14 +688,11 @@ def advice_selection(
     packs = ADVICE_PACKS[language]
     background_count = len(ADVICE_BACKGROUNDS)
     background = ADVICE_BACKGROUNDS[normalized_phase % background_count]
-    # Four backgrounds and four packs would otherwise remain locked together.
-    # Shifting the pack after every complete background lap makes every visual
-    # template meet every advice pack during the 16-step visual cycle.
-    pack_index = (
-        normalized_phase + normalized_phase // background_count
-    ) % len(packs)
+    # Five backgrounds and four packs are coprime, so advancing both on every
+    # video makes every template meet every advice pack in the visual cycle.
+    pack_index = normalized_phase % len(packs)
     tips = packs[pack_index]
-    if background == AdviceBackground.EDITORIAL:
+    if background in {AdviceBackground.EDITORIAL, AdviceBackground.BROWN}:
         tips = (
             *tips[:-1],
             ADVICE_EDITORIAL_EXTRA_TIPS[language][pack_index],
