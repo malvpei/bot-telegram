@@ -185,6 +185,11 @@ cooldown durante `ACCOUNT_COOLDOWN_DAYS`. Después, **/create** elige desde ese
 pool local, rota cuentas para evitar favoritismo, y permite **Pasar cuenta** si
 quieres forzar la siguiente cuenta disponible.
 
+`/pool` muestra el total global y separa la disponibilidad de Tipo 1 para
+hombres y mujeres. Una cuenta solo figura como viable para Tipo 1 cuando puede
+formar la combinación completa: portada con persona, al menos cinco fotos con
+persona y, como máximo, un paisaje sin persona.
+
 ### Colocacion de texto y rendimiento
 
 El renderer detecta caras frontales y de perfil sobre una copia reducida de la

@@ -661,6 +661,44 @@ def test_pool_select_plan_tries_all_local_accounts_without_attempt_limit():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_select_plan_continues_past_fast_account_batch():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+        )
+        state = StateStore(settings.state_dir)
+        accounts = [f"bad{index}" for index in range(8)] + ["good"]
+        items = []
+        for index, account in enumerate(accounts):
+            image_path = root / f"{account}.jpg"
+            Image.new("RGB", (32, 32), (10 + index, 20, 30)).save(image_path)
+            items.append(_pool_item(account, f"{account}:POST{index}:0", image_path))
+        state.write_media_pool(
+            {
+                "version": 1,
+                "cursor_by_type": {},
+                "items": items,
+            }
+        )
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            OnlyGoodSelector(),  # type: ignore[arg-type]
+        )
+
+        plan, tried = service.select_plan(accounts, VideoType.TYPE_3, Language.ES)
+
+        assert plan.chosen_account == "good"
+        assert tried == accounts
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_pool_select_plan_can_make_multiple_type_1_videos_from_same_account_stock():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -752,6 +790,128 @@ def test_pool_stock_counts_type_photos_when_account_can_build_plan():
         assert counts["raw_total"] == 6
         assert counts["by_type"][VideoType.TYPE_1.value] == 6
         assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == ["alpha"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_does_not_mark_landscape_only_account_viable_for_type_1():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        items = []
+        for index in range(8):
+            image_path = root / f"landscape_{index}.jpg"
+            Image.new("RGB", (64, 32), (10 + index, 20, 30)).save(image_path)
+            items.append(
+                _pool_item(
+                    "landscapes",
+                    f"landscapes:POST{index}:{index}",
+                    image_path,
+                    faces=0,
+                    is_landscape=True,
+                    eligible_types=[VideoType.TYPE_1.value],
+                )
+            )
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            ImageSelector(settings, state),
+        )
+
+        counts = service._stock_counts(
+            {"version": 1, "cursor_by_type": {}, "items": items}
+        )
+
+        assert counts["raw_total"] == 8
+        assert counts["by_type"][VideoType.TYPE_1.value] == 0
+        assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == []
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_marks_five_people_and_one_landscape_viable_for_type_1():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        items = []
+        for index in range(5):
+            image_path = root / f"person_{index}.jpg"
+            Image.new("RGB", (32, 64), (10 + index, 20, 30)).save(image_path)
+            items.append(
+                _pool_item(
+                    "mixed",
+                    f"mixed:PERSON{index}:{index}",
+                    image_path,
+                    eligible_types=[VideoType.TYPE_1.value],
+                )
+            )
+        landscape_path = root / "landscape.jpg"
+        Image.new("RGB", (64, 32), (30, 20, 10)).save(landscape_path)
+        items.append(
+            _pool_item(
+                "mixed",
+                "mixed:LANDSCAPE:5",
+                landscape_path,
+                faces=0,
+                is_landscape=True,
+                eligible_types=[VideoType.TYPE_1.value],
+            )
+        )
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            ImageSelector(settings, state),
+        )
+
+        counts = service._stock_counts(
+            {"version": 1, "cursor_by_type": {}, "items": items}
+        )
+
+        assert counts["by_type"][VideoType.TYPE_1.value] == 6
+        assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == ["mixed"]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_requires_strict_person_signal_for_type_1_hook():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        items = []
+        for index in range(6):
+            image_path = root / f"portrait_{index}.jpg"
+            Image.new("RGB", (32, 64), (10 + index, 20, 30)).save(image_path)
+            items.append(
+                _pool_item(
+                    "portraits",
+                    f"portraits:POST{index}:{index}",
+                    image_path,
+                    faces=0,
+                    is_landscape=False,
+                    eligible_types=[VideoType.TYPE_1.value],
+                )
+            )
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            ImageSelector(settings, state),
+        )
+
+        counts = service._stock_counts(
+            {"version": 1, "cursor_by_type": {}, "items": items}
+        )
+
+        assert counts["by_type"][VideoType.TYPE_1.value] == 0
+        assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == []
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

@@ -453,6 +453,69 @@ def test_type_1_moves_single_landscape_exception_to_secondary_role(temp_workspac
     assert selector._is_type_1_person_visible_media(hook_slide.media)
 
 
+def test_type_1_uses_constrained_fallback_for_known_viable_set(
+    temp_workspace,
+    monkeypatch,
+):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "constrained_fallback"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="constrained_fallback", idx=index)
+        for index in range(5)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.68,
+            daylight=0.64,
+            faces=1,
+            is_landscape=False,
+            outdoor=0.18,
+            casual=0.12,
+            luxury=0.04,
+            portrait_focus=0.42,
+        )
+    landscape = _make_candidate(
+        account_dir,
+        username="constrained_fallback",
+        idx=5,
+        landscape=True,
+    )
+    landscape.metrics = _metrics_stub(
+        quality=0.96,
+        daylight=0.9,
+        faces=0,
+        is_landscape=True,
+        outdoor=0.9,
+        portrait_focus=0.0,
+    )
+    candidates.append(landscape)
+
+    selector = ImageSelector(settings, state)
+    monkeypatch.setattr(
+        selector,
+        "_enforce_type_1_person_visibility",
+        lambda *args, **kwargs: False,
+    )
+
+    plan = selector.create_plan(
+        {"constrained_fallback": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    non_fixed = [slide for slide in plan.slides if not slide.fixed_asset]
+    without_person = [
+        slide
+        for slide in non_fixed
+        if not selector._is_type_1_person_visible_media(slide.media)
+    ]
+    assert len(non_fixed) == 6
+    assert len(without_person) == 1
+    assert without_person[0].role in TYPE_1_REPLACEABLE_FOR_LANDSCAPE
+
+
 def test_type_1_treats_scenic_vertical_photos_as_landscape_exceptions(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "scenic_vertical"

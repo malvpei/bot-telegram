@@ -1135,7 +1135,14 @@ async def pool_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if not await _ensure_allowed(update):
         return
     service: VideoCreationService = context.application.bot_data["service"]
+    settings = get_settings()
+    accounts_by_gender = _load_accounts_by_gender(settings)
     summary = await asyncio.to_thread(service.pool_status)
+    summary["by_gender"] = {
+        gender.value: _type_1_pool_status_for_accounts(summary, accounts)
+        for gender, accounts in accounts_by_gender.items()
+        if accounts
+    }
     await update.effective_message.reply_text(_format_pool_status(summary))
 
 
@@ -2508,28 +2515,81 @@ def _accounts_status_line(settings, gender: VideoGender) -> str:
     return f"{len(accounts)} desde {path}"
 
 
+def _type_1_pool_status_for_accounts(
+    summary: dict,
+    accounts: list[str],
+) -> dict[str, object]:
+    allowed = {
+        normalized
+        for account in accounts
+        if (normalized := normalize_account(account)) is not None
+    }
+    by_type_by_account = summary.get("by_type_by_account", {})
+    viable = summary.get("viable_accounts_by_type", {}).get("1", [])
+    return {
+        "by_type": {
+            "1": sum(
+                int(counts.get("1", 0))
+                for account, counts in by_type_by_account.items()
+                if account in allowed and isinstance(counts, dict)
+            )
+        },
+        "viable_accounts_by_type": {
+            "1": [account for account in viable if account in allowed]
+        },
+    }
+
+
 def _format_pool_status(summary: dict) -> str:
     by_type = summary.get("by_type", {})
     by_account = summary.get("by_account", {})
     viable = summary.get("viable_accounts_by_type", {})
+    by_gender = summary.get("by_gender", {})
     account_lines = [
         f"@{account}: {count}"
         for account, count in sorted(by_account.items(), key=lambda item: (-item[1], item[0]))[:12]
     ]
     text = (
-        "Pool de fotos\n"
+        "Pool de fotos (global)\n"
         f"Fotos aptas para planes: {summary.get('total', 0)}\n"
         f"Fotos en disco sin usar: {summary.get('raw_total', summary.get('total', 0))}\n"
         f"Tipo 1 aptas: {by_type.get('1', 0)} "
-        f"({len(viable.get('1', []))} cuentas con stock minimo)\n"
+        f"({_format_viable_account_count(viable.get('1', []))})\n"
         f"Tipo 2 aptas: {by_type.get('2', 0)} "
-        f"({len(viable.get('2', []))} cuentas con stock minimo)\n"
+        f"({_format_viable_account_count(viable.get('2', []))})\n"
         f"Tipo 3 aptas: {by_type.get('3', 0)} "
-        f"({len(viable.get('3', []))} cuentas con stock minimo)"
+        f"({_format_viable_account_count(viable.get('3', []))})"
     )
+    if by_gender:
+        text += "\n\nTipo 1 según protagonista:"
+        for gender, label in (
+            (VideoGender.MALE.value, "Hombres"),
+            (VideoGender.FEMALE.value, "Mujeres"),
+        ):
+            gender_summary = by_gender.get(gender)
+            if not isinstance(gender_summary, dict):
+                continue
+            gender_by_type = gender_summary.get("by_type", {})
+            gender_viable = gender_summary.get("viable_accounts_by_type", {})
+            viable_count = len(gender_viable.get("1", []))
+            account_label = "cuenta capaz" if viable_count == 1 else "cuentas capaces"
+            text += (
+                f"\n{label}: {gender_by_type.get('1', 0)} fotos "
+                f"({viable_count} {account_label} de generar ahora)"
+            )
     if account_lines:
         text += "\n\nPor cuenta con stock:\n" + "\n".join(account_lines)
     return text
+
+
+def _format_viable_account_count(accounts: object) -> str:
+    count = len(accounts) if isinstance(accounts, list) else 0
+    label = (
+        "cuenta con combinación válida"
+        if count == 1
+        else "cuentas con combinación válida"
+    )
+    return f"{count} {label}"
 
 
 def _format_pool_refill_summary(summary: dict) -> str:

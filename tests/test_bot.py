@@ -28,6 +28,7 @@ from app.bot import (
     _format_account_audit,
     _format_pool_refill_summary,
     _format_pool_status,
+    _type_1_pool_status_for_accounts,
     _main_menu_markup,
     regenerate_choice,
     _execute_template_video,
@@ -1375,7 +1376,56 @@ def test_pool_status_distinguishes_raw_photos_from_usable_plan_photos():
 
     assert "Fotos aptas para planes: 0" in text
     assert "Fotos en disco sin usar: 2155" in text
-    assert "Tipo 1 aptas: 0 (0 cuentas con stock minimo)" in text
+    assert "Tipo 1 aptas: 0 (0 cuentas con combinación válida)" in text
+
+
+def test_pool_status_distinguishes_type_1_stock_by_gender():
+    text = _format_pool_status(
+        {
+            "total": 12,
+            "raw_total": 20,
+            "by_type": {"1": 12, "2": 0, "3": 0},
+            "by_account": {},
+            "viable_accounts_by_type": {
+                "1": ["man", "woman"],
+                "2": [],
+                "3": [],
+            },
+            "by_gender": {
+                VideoGender.MALE.value: {
+                    "by_type": {"1": 6},
+                    "viable_accounts_by_type": {"1": ["man"]},
+                },
+                VideoGender.FEMALE.value: {
+                    "by_type": {"1": 6},
+                    "viable_accounts_by_type": {"1": ["woman"]},
+                },
+            },
+        }
+    )
+
+    assert "Pool de fotos (global)" in text
+    assert "Hombres: 6 fotos (1 cuenta capaz de generar ahora)" in text
+    assert "Mujeres: 6 fotos (1 cuenta capaz de generar ahora)" in text
+
+
+def test_type_1_pool_status_filters_accounts_from_instagram_urls():
+    filtered = _type_1_pool_status_for_accounts(
+        {
+            "by_type_by_account": {
+                "man": {"1": 7},
+                "woman": {"1": 9},
+                "old": {"1": 12},
+            },
+            "viable_accounts_by_type": {
+                "1": ["man", "woman", "old"],
+            },
+        },
+        ["https://www.instagram.com/man/?hl=es", "@woman"],
+    )
+
+    assert filtered["by_type"] == {"1": 16}
+    assert filtered["viable_accounts_by_type"] == {"1": ["man", "woman"]}
 
 
 def test_account_audit_summary_prioritizes_exhausted_accounts():

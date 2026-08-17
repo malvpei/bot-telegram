@@ -231,18 +231,9 @@ class MediaPoolService:
             pool=pool,
             video_type=video_type,
         )
-        account_limit = max(
-            0,
-            int(getattr(self.settings, "pool_plan_max_accounts", 0)),
-        )
-        accounts_to_try = (
-            ordered_accounts[:account_limit]
-            if account_limit
-            else ordered_accounts
-        )
         tried: list[str] = []
         last_error: str | None = None
-        for account in accounts_to_try:
+        for account in ordered_accounts:
             tried.append(account)
             try:
                 plan = self.selector.create_plan(
@@ -257,21 +248,9 @@ class MediaPoolService:
             return plan, tried
 
         detail = f"\nUltimo motivo: {last_error}" if last_error else ""
-        limited = bool(account_limit and len(ordered_accounts) > account_limit)
-        tried_detail = (
-            f"Probe {len(tried)} de {len(ordered_accounts)} cuentas locales disponibles. "
-            if limited
-            else f"Probe todas las cuentas locales disponibles ({len(tried)}/{len(ordered_accounts)}). "
-        )
-        limit_detail = (
-            f"Limite de cuentas del pool por intento: {account_limit}. "
-            if limited
-            else ""
-        )
         raise ValueError(
             "No hay una cuenta del pool que pueda generar este tipo de video. "
-            + tried_detail
-            + limit_detail
+            f"Probe todas las cuentas locales disponibles ({len(tried)}/{len(ordered_accounts)}). "
             + "Se puede usar busqueda dinamica fuera del pool para encontrar mas fotos."
             + detail
         )
@@ -373,6 +352,7 @@ class MediaPoolService:
             used_count = 0
             invalid_count = 0
             available_count = 0
+            available_candidates: list[MediaCandidate] = []
 
             for candidate in candidates:
                 if candidate.metrics is None:
@@ -383,13 +363,15 @@ class MediaPoolService:
                     used_count += 1
                     continue
                 available_count += 1
+                available_candidates.append(candidate)
                 for video_type in ALL_VIDEO_TYPES:
                     if self._candidate_counts_for_type(candidate, video_type):
                         usable_by_type[video_type.value] += 1
 
             viable_by_type = {
-                video_type.value: (
-                    usable_by_type[video_type.value] >= MIN_POOL_ITEMS_BY_TYPE[video_type]
+                video_type.value: self._account_has_viable_plan(
+                    available_candidates,
+                    video_type,
                 )
                 for video_type in ALL_VIDEO_TYPES
             }
@@ -639,19 +621,19 @@ class MediaPoolService:
             video_type=video_type,
         )
         rotated_index = {account: index for index, account in enumerate(rotated)}
-        minimum = MIN_POOL_ITEMS_BY_TYPE[video_type]
+        account_stats = {
+            account: (
+                self._account_has_viable_plan(candidates, video_type),
+                self._usable_count_for_type(candidates, video_type),
+            )
+            for account, candidates in candidates_by_account.items()
+        }
 
         return sorted(
             rotated,
             key=lambda account: (
-                self._usable_count_for_type(
-                    candidates_by_account[account],
-                    video_type,
-                ) < minimum,
-                -self._usable_count_for_type(
-                    candidates_by_account[account],
-                    video_type,
-                ),
+                not account_stats[account][0],
+                -account_stats[account][1],
                 rotated_index[account],
             ),
         )
@@ -718,8 +700,7 @@ class MediaPoolService:
             )
             result[video_type.value] = []
             for account, candidates in candidates_by_account.items():
-                usable_count = self._usable_count_for_type(candidates, video_type)
-                if usable_count < MIN_POOL_ITEMS_BY_TYPE[video_type]:
+                if not self._account_has_viable_plan(candidates, video_type):
                     continue
                 result[video_type.value].append(account)
         return result
@@ -775,7 +756,7 @@ class MediaPoolService:
                     for candidate in candidates
                     if self._candidate_counts_for_type(candidate, video_type)
                 ]
-                if len(usable) < MIN_POOL_ITEMS_BY_TYPE[video_type]:
+                if not self._account_has_viable_plan(candidates, video_type):
                     continue
                 by_type[video_key] += len(usable)
                 by_type_by_account.setdefault(account, {})[video_key] = len(usable)
@@ -836,6 +817,23 @@ class MediaPoolService:
             for candidate in candidates
             if self._candidate_counts_for_type(candidate, video_type)
         )
+
+    def _account_has_viable_plan(
+        self,
+        candidates: list[MediaCandidate],
+        video_type: VideoType,
+    ) -> bool:
+        if (
+            self._usable_count_for_type(candidates, video_type)
+            < MIN_POOL_ITEMS_BY_TYPE[video_type]
+        ):
+            return False
+        if video_type != VideoType.TYPE_1:
+            return True
+        checker = getattr(self.selector, "has_viable_type_1_candidate_set", None)
+        if not callable(checker):
+            return True
+        return bool(checker(candidates))
 
     def _candidate_counts_for_type(
         self,

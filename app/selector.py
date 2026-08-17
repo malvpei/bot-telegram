@@ -238,6 +238,56 @@ class ImageSelector:
     def reservation_keys_for(self, media_items) -> list[str]:
         return self._reservation_keys(media_items)
 
+    def has_viable_type_1_candidate_set(
+        self,
+        media_items: list[MediaCandidate],
+    ) -> bool:
+        """Return whether unused, prepared candidates can fill a Type 1 plan.
+
+        The media-pool service filters reservations and prepares metrics before
+        calling this helper. Keeping the composition rule here prevents `/pool`
+        from advertising six landscapes as a viable six-photo Type 1 account.
+        """
+        candidates = list(
+            {
+                media.source_id: media
+                for media in media_items
+                if media.metrics is not None
+            }.values()
+        )
+        if len(candidates) < 6:
+            return False
+
+        person_candidates = [
+            media
+            for media in candidates
+            if self._is_type_1_person_visible_media(media)
+            and any(
+                self._score_type_1(media, role) > 0
+                for role in TYPE_1_ROLES
+                if role not in {SlideRole.HOOK, SlideRole.FEBRUARY}
+            )
+        ]
+        hook_candidates = [
+            media
+            for media in person_candidates
+            if self._score_type_1(media, SlideRole.HOOK) > 0
+        ]
+        if not hook_candidates:
+            return False
+
+        landscape_exceptions = [
+            media
+            for media in candidates
+            if not self._is_type_1_person_visible_media(media)
+            and self._is_landscape_media(media)
+            and any(
+                self._score_type_1(media, role) > 0
+                for role in TYPE_1_REPLACEABLE_FOR_LANDSCAPE
+            )
+        ]
+        return len(person_candidates) + min(1, len(landscape_exceptions)) >= 6
+
     # ------------------------------------------------------------------
     # Type 1
     # ------------------------------------------------------------------
@@ -265,6 +315,13 @@ class ImageSelector:
             if len(available) < 6:
                 LOGGER.info("tipo1 @%s: descartada, < 6 disponibles", account)
                 continue
+            if not self.has_viable_type_1_candidate_set(available):
+                LOGGER.info(
+                    "tipo1 @%s: descartada, no hay una combinacion de portada, "
+                    "personas y paisaje compatible",
+                    account,
+                )
+                continue
 
             non_fixed_roles = [role for role in TYPE_1_ROLES if role != SlideRole.FEBRUARY]
             picked: dict[SlideRole, MediaCandidate] = {}
@@ -283,7 +340,8 @@ class ImageSelector:
                 picked[role] = best.media
                 role_scores[role] = best.score
 
-            if len(picked) != len(non_fixed_roles):
+            valid_pick = len(picked) == len(non_fixed_roles)
+            if not valid_pick:
                 LOGGER.info(
                     "tipo1 @%s: solo pude elegir %d/%d slides (pool=%d)",
                     account,
@@ -291,31 +349,45 @@ class ImageSelector:
                     len(non_fixed_roles),
                     len(available),
                 )
-                continue
 
-            if not self._enforce_single_landscape(
-                account,
-                picked,
-                role_scores,
-                available,
-                score_fn=self._score_type_1,
-                label="tipo1",
-                landscape_fn=lambda media: (
-                    self._is_landscape_media(media)
-                    and not self._is_type_1_person_visible_media(media)
-                ),
-                strict=False,
-            ):
-                continue
+            if valid_pick:
+                valid_pick = self._enforce_single_landscape(
+                    account,
+                    picked,
+                    role_scores,
+                    available,
+                    score_fn=self._score_type_1,
+                    label="tipo1",
+                    landscape_fn=lambda media: (
+                        self._is_landscape_media(media)
+                        and not self._is_type_1_person_visible_media(media)
+                    ),
+                    strict=False,
+                )
 
-            if not self._enforce_type_1_person_visibility(
-                account,
-                picked,
-                role_scores,
-                available,
-                replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
-            ):
-                continue
+            if valid_pick:
+                valid_pick = self._enforce_type_1_person_visibility(
+                    account,
+                    picked,
+                    role_scores,
+                    available,
+                    replaceable_roles=TYPE_1_REPLACEABLE_FOR_LANDSCAPE,
+                )
+
+            if not valid_pick:
+                constrained_pick = self._pick_constrained_type_1(available)
+                if constrained_pick is None:
+                    LOGGER.info(
+                        "tipo1 @%s: la seleccion restringida tampoco encontro plan",
+                        account,
+                    )
+                    continue
+                picked, role_scores = constrained_pick
+                LOGGER.info(
+                    "tipo1 @%s: uso seleccion restringida para conservar "
+                    "la combinacion valida",
+                    account,
+                )
 
             fallback_accounts: list[str] = []
 
@@ -337,10 +409,75 @@ class ImageSelector:
 
         if not ranked:
             raise ValueError(
-                "No encontré suficientes fotos válidas para un video tipo 1 sin reutilizar imágenes."
+                "No pude formar un video tipo 1 con esta cuenta. Hacen falta 6 "
+                "fotos nuevas: una portada no paisajística con una persona visible "
+                "y al menos 5 de las 6 deben mostrar una persona. La sexta puede "
+                "ser un paisaje. Esto no significa que el pool completo esté vacío."
             )
         ranked.sort(key=lambda entry: entry[0], reverse=True)
         return ranked[0][1]
+
+    def _pick_constrained_type_1(
+        self,
+        available: list[MediaCandidate],
+    ) -> tuple[dict[SlideRole, MediaCandidate], dict[SlideRole, float]] | None:
+        picked: dict[SlideRole, MediaCandidate] = {}
+        role_scores: dict[SlideRole, float] = {}
+        hook = self._pick_best_with_post_preference(
+            available,
+            picked=picked,
+            score_fn=lambda media: self._score_type_1(media, SlideRole.HOOK),
+        )
+        if hook is None:
+            return None
+        picked[SlideRole.HOOK] = hook.media
+        role_scores[SlideRole.HOOK] = hook.score
+
+        person_pool = [
+            media
+            for media in available
+            if self._is_type_1_person_visible_media(media)
+        ]
+        remaining_person_ids = {
+            media.source_id
+            for media in person_pool
+            if media.source_id != hook.media.source_id
+        }
+        landscape_role: SlideRole | None = None
+        if len(remaining_person_ids) < 5:
+            landscape_role = TYPE_1_REPLACEABLE_FOR_LANDSCAPE[0]
+            landscape = self._pick_best_with_post_preference(
+                available,
+                picked=picked,
+                score_fn=lambda media, current_role=landscape_role: (
+                    self._score_type_1(media, current_role)
+                    if not self._is_type_1_person_visible_media(media)
+                    and self._is_landscape_media(media)
+                    else 0.0
+                ),
+            )
+            if landscape is None:
+                return None
+            picked[landscape_role] = landscape.media
+            role_scores[landscape_role] = landscape.score
+
+        for role in TYPE_1_ROLES:
+            if role in {SlideRole.HOOK, SlideRole.FEBRUARY, landscape_role}:
+                continue
+            best = self._pick_best_with_post_preference(
+                person_pool,
+                picked=picked,
+                score_fn=lambda media, current_role=role: self._score_type_1(
+                    media,
+                    current_role,
+                ),
+            )
+            if best is None:
+                return None
+            picked[role] = best.media
+            role_scores[role] = best.score
+
+        return picked, role_scores
 
     # ------------------------------------------------------------------
     # Type 2
