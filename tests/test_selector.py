@@ -1103,7 +1103,7 @@ def test_type_1_hook_never_uses_landscape_photo(temp_workspace):
     assert not selector._is_landscape_media(hook_slide.media)
 
 
-def test_type_1_hook_requires_detected_person_signal(temp_workspace):
+def test_type_1_hook_prefers_detected_person_signal_when_available(temp_workspace):
     settings, state = temp_workspace
     account_dir = settings.downloads_dir / "hook_requires_person"
     account_dir.mkdir()
@@ -1405,9 +1405,6 @@ def test_type_1_generates_when_face_detector_misses_clear_vertical_photos(temp_w
             portrait_focus=0.0,
         )
         candidate.metrics.aspect_ratio = 0.72
-    candidates[0].metrics.body_area_ratio = 0.08
-    candidates[0].metrics.body_focus_score = 0.42
-
     selector = ImageSelector(settings, state)
     plan = selector.create_plan(
         {"vertical_no_face": candidates},
@@ -1417,8 +1414,80 @@ def test_type_1_generates_when_face_detector_misses_clear_vertical_photos(temp_w
 
     hook_slide = next(slide for slide in plan.slides if slide.role == SlideRole.HOOK)
     assert [slide.role for slide in plan.slides] == list(TYPE_1_ROLES)
-    assert hook_slide.media.source_id == candidates[0].source_id
-    assert selector._is_hook_person_visible_media(hook_slide.media)
+    assert not any(selector._has_person_signal(candidate) for candidate in candidates)
+    assert selector._is_type_1_hook_media(hook_slide.media)
+
+
+def test_type_1_detector_miss_fallback_accepts_moderately_lit_portraits(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "moderate_portraits"
+    account_dir.mkdir()
+
+    candidates = [
+        _make_candidate(account_dir, username="moderate_portraits", idx=i)
+        for i in range(6)
+    ]
+    for index, candidate in enumerate(candidates):
+        candidate.metrics = _metrics_stub(
+            quality=0.48 if index == 0 else 0.18,
+            daylight=0.24 if index == 0 else 0.14,
+            faces=0,
+            is_landscape=False,
+            outdoor=0.12,
+            casual=0.08,
+            luxury=0.03,
+            portrait_focus=0.0,
+        )
+        candidate.metrics.aspect_ratio = 0.8
+
+    selector = ImageSelector(settings, state)
+    summary = selector.type_1_candidate_summary(candidates)
+    plan = selector.create_plan(
+        {"moderate_portraits": candidates},
+        VideoType.TYPE_1,
+        Language.ES,
+    )
+
+    assert summary == {
+        "total": 6,
+        "people": 6,
+        "strict_people": 0,
+        "fallback_portraits": 6,
+        "hooks": 1,
+        "landscapes": 0,
+    }
+    assert plan.chosen_account == "moderate_portraits"
+
+
+def test_type_1_vertical_person_with_sky_can_score_as_hook(temp_workspace):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "vertical_sky_person"
+    account_dir.mkdir()
+    candidate = _make_candidate(
+        account_dir,
+        username="vertical_sky_person",
+        idx=0,
+        caption="beach sky",
+    )
+    candidate.metrics = _metrics_stub(
+        quality=0.72,
+        daylight=0.68,
+        faces=1,
+        is_landscape=True,
+        outdoor=0.8,
+        casual=0.25,
+        luxury=0.04,
+        face_area=0.04,
+        portrait_focus=0.55,
+        sky=0.5,
+    )
+    candidate.metrics.aspect_ratio = 0.75
+
+    selector = ImageSelector(settings, state)
+
+    assert selector._is_landscape_media(candidate)
+    assert selector._is_type_1_hook_media(candidate)
+    assert selector._score_type_1(candidate, SlideRole.HOOK) > 0.0
 
 
 def test_type_1_can_use_multiple_images_from_same_carousel_when_needed(temp_workspace):

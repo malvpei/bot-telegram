@@ -879,7 +879,56 @@ def test_pool_marks_five_people_and_one_landscape_viable_for_type_1():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_requires_strict_person_signal_for_type_1_hook():
+def test_pool_rejects_four_portraits_and_two_landscapes_for_type_1():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(get_settings(), data_dir=root, state_dir=root / "state")
+        state = StateStore(settings.state_dir)
+        items = []
+        for index in range(4):
+            image_path = root / f"portrait_{index}.jpg"
+            Image.new("RGB", (32, 64), (10 + index, 20, 30)).save(image_path)
+            items.append(
+                _pool_item(
+                    "mixed",
+                    f"mixed:PORTRAIT{index}:{index}",
+                    image_path,
+                    faces=0,
+                    eligible_types=[VideoType.TYPE_1.value],
+                )
+            )
+        for index in range(2):
+            image_path = root / f"landscape_{index}.jpg"
+            Image.new("RGB", (64, 32), (30, 20 + index, 10)).save(image_path)
+            items.append(
+                _pool_item(
+                    "mixed",
+                    f"mixed:LANDSCAPE{index}:{index + 4}",
+                    image_path,
+                    faces=0,
+                    is_landscape=True,
+                    eligible_types=[VideoType.TYPE_1.value],
+                )
+            )
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            ImageSelector(settings, state),
+        )
+
+        counts = service._stock_counts(
+            {"version": 1, "cursor_by_type": {}, "items": items}
+        )
+
+        assert counts["by_type"][VideoType.TYPE_1.value] == 0
+        assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == []
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_accepts_detector_miss_portraits_for_type_1_hook():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -906,12 +955,21 @@ def test_pool_requires_strict_person_signal_for_type_1_hook():
             ImageSelector(settings, state),
         )
 
-        counts = service._stock_counts(
-            {"version": 1, "cursor_by_type": {}, "items": items}
+        pool = {"version": 1, "cursor_by_type": {}, "items": items}
+        counts = service._stock_counts(pool)
+        state.write_media_pool(pool)
+        plan, tried = service.select_plan(
+            ["portraits"],
+            VideoType.TYPE_1,
+            Language.ES,
         )
 
-        assert counts["by_type"][VideoType.TYPE_1.value] == 0
-        assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == []
+        assert counts["by_type"][VideoType.TYPE_1.value] == 6
+        assert counts["viable_accounts_by_type"][VideoType.TYPE_1.value] == [
+            "portraits"
+        ]
+        assert plan.chosen_account == "portraits"
+        assert tried == ["portraits"]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

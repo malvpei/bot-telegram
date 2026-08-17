@@ -114,6 +114,11 @@ MIN_VISIBLE_FACE_AREA_RATIO = 0.006
 MIN_VISIBLE_PERSON_FOCUS_SCORE = 0.22
 MIN_VISIBLE_BODY_AREA_RATIO = 0.035
 MIN_VISIBLE_BODY_FOCUS_SCORE = 0.18
+TYPE_1_PORTRAIT_FALLBACK_MIN_QUALITY = 0.16
+TYPE_1_PORTRAIT_FALLBACK_MIN_DAYLIGHT = 0.12
+TYPE_1_HOOK_FALLBACK_MIN_QUALITY = 0.45
+TYPE_1_HOOK_FALLBACK_MIN_DAYLIGHT = 0.20
+TYPE_1_PORTRAIT_MAX_ASPECT_RATIO = 0.92
 IMAGE_ANALYSIS_CACHE_VERSION = 2
 IMAGE_ANALYSIS_CACHE_MAX_ITEMS = 5000
 
@@ -248,6 +253,22 @@ class ImageSelector:
         calling this helper. Keeping the composition rule here prevents `/pool`
         from advertising six landscapes as a viable six-photo Type 1 account.
         """
+        summary = self.type_1_candidate_summary(media_items)
+        return self._type_1_summary_is_viable(summary)
+
+    @staticmethod
+    def _type_1_summary_is_viable(summary: dict[str, int]) -> bool:
+        return (
+            summary["total"] >= 6
+            and summary["hooks"] >= 1
+            and summary["people"] + min(1, summary["landscapes"]) >= 6
+        )
+
+    def type_1_candidate_summary(
+        self,
+        media_items: list[MediaCandidate],
+    ) -> dict[str, int]:
+        """Describe the exact Type 1 composition available in one account."""
         candidates = list(
             {
                 media.source_id: media
@@ -255,9 +276,6 @@ class ImageSelector:
                 if media.metrics is not None
             }.values()
         )
-        if len(candidates) < 6:
-            return False
-
         person_candidates = [
             media
             for media in candidates
@@ -273,9 +291,6 @@ class ImageSelector:
             for media in person_candidates
             if self._score_type_1(media, SlideRole.HOOK) > 0
         ]
-        if not hook_candidates:
-            return False
-
         landscape_exceptions = [
             media
             for media in candidates
@@ -286,7 +301,17 @@ class ImageSelector:
                 for role in TYPE_1_REPLACEABLE_FOR_LANDSCAPE
             )
         ]
-        return len(person_candidates) + min(1, len(landscape_exceptions)) >= 6
+        strict_people = sum(
+            1 for media in person_candidates if self._has_person_signal(media)
+        )
+        return {
+            "total": len(candidates),
+            "people": len(person_candidates),
+            "strict_people": strict_people,
+            "fallback_portraits": len(person_candidates) - strict_people,
+            "hooks": len(hook_candidates),
+            "landscapes": len(landscape_exceptions),
+        }
 
     # ------------------------------------------------------------------
     # Type 1
@@ -315,11 +340,20 @@ class ImageSelector:
             if len(available) < 6:
                 LOGGER.info("tipo1 @%s: descartada, < 6 disponibles", account)
                 continue
-            if not self.has_viable_type_1_candidate_set(available):
+            type_1_summary = self.type_1_candidate_summary(available)
+            if not self._type_1_summary_is_viable(type_1_summary):
                 LOGGER.info(
                     "tipo1 @%s: descartada, no hay una combinacion de portada, "
-                    "personas y paisaje compatible",
+                    "personas y paisaje compatible "
+                    "(total=%d, personas=%d, detectadas=%d, retratos_fallback=%d, "
+                    "portadas=%d, paisajes=%d)",
                     account,
+                    type_1_summary["total"],
+                    type_1_summary["people"],
+                    type_1_summary["strict_people"],
+                    type_1_summary["fallback_portraits"],
+                    type_1_summary["hooks"],
+                    type_1_summary["landscapes"],
                 )
                 continue
 
@@ -409,10 +443,10 @@ class ImageSelector:
 
         if not ranked:
             raise ValueError(
-                "No pude formar un video tipo 1 con esta cuenta. Hacen falta 6 "
-                "fotos nuevas: una portada no paisajística con una persona visible "
-                "y al menos 5 de las 6 deben mostrar una persona. La sexta puede "
-                "ser un paisaje. Esto no significa que el pool completo esté vacío."
+                "No pude formar un video tipo 1 con esta cuenta. Se necesitan 6 "
+                "fotos nuevas de la misma cuenta: una portada vertical o cuadrada "
+                "y otras 5 fotos con persona o formato retrato. Como máximo una "
+                "puede ser un paisaje. Esto no significa que el pool completo esté vacío."
             )
         ranked.sort(key=lambda entry: entry[0], reverse=True)
         return ranked[0][1]
@@ -1005,7 +1039,34 @@ class ImageSelector:
             return True
         if media.metrics is None:
             return False
-        return self._is_high_quality_portrait_without_detected_face(media.metrics)
+        return self._is_type_1_portrait_fallback(media.metrics)
+
+    def _is_type_1_hook_media(self, media: MediaCandidate) -> bool:
+        """Accept a detected person or a conservative detector-miss fallback.
+
+        The semantic landscape flag also includes sky and caption keywords. A
+        detected person in a vertical photo must therefore not be rejected just
+        because the background contains a beach or a large patch of sky.
+        """
+        metrics = media.metrics
+        if metrics is None or metrics.aspect_ratio > 1.05:
+            return False
+        if self._has_person_signal(media):
+            return True
+        return (
+            self._is_type_1_portrait_fallback(metrics)
+            and metrics.quality_score >= TYPE_1_HOOK_FALLBACK_MIN_QUALITY
+            and metrics.daylight >= TYPE_1_HOOK_FALLBACK_MIN_DAYLIGHT
+        )
+
+    def _is_type_1_portrait_fallback(self, metrics: ImageMetrics) -> bool:
+        return (
+            not self._metrics_have_person_signal(metrics)
+            and metrics.quality_score >= TYPE_1_PORTRAIT_FALLBACK_MIN_QUALITY
+            and metrics.daylight >= TYPE_1_PORTRAIT_FALLBACK_MIN_DAYLIGHT
+            and metrics.aspect_ratio <= TYPE_1_PORTRAIT_MAX_ASPECT_RATIO
+            and not metrics.is_landscape
+        )
 
     def _has_person_signal(self, media: MediaCandidate) -> bool:
         if not media.metrics:
@@ -1648,10 +1709,7 @@ class ImageSelector:
             + 0.04 * metrics.hands_score
         )
         if role == SlideRole.HOOK:
-            if (
-                self._is_landscape_media(media)
-                or not self._is_hook_person_visible_media(media)
-            ):
+            if not self._is_type_1_hook_media(media):
                 return 0.0
             score += (
                 0.12 * metrics.daylight

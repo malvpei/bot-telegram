@@ -716,13 +716,17 @@ class InstagramCollector:
         cached_by_id = {item.source_id: item for item in cached_items}
         merged: list[MediaCandidate] = []
         seen: set[str] = set()
-        for folder_item in folder_items:
-            item = cached_by_id.get(folder_item.source_id, folder_item)
+        # meta.json preserves the collector's newest-to-oldest post order.
+        # Keep that order authoritative: the folder scan is alphabetical and
+        # putting it first can make the post limit select an arbitrary, older
+        # slice of a large cache.
+        for item in cached_items:
             if item.source_id in seen:
                 continue
             seen.add(item.source_id)
             merged.append(item)
-        for item in cached_items:
+        for folder_item in folder_items:
+            item = cached_by_id.get(folder_item.source_id, folder_item)
             if item.source_id in seen:
                 continue
             seen.add(item.source_id)

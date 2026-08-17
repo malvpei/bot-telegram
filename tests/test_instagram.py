@@ -273,6 +273,63 @@ def test_collector_repairs_truncated_cache_from_local_folder() -> None:
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_collector_preserves_cached_post_order_when_repairing_folder() -> None:
+    root = (
+        Path(__file__).resolve().parents[1]
+        / "data"
+        / "_test_tmp"
+        / f"instagram-{uuid4().hex}"
+    )
+    root.mkdir(parents=True)
+    try:
+        downloads_dir = root / "downloads"
+        account_dir = downloads_dir / "alpha"
+        account_dir.mkdir(parents=True)
+        paths = {}
+        for post in ("ANEW", "BNEW", "AOLD"):
+            image_path = account_dir / f"{post}_0.jpg"
+            Image.new("RGB", (64, 64), (100, 120, 140)).save(image_path)
+            paths[post] = image_path
+        cached_items = [
+            {
+                "source_id": f"alpha:{post}:0",
+                "local_path": str(paths[post]),
+                "permalink": f"https://www.instagram.com/p/{post}/",
+                "caption": post,
+                "width": 64,
+                "height": 64,
+                "created_at": "2026-08-17T00:00:00+00:00",
+            }
+            for post in ("BNEW", "ANEW")
+        ]
+        (account_dir / "meta.json").write_text(
+            json.dumps(
+                {
+                    "cache_version": 3,
+                    "max_posts_per_account": 2,
+                    "items": cached_items,
+                }
+            ),
+            encoding="utf-8",
+        )
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            downloads_dir=downloads_dir,
+            max_posts_per_account=2,
+            account_cache_ttl_hours=0,
+        )
+
+        media = InstagramCollector(settings).collect_one("alpha")
+
+        assert [item.source_id for item in media] == [
+            "alpha:BNEW:0",
+            "alpha:ANEW:0",
+        ]
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_collector_local_folder_treats_manual_files_as_separate_posts() -> None:
     root = (
         Path(__file__).resolve().parents[1]
