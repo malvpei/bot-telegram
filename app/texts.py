@@ -463,13 +463,6 @@ class ScriptGenerator:
                 SlideRole.TIP3: "3. Vender lo mismo que todos\nLos productos virales tienen demasiada competencia y nulo margen. Busca nichos que resuelvan problemas reales y apóyate en herramientas como Dropradar para encontrar productos rentables.",
                 SlideRole.TIP4: "4. Descuidar el trato con el comprador\nConseguir el pago es solo la mitad del trabajo. Si no ayudas al cliente tras la compra, tu reputación y tu cuenta bancaria lo pagarán. Una comunicación rápida evita devoluciones y protege tu negocio.",
             },
-            "c": {
-                SlideRole.HOOK: "4 consejos para Dropshipping\nque me habrían ahorrado mucho dinero...",
-                SlideRole.TIP1: "1. No compitas tirando los precios por los suelos para conseguir tu primera venta rápida. Si tu margen de beneficio es minúsculo, cualquier pequeño gasto imprevisto en publicidad o en posibles devoluciones te dejará en números rojos. Mejor esfuérzate en construir una oferta irresistible alrededor de tu producto.",
-                SlideRole.TIP2: "2. Contacta siempre con tus proveedores para confirmar su capacidad antes de escalar una campaña publicitaria. De nada sirve que un anuncio funcione genial si la fábrica no tiene stock o tarda semanas en procesar pedidos, ya que acabarás lidiando con decenas de clientes exigiendo su dinero.",
-                SlideRole.TIP3: "3. Deja de intentar adivinar qué se va a vender basándote únicamente en tu intuición o en lo que te parece visualmente atractivo. El éxito llega cuando ofreces lo que el mercado ya está pidiendo a gritos, así que apóyate en herramientas como Dropradar para basarte en datos reales y encontrar productos ganadores.",
-                SlideRole.TIP4: "4. Tus anuncios de vídeo deben centrarse en el problema que resuelves y no en enumerar características técnicas aburridas. Aprovecha los tres primeros segundos para captar la atención del espectador mostrándole de forma visual y muy directa cómo tu artículo le va a hacer la vida más fácil.",
-            },
         }
         return self._compose_type_2_fixed(Language.ES, variants)
 
@@ -488,13 +481,6 @@ class ScriptGenerator:
                 SlideRole.TIP2: "2. Treating ads like a slot machine\nDo not throw money at Facebook or TikTok hoping for a miracle. Start small, test different angles and use organic content to see what works before investing heavily.",
                 SlideRole.TIP3: "3. Sell the same as everyone else\nViral products have too much competition and no margin. Look for niches that solve real problems and lean on tools like Dropradar to find profitable products.",
                 SlideRole.TIP4: "4. Neglecting the buyer experience\nGetting the payment is only half the job. If you do not help the customer after purchase, your reputation and your bank account will pay for it. Fast communication prevents refunds and protects your business.",
-            },
-            "c": {
-                SlideRole.HOOK: "4 Dropshipping tips\nthat would have saved me a lot of money...",
-                SlideRole.TIP1: "1. Don't compete by slashing prices to the ground just to get your first quick sale. If your profit margin is tiny, any small unexpected expense in advertising or potential returns will put you in the red. Instead, focus your efforts on building an irresistible offer around your product.",
-                SlideRole.TIP2: "2. Always contact your suppliers to confirm their capacity before scaling an advertising campaign. It is useless for an ad to perform great if the factory has no stock or takes weeks to process orders, as you will end up dealing with dozens of angry customers demanding their money back.",
-                SlideRole.TIP3: "3. Stop trying to guess what will sell based solely on your intuition or what you find visually appealing. Success comes when you offer what the market is already crying out for, so lean on tools like Dropradar to base your decisions on real data and find winning products.",
-                SlideRole.TIP4: "4. Your video ads should focus on the problem you solve rather than listing boring technical features. Use the first three seconds to grab the viewer's attention by showing them visually and very directly how your item is going to make their life easier.",
             },
         }
         return self._compose_type_2_fixed(Language.EN, variants)

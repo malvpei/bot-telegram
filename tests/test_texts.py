@@ -256,17 +256,13 @@ def test_type_2_tips_separate_title_and_body_and_hooks_are_fixed(state_dir):
     assert package.slides_by_role[SlideRole.HOOK] in {
         "Habría pagado por saber estas 4 cosas\ncuando empecé en Dropshipping",
         "Errores que cuestan dinero\nal empezar en Dropshipping",
-        "4 consejos para Dropshipping\nque me habrían ahorrado mucho dinero...",
     }
     for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4):
         slide = package.slides_by_role[role]
         assert slide.startswith(f"{role.value[-1]}.")
-        if "\n" in slide:
-            title, body = slide.split("\n", 1)
-            assert title
-            assert body
-        else:
-            assert len(slide.split()) >= 8
+        title, body = slide.split("\n", 1)
+        assert title
+        assert body
 
 
 def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
@@ -295,35 +291,11 @@ def test_type_2_es_uses_fixed_variants_and_alternates(state_dir):
 
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.ES, second.choice_key)
     third = generator.generate(VideoType.TYPE_2, Language.ES)
-    assert third.choice_key == "c"
-    assert (
-        third.slides_by_role[SlideRole.HOOK]
-        == "4 consejos para Dropshipping\nque me habrían ahorrado mucho dinero..."
-    )
-    assert third.slides_by_role[SlideRole.TIP1].startswith(
-        "1. No compitas tirando los precios por los suelos"
-    )
-    assert third.slides_by_role[SlideRole.TIP2].startswith(
-        "2. Contacta siempre con tus proveedores"
-    )
-    assert third.slides_by_role[SlideRole.TIP3].startswith(
-        "3. Deja de intentar adivinar qué se va a vender"
-    )
-    assert third.slides_by_role[SlideRole.TIP4].startswith(
-        "4. Tus anuncios de vídeo deben centrarse"
-    )
+    assert third.choice_key == "a"
     assert all(
-        "\n" not in third.slides_by_role[role]
+        "\n" in third.slides_by_role[role]
         for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4)
     )
-    assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
-    assert all(
-        "Dropradar" not in third.slides_by_role[role]
-        for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP4)
-    )
-
-    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.ES, third.choice_key)
-    assert generator.generate(VideoType.TYPE_2, Language.ES).choice_key == "a"
 
 
 def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
@@ -352,19 +324,11 @@ def test_type_2_en_uses_fixed_variants_and_alternates(state_dir):
 
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, second.choice_key)
     third = generator.generate(VideoType.TYPE_2, Language.EN)
-    assert third.choice_key == "c"
-    assert (
-        third.slides_by_role[SlideRole.HOOK]
-        == "4 Dropshipping tips\nthat would have saved me a lot of money..."
+    assert third.choice_key == "a"
+    assert all(
+        "\n" in third.slides_by_role[role]
+        for role in (SlideRole.TIP1, SlideRole.TIP2, SlideRole.TIP3, SlideRole.TIP4)
     )
-    assert third.slides_by_role[SlideRole.TIP1].startswith(
-        "1. Don't compete by slashing prices"
-    )
-    assert "\n" not in third.slides_by_role[SlideRole.TIP1]
-    assert "Dropradar" in third.slides_by_role[SlideRole.TIP3]
-
-    generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, third.choice_key)
-    assert generator.generate(VideoType.TYPE_2, Language.EN).choice_key == "a"
 
 
 @pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
@@ -397,7 +361,7 @@ def test_type_1_and_2_text_queue_is_shared_between_languages(
         second.choice_key,
     )
     third = generator.generate(video_type, first_language)
-    assert third.choice_key == "c"
+    assert third.choice_key == ("c" if video_type == VideoType.TYPE_1 else "a")
 
 
 def test_type_2_en_passes_punctuation_rule(state_dir):
@@ -475,10 +439,8 @@ def test_type_1_and_2_hooks_mention_money_and_dropshipping(
             assert normalized_hook in {
                 "habría pagado por saber estas 4 cosas cuando empecé en dropshipping",
                 "errores que cuestan dinero al empezar en dropshipping",
-                "4 consejos para dropshipping que me habrían ahorrado mucho dinero...",
                 "i would have paid to know these 4 things when i started dropshipping",
                 "mistakes i see small dropshippers making when they are starting out",
-                "4 dropshipping tips that would have saved me a lot of money...",
             }
             continue
         assert any(term in hook for term in money_terms)
@@ -497,8 +459,15 @@ def test_consecutive_generations_differ(state_dir):
     assert second.signature != first.signature
 
 
-@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
-def test_type_1_and_2_have_exactly_three_script_variants(state_dir, video_type):
+@pytest.mark.parametrize(
+    ("video_type", "expected_count"),
+    [(VideoType.TYPE_1, 3), (VideoType.TYPE_2, 2)],
+)
+def test_type_1_and_2_have_expected_script_variants(
+    state_dir,
+    video_type,
+    expected_count,
+):
     generator = _make_generator(state_dir)
     signatures: set[str] = set()
     for _ in range(12):
@@ -508,7 +477,7 @@ def test_type_1_and_2_have_exactly_three_script_variants(state_dir, video_type):
         generator.state.remember_signature(video_type, Language.ES, package.signature)
         signatures.add(package.signature)
 
-    assert len(signatures) == 3
+    assert len(signatures) == expected_count
 
 
 @pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
@@ -729,7 +698,7 @@ def test_lowercase_option_formats_slides_and_social_copy(state_dir):
     assert all(tag == tag.lower() for tag in package.social_copy.hashtags)
 
 
-def test_lowercase_option_formats_type_2_titleless_long_variant(state_dir):
+def test_lowercase_option_formats_remaining_type_2_variant(state_dir):
     generator = _make_generator(state_dir)
     generator.state.set_last_text_choice(VideoType.TYPE_2, Language.EN, "b")
 
@@ -739,10 +708,12 @@ def test_lowercase_option_formats_type_2_titleless_long_variant(state_dir):
         lowercase_text=True,
     )
 
-    assert package.choice_key == "c"
+    assert package.choice_key == "a"
     assert all(slide == slide.lower() for slide in package.ordered_slides)
-    assert "\n" not in package.slides_by_role[SlideRole.TIP1]
-    assert package.slides_by_role[SlideRole.TIP1].startswith("1. don't compete")
+    assert "\n" in package.slides_by_role[SlideRole.TIP1]
+    assert package.slides_by_role[SlideRole.TIP1].startswith(
+        "1. validate with a small budget"
+    )
 
 
 def test_social_hashtags_force_literal_dropshipping():
