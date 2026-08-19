@@ -146,6 +146,25 @@ class EmptyPlanPool:
         self.noted.append((account, video_type))
 
 
+class PhotoResetPool:
+    def __init__(self, state: StateStore, lock: Lock) -> None:
+        self.state = state
+        self.lock = lock
+        self.usernames: list[str] = []
+        self.lock_was_held = False
+        self.usage_was_still_present = False
+
+    def restore_cached_candidates(self, usernames: list[str]) -> dict[str, object]:
+        self.usernames = list(usernames)
+        self.lock_was_held = self.lock.locked()
+        self.usage_was_still_present = self.state.is_media_used("photo:1")
+        return {
+            "restored_count": 4,
+            "cached_candidates": 10,
+            "accounts_with_cache": 2,
+        }
+
+
 class FakeR2Storage:
     is_configured = True
 
@@ -1648,6 +1667,23 @@ def test_picker_tries_next_random_account_when_video_cannot_be_made(monkeypatch)
         assert tried == ["bad", "good"]
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_photo_reset_restores_pool_before_clearing_usage_under_job_lock(tmp_path):
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.state = StateStore(tmp_path / "state")
+    service.state.reserve_media(["photo:1"], "job-old")
+    service._job_lock = Lock()
+    service.pool = PhotoResetPool(service.state, service._job_lock)
+
+    summary = service.reset_photo_usage(["@Alpha", "alpha", "@beta"])
+
+    assert service.pool.usernames == ["alpha", "beta"]
+    assert service.pool.lock_was_held
+    assert service.pool.usage_was_still_present
+    assert summary["reset_count"] == 1
+    assert summary["restored_count"] == 4
+    assert service.state.read_used_media() == {}
 
 
 def test_persistence_status_warns_when_container_data_dir_is_not_app_data(monkeypatch):

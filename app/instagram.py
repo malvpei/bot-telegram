@@ -607,13 +607,35 @@ class InstagramCollector:
     def _cache_path(self, username: str) -> Path:
         return self.settings.downloads_dir / username / "meta.json"
 
+    def load_local_account(self, username: str) -> list[MediaCandidate]:
+        """Load the configured local catalog without fetching Instagram."""
+        cached = self._load_cached_account(
+            username,
+            allow_stale=True,
+            unlimited=True,
+        )
+        if cached is not None:
+            return cached
+        account_dir = self.settings.downloads_dir / username
+        return list(
+            self._load_account_from_folder(
+                username,
+                account_dir,
+                save_cache=False,
+                unlimited=True,
+            )
+            or []
+        )
+
     def _load_cached_account(
         self,
         username: str,
         *,
         max_posts: int | None = None,
+        allow_stale: bool = False,
+        unlimited: bool = False,
     ) -> list[MediaCandidate] | None:
-        post_limit = self._resolve_max_posts(max_posts)
+        post_limit = 0 if unlimited else self._resolve_max_posts(max_posts)
         cache_path = self._cache_path(username)
         account_dir = self.settings.downloads_dir / username
         if not cache_path.exists():
@@ -621,10 +643,14 @@ class InstagramCollector:
                 username,
                 account_dir,
                 max_posts=post_limit,
-                save_cache=post_limit == self.settings.max_posts_per_account,
+                save_cache=(
+                    not unlimited
+                    and post_limit == self.settings.max_posts_per_account
+                ),
+                unlimited=unlimited,
             )
         ttl_hours = self.settings.account_cache_ttl_hours
-        if ttl_hours > 0:
+        if ttl_hours > 0 and not allow_stale:
             age = time.time() - cache_path.stat().st_mtime
             if age > ttl_hours * 3600:
                 return None
@@ -640,7 +666,12 @@ class InstagramCollector:
             payload.get("max_posts_per_account"),
             self.settings.max_posts_per_account,
         )
-        if post_limit > 0 and cached_limit > 0 and cached_limit < post_limit:
+        if (
+            not unlimited
+            and post_limit > 0
+            and cached_limit > 0
+            and cached_limit < post_limit
+        ):
             return None
         items: list[MediaCandidate] = []
         for raw in payload.get("items", []):
@@ -663,11 +694,10 @@ class InstagramCollector:
             items = self._merge_cached_items_with_local_folder(
                 username, account_dir, items
             )
-            limited_items = _limit_candidates_by_post(
-                items, post_limit
-            )
+            limited_items = _limit_candidates_by_post(items, post_limit)
             if (
-                post_limit == self.settings.max_posts_per_account
+                not unlimited
+                and post_limit == self.settings.max_posts_per_account
                 and len(limited_items) != len(payload.get("items", []))
             ):
                 self._save_account_cache(username, limited_items, max_posts=post_limit)
@@ -676,7 +706,11 @@ class InstagramCollector:
             username,
             account_dir,
             max_posts=post_limit,
-            save_cache=post_limit == self.settings.max_posts_per_account,
+            save_cache=(
+                not unlimited
+                and post_limit == self.settings.max_posts_per_account
+            ),
+            unlimited=unlimited,
         )
 
     def _load_account_from_folder(
@@ -686,8 +720,9 @@ class InstagramCollector:
         *,
         max_posts: int | None = None,
         save_cache: bool = True,
+        unlimited: bool = False,
     ) -> list[MediaCandidate] | None:
-        post_limit = self._resolve_max_posts(max_posts)
+        post_limit = 0 if unlimited else self._resolve_max_posts(max_posts)
         items = self._read_account_folder(username, account_dir)
         if not items:
             return None

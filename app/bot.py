@@ -186,6 +186,8 @@ def run_bot() -> None:
         CommandHandler("audit_accounts_women", audit_accounts_women_command)
     )
     application.add_handler(CommandHandler("memory", memory_command))
+    application.add_handler(CommandHandler("reset_photos", reset_photos_command))
+    application.add_handler(CommandHandler("reset_fotos", reset_photos_command))
     application.add_handler(CommandHandler("template_video", template_video_command))
     application.add_handler(CommandHandler("video_template", template_video_command))
     application.add_handler(CommandHandler("batch", batch_command))
@@ -967,6 +969,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/download_pool y /download_pool_women quedan como precalentamiento opcional.\n\n"
         "Usa /audit_accounts o /audit_accounts_women para ver que cuentas "
         "estan gastadas, sin cache local o sin suficientes fotos aptas.\n\n"
+        "Usa /reset_fotos confirmar para desbloquear todas las fotos ya usadas "
+        "sin borrar el pool, las cachés ni el historial de jobs. Solo puede "
+        "hacerlo el propietario.\n\n"
         "Usa /template_video [prefijo-r2] para coger un MP4 de R2 y "
         "aplicarle la plantilla fija de herramientas. El MP4 final sale sin audio.\n\n"
         "Usa /batch para crear el lote rotativo ahora. Por ejemplo, "
@@ -1324,6 +1329,98 @@ async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         f"Mas repetidas: {top_line}\n\n"
         "Si despues de redeploy fotos/jobs vuelven a 0 o el marker cambia, "
         "falta Persistent Storage montado en /app/data dentro de Coolify."
+    )
+
+
+async def reset_photos_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+) -> None:
+    if not await _ensure_admin(update):
+        return
+    message = update.effective_message
+    if message is None:
+        return
+
+    values = [
+        str(value).strip().lower()
+        for value in (getattr(context, "args", None) or [])
+        if str(value).strip()
+    ]
+    if values != ["confirmar"]:
+        blocked_count = len(_telegram_state_store().read_used_media())
+        await message.reply_text(
+            "Este reset hará que todas las fotos usadas puedan volver a salir "
+            "en vídeos nuevos. No borrará imágenes, pool, cachés, jobs ni "
+            "configuración.\n\n"
+            f"Marcadores de uso que se desbloquearán: {blocked_count}.\n"
+            "Para confirmarlo usa: /reset_fotos confirmar"
+        )
+        return
+
+    lock = _batch_lock(context.application)
+    if lock.locked():
+        await message.reply_text(
+            "Hay un lote en curso. Espera a que termine antes de reiniciar las fotos."
+        )
+        return
+
+    try:
+        async with lock:
+            await message.reply_text(
+                "Reiniciando la memoria y reconstruyendo el pool desde la caché local..."
+            )
+            accounts_by_gender = _load_accounts_by_gender(get_settings())
+            normalized_accounts = (
+                normalize_account(account)
+                for accounts in accounts_by_gender.values()
+                for account in accounts
+            )
+            account_inputs = list(
+                dict.fromkeys(
+                    account for account in normalized_accounts if account is not None
+                )
+            )
+            service: VideoCreationService | None = context.application.bot_data.get(
+                "service"
+            )
+            if service is not None:
+                reset_summary = await asyncio.to_thread(
+                    service.reset_photo_usage,
+                    account_inputs,
+                )
+            else:
+                reset_summary = {
+                    "reset_count": await asyncio.to_thread(
+                        _telegram_state_store().reset_used_media
+                    ),
+                    "restored_count": 0,
+                    "cached_candidates": 0,
+                    "accounts_with_cache": 0,
+                }
+    except Exception as error:  # noqa: BLE001
+        LOGGER.exception("Photo reset failed")
+        await message.reply_text(
+            "No pude completar el reinicio de fotos. No se borraron imágenes. "
+            f"Motivo: {error}"
+        )
+        return
+
+    reset_count = int(reset_summary.get("reset_count", 0))
+    restored_count = int(reset_summary.get("restored_count", 0))
+    cached_candidates = int(reset_summary.get("cached_candidates", 0))
+    cached_accounts = int(reset_summary.get("accounts_with_cache", 0))
+    backup_line = (
+        "Se conservó una copia de seguridad del estado anterior."
+        if reset_count
+        else "No había marcadores de uso que reiniciar."
+    )
+    await message.reply_text(
+        f"Reset completado: {reset_count} marcadores de uso eliminados. "
+        f"Revisé {cached_candidates} fotos locales de {cached_accounts} cuentas "
+        f"y restauré {restored_count} que faltaban en el pool. "
+        "Todas las fotos cacheadas dejan de estar marcadas como usadas; las "
+        f"validaciones de calidad, formato y duplicados siguen activas. {backup_line}"
     )
 
 

@@ -31,6 +31,7 @@ from app.bot import (
     _type_1_pool_status_for_accounts,
     _main_menu_markup,
     regenerate_choice,
+    reset_photos_command,
     _execute_template_video,
     _send_message,
     _send_slides_text_then_image,
@@ -171,6 +172,27 @@ class FakeTemplateService:
             ),
             queue_restarted=True,
         )
+
+
+class FakePhotoResetService:
+    def __init__(self, store: StateStore) -> None:
+        self.store = store
+        self.batch_lock: asyncio.Lock | None = None
+        self.batch_lock_was_held = False
+        self.calls = 0
+        self.account_inputs: list[str] = []
+
+    def reset_photo_usage(self, account_inputs: list[str]) -> dict[str, object]:
+        self.calls += 1
+        self.account_inputs = list(account_inputs)
+        if self.batch_lock is not None:
+            self.batch_lock_was_held = self.batch_lock.locked()
+        return {
+            "reset_count": self.store.reset_used_media(),
+            "restored_count": 3,
+            "cached_candidates": 12,
+            "accounts_with_cache": 2,
+        }
 
 
 class FakeRegenerateQuery:
@@ -1030,6 +1052,101 @@ def test_authorized_telegram_users_share_access_without_sharing_identity(tmp_pat
         group = AccessUpdate(2, chat_type="group")
         assert not asyncio.run(_ensure_allowed(group))
         assert "chat privado" in group.effective_message.text
+
+
+def test_reset_photos_requires_confirmation_and_clears_usage(tmp_path):
+    async def allow_admin(update):
+        return True
+
+    accounts_file = tmp_path / "accounts.txt"
+    women_accounts_file = tmp_path / "accounts_women.txt"
+    accounts_file.write_text("@alpha\n", encoding="utf-8")
+    women_accounts_file.write_text("@beta\n@alpha\n", encoding="utf-8")
+    settings = replace(
+        get_settings(),
+        state_dir=tmp_path / "state",
+        accounts_file=accounts_file,
+        women_accounts_file=women_accounts_file,
+    )
+    store = StateStore(settings.state_dir)
+    store.reserve_media(["photo:1", "dhash:1111111111111111"], "job-1")
+    service = FakePhotoResetService(store)
+    context = FakeContext()
+    context.application = FakeApplication(service)
+    context.application.bot_data["batch_lock"] = asyncio.Lock()
+    service.batch_lock = context.application.bot_data["batch_lock"]
+    context.args = []
+    update = FakeUpdate()
+
+    with patch("app.bot._ensure_admin", allow_admin), patch(
+        "app.bot.get_settings",
+        return_value=settings,
+    ):
+        asyncio.run(reset_photos_command(update, context))
+        assert len(store.read_used_media()) == 2
+        assert "/reset_fotos confirmar" in update.effective_message.text
+
+        context.args = ["confirmar"]
+        asyncio.run(reset_photos_command(update, context))
+
+    assert store.read_used_media() == {}
+    assert "Reset completado: 2" in update.effective_message.text
+    assert "restauré 3" in update.effective_message.text
+    assert (settings.state_dir / "used_media_before_reset.json").exists()
+    assert service.batch_lock_was_held
+    assert service.account_inputs == ["alpha", "beta"]
+
+
+def test_reset_photos_refuses_while_batch_is_active(tmp_path):
+    async def allow_admin(update):
+        return True
+
+    async def run_command() -> tuple[StateStore, FakePhotoResetService, FakeUpdate]:
+        settings = replace(get_settings(), state_dir=tmp_path / "state")
+        store = StateStore(settings.state_dir)
+        store.reserve_media(["photo:1"], "job-1")
+        service = FakePhotoResetService(store)
+        context = FakeContext()
+        context.application = FakeApplication(service)
+        context.args = ["confirmar"]
+        update = FakeUpdate()
+        lock = asyncio.Lock()
+        context.application.bot_data["batch_lock"] = lock
+        await lock.acquire()
+        try:
+            with patch("app.bot._ensure_admin", allow_admin), patch(
+                "app.bot.get_settings",
+                return_value=settings,
+            ):
+                await reset_photos_command(update, context)
+        finally:
+            lock.release()
+        return store, service, update
+
+    store, service, update = asyncio.run(run_command())
+
+    assert service.calls == 0
+    assert store.is_media_used("photo:1")
+    assert "Hay un lote en curso" in update.effective_message.text
+
+
+def test_reset_photos_does_nothing_when_admin_check_fails(tmp_path):
+    async def deny_admin(update):
+        return False
+
+    settings = replace(get_settings(), state_dir=tmp_path / "state")
+    store = StateStore(settings.state_dir)
+    store.reserve_media(["photo:1"], "job-1")
+    service = FakePhotoResetService(store)
+    context = FakeContext()
+    context.application = FakeApplication(service)
+    context.args = ["confirmar"]
+
+    with patch("app.bot._ensure_admin", deny_admin):
+        asyncio.run(reset_photos_command(FakeUpdate(), context))
+
+    assert service.calls == 0
+    assert store.is_media_used("photo:1")
 
 
 def test_non_owner_skip_does_not_mutate_shared_accounts_or_pool(tmp_path):

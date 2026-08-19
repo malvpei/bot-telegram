@@ -54,6 +54,35 @@ def test_release_media_cannot_release_another_jobs_reservation(state_dir):
     assert not store.is_media_used("shared-photo")
 
 
+def test_reset_used_media_clears_only_photo_usage_and_keeps_backup(state_dir):
+    store = StateStore(state_dir)
+    store.reserve_media(["photo:1", "dhash:1111111111111111"], job_id="job-1")
+    store.log_job(
+        store.build_job_record(
+            job_id="job-1",
+            chosen_account="alpha",
+            requested_accounts=["alpha"],
+            fallback_accounts=[],
+            video_type=VideoType.TYPE_1,
+            language=Language.ES,
+            video_path=None,
+            script_path="job-1.txt",
+        )
+    )
+    previous = store.read_used_media()
+
+    reset_count = store.reset_used_media()
+
+    assert reset_count == 2
+    assert store.read_used_media() == {}
+    assert store.memory_snapshot()["jobs_count"] == 1
+    backup_path = state_dir / "used_media_before_reset.json"
+    assert backup_path.exists()
+    assert store._read_json(backup_path, {}) == previous
+    assert store.reset_used_media() == 0
+    assert store._read_json(backup_path, {}) == previous
+
+
 def test_media_memory_is_exact_not_near_duplicate(state_dir):
     store = StateStore(state_dir)
     store.reserve_media(["ahash:0000000000000000"], job_id="job-1")
@@ -287,6 +316,28 @@ def test_historical_r2_story_jobs_are_migrated_to_global_reservations(state_dir)
     assert store.backfill_story_reference_reservations() == 1
     assert store.backfill_story_reference_reservations() == 0
     assert store.is_media_used("r2-story:imagenes/already-used.jpg")
+
+
+def test_photo_reset_does_not_reblock_historical_r2_story_photos(state_dir):
+    store = StateStore(state_dir)
+    store.log_job(
+        store.build_job_record(
+            job_id="old-story",
+            chosen_account="r2:imagenes/reusable.jpg",
+            requested_accounts=["r2:imagenes/reusable.jpg"],
+            fallback_accounts=[],
+            video_type=VideoType.TYPE_4,
+            language=Language.ES,
+            video_path=None,
+            script_path="old-story.txt",
+            user_id=10,
+        )
+    )
+
+    store.reset_used_media()
+
+    assert store.backfill_story_reference_reservations() == 0
+    assert not store.is_media_used("r2-story:imagenes/reusable.jpg")
 
 
 def test_batch_schedule_and_rotation_survive_new_store_instance(state_dir):

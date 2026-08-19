@@ -2,6 +2,7 @@ from dataclasses import replace
 import json
 from pathlib import Path
 import shutil
+from unittest.mock import patch
 from uuid import uuid4
 
 from PIL import Image
@@ -76,6 +77,76 @@ def test_collector_rebuilds_catalog_from_local_account_folder() -> None:
         assert media[0].source_id == "alpha:POST123:0"
         assert media[0].local_path == image_path
         assert (account_dir / "meta.json").exists()
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_local_account_loader_ignores_ttl_and_repairs_corrupt_catalog() -> None:
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"instagram-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        downloads_dir = root / "downloads"
+        account_dir = downloads_dir / "alpha"
+        account_dir.mkdir(parents=True)
+        image_path = account_dir / "POST123_0.jpg"
+        second_image_path = account_dir / "POST456_0.jpg"
+        Image.new("RGB", (64, 64), (100, 120, 140)).save(image_path)
+        Image.new("RGB", (64, 64), (80, 100, 120)).save(second_image_path)
+        cache_path = account_dir / "meta.json"
+        cache_path.write_text(
+            json.dumps(
+                {
+                    "cache_version": 3,
+                    "items": [
+                        {
+                            "source_id": "alpha:POST123:0",
+                            "local_path": str(image_path),
+                            "permalink": "https://www.instagram.com/p/POST123/",
+                            "caption": "cached",
+                            "width": 64,
+                            "height": 64,
+                            "created_at": "local",
+                        },
+                        {
+                            "source_id": "alpha:POST456:0",
+                            "local_path": str(second_image_path),
+                            "permalink": "https://www.instagram.com/p/POST456/",
+                            "caption": "cached second",
+                            "width": 64,
+                            "height": 64,
+                            "created_at": "local",
+                        },
+                    ],
+                }
+            ),
+            encoding="utf-8",
+        )
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            downloads_dir=downloads_dir,
+            account_cache_ttl_hours=1,
+            max_posts_per_account=1,
+        )
+        collector = InstagramCollector(settings)
+
+        with patch("app.instagram.time.time", return_value=cache_path.stat().st_mtime + 7200):
+            stale = collector.load_local_account("alpha")
+
+        assert [item.source_id for item in stale] == [
+            "alpha:POST123:0",
+            "alpha:POST456:0",
+        ]
+        assert stale[0].caption == "cached"
+
+        cache_path.write_text("not-json", encoding="utf-8")
+        repaired = collector.load_local_account("alpha")
+
+        assert {item.source_id for item in repaired} == {
+            "alpha:POST123:0",
+            "alpha:POST456:0",
+        }
+        assert repaired[0].local_path == image_path
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

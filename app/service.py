@@ -396,6 +396,14 @@ class VideoCreationService:
         with self._job_lock:
             return self.pool.exclude_account(account)
 
+    def reset_photo_usage(self, account_inputs: list[str]) -> dict[str, object]:
+        """Restore the local pool and reset reservations as one serialized action."""
+        with self._job_lock:
+            usernames = extract_usernames(account_inputs, len(account_inputs) or 1)
+            summary = self.pool.restore_cached_candidates(usernames)
+            summary["reset_count"] = self.state.reset_used_media()
+            return summary
+
     def sync_accounts(self, account_inputs: list[str]) -> dict[str, object]:
         with self._job_lock:
             usernames = extract_usernames(account_inputs, len(account_inputs) or 1)

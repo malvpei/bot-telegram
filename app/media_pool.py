@@ -53,7 +53,7 @@ class MediaPoolService:
         pool = self._normalise_pool(self.state.read_media_pool())
         used_media = self.state.read_used_media()
         before = self._stock_counts(pool, used_media=used_media, usernames=usernames)
-        pruned = self._prune_unavailable_items(pool, used_media=used_media)
+        pruned = self._prune_unavailable_items(pool)
         cooldowns = self.state.read_account_cooldowns()
         now = datetime.now(timezone.utc)
 
@@ -269,6 +269,51 @@ class MediaPoolService:
             pool["updated_at"] = datetime.now(timezone.utc).isoformat()
             self.state.write_media_pool(pool)
         return added
+
+    def restore_cached_candidates(self, usernames: list[str]) -> dict[str, Any]:
+        """Restore every eligible local candidate to the pool without network use."""
+        excluded = self.state.read_excluded_accounts()
+        accounts: list[str] = []
+        seen: set[str] = set()
+        for raw_username in usernames:
+            username = str(raw_username).strip().lstrip("@").lower()
+            if not username or username in seen or username in excluded:
+                continue
+            seen.add(username)
+            accounts.append(username)
+
+        pool = self._normalise_pool(self.state.read_media_pool())
+        before = len(pool["items"])
+        added = 0
+        cached_candidates = 0
+        accounts_with_cache = 0
+        missing_accounts: list[str] = []
+        for username in accounts:
+            candidates = self._cached_candidates(username, include_stale=True)
+            if not candidates:
+                missing_accounts.append(username)
+                continue
+            accounts_with_cache += 1
+            cached_candidates += len(candidates)
+            restored, _ = self._add_candidates_to_pool(
+                pool,
+                candidates,
+                used_media={},
+            )
+            added += restored
+
+        if added:
+            pool["updated_at"] = datetime.now(timezone.utc).isoformat()
+            self.state.write_media_pool(pool)
+        return {
+            "accounts_checked": len(accounts),
+            "accounts_with_cache": accounts_with_cache,
+            "missing_accounts": missing_accounts,
+            "cached_candidates": cached_candidates,
+            "restored_count": added,
+            "pool_items_before": before,
+            "pool_items_after": len(pool["items"]),
+        }
 
     def note_account_used(self, account: str, video_type: VideoType) -> None:
         pool = self._normalise_pool(self.state.read_media_pool())
@@ -660,15 +705,13 @@ class MediaPoolService:
     def _prune_unavailable_items(
         self,
         pool: dict[str, Any],
-        *,
-        used_media: dict[str, Any],
     ) -> int:
         excluded = self.state.read_excluded_accounts()
         kept: list[dict[str, Any]] = []
         for item in pool["items"]:
             account = str(item.get("source_account") or "").strip().lstrip("@").lower()
             path = Path(str(item.get("local_path") or ""))
-            if account in excluded or not path.exists() or self._item_used(item, used_media):
+            if account in excluded or not path.exists():
                 continue
             candidate = self._item_to_candidate(item)
             if candidate.metrics is not None and not self._eligible_types(candidate):
@@ -676,7 +719,7 @@ class MediaPoolService:
             kept.append(item)
         removed = len(pool["items"]) - len(kept)
         if removed:
-            LOGGER.info("Pool cleanup: retiro %d fotos usadas o ya no aptas", removed)
+            LOGGER.info("Pool cleanup: retiro %d fotos ausentes o ya no aptas", removed)
             pool["items"] = kept
         return removed
 
@@ -1006,8 +1049,19 @@ class MediaPoolService:
     def _keys_used(self, keys: list[str], used_media: dict[str, Any]) -> bool:
         return self.state.any_media_used_in_snapshot(keys, used_media)
 
-    def _cached_candidates(self, username: str) -> list[MediaCandidate]:
-        loader = getattr(self.collector, "_load_cached_account", None)
+    def _cached_candidates(
+        self,
+        username: str,
+        *,
+        include_stale: bool = False,
+    ) -> list[MediaCandidate]:
+        loader = (
+            getattr(self.collector, "load_local_account", None)
+            if include_stale
+            else None
+        )
+        if not callable(loader):
+            loader = getattr(self.collector, "_load_cached_account", None)
         if not callable(loader):
             return []
         try:

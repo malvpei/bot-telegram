@@ -35,6 +35,10 @@ class StateStore:
         self.state_dir = state_dir
         self.state_dir.mkdir(parents=True, exist_ok=True)
         self._used_media_path = self.state_dir / "used_media.json"
+        self._used_media_reset_backup_path = (
+            self.state_dir / "used_media_before_reset.json"
+        )
+        self._used_media_reset_marker_path = self.state_dir / "used_media_reset.json"
         self._recent_scripts_path = self.state_dir / "recent_scripts.json"
         self._recent_text_choices_path = self.state_dir / "recent_text_choices.json"
         self._recent_social_choices_path = self.state_dir / "recent_social_choices.json"
@@ -135,6 +139,22 @@ class StateStore:
             used = self._read_json(self._used_media_path, {})
         return used if isinstance(used, dict) else {}
 
+    def reset_used_media(self) -> int:
+        """Make every reserved photo available again, preserving one backup."""
+        with self._exclusive():
+            used = self._read_json(self._used_media_path, {})
+            if not isinstance(used, dict):
+                used = {}
+            reset_count = len(used)
+            if reset_count:
+                self._write_json(self._used_media_reset_backup_path, used)
+            self._write_json(
+                self._used_media_reset_marker_path,
+                {"reset_at": datetime.now(timezone.utc).isoformat()},
+            )
+            self._write_json(self._used_media_path, {})
+        return reset_count
+
     @classmethod
     def any_media_used_in_snapshot(
         cls,
@@ -199,6 +219,9 @@ class StateStore:
     def backfill_story_reference_reservations(self) -> int:
         """Migrate successful R2 type-4 jobs from before global reservations."""
         with self._exclusive():
+            reset_marker = self._read_json(self._used_media_reset_marker_path, {})
+            if isinstance(reset_marker, dict) and reset_marker.get("reset_at"):
+                return 0
             jobs = self._read_json(self._jobs_log_path, [])
             used = self._read_json(self._used_media_path, {})
             if not isinstance(jobs, list):

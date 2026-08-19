@@ -1337,7 +1337,7 @@ def test_pool_exclude_account_removes_items_and_blocks_future_selection():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_refill_prunes_used_items_before_adding_replacement_stock():
+def test_pool_refill_keeps_used_items_indexed_while_adding_replacement_stock():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -1376,9 +1376,88 @@ def test_pool_refill_prunes_used_items_before_adding_replacement_stock():
             item["source_id"] for item in state.read_media_pool()["items"]
         }
 
-        assert summary["pruned"] == 1
-        assert old.source_id not in item_ids
+        assert summary["pruned"] == 0
+        assert old.source_id in item_ids
         assert fresh.source_id in item_ids
+        assert summary["after"]["total"] == 1
+
+        state.reset_used_media()
+
+        assert service.stock_counts(["alpha"])["total"] == 2
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_pool_restore_cached_readds_every_account_without_network_or_limits():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+            pool_target_images=1,
+            pool_refill_max_accounts=1,
+            pool_refill_max_fresh_accounts=1,
+        )
+        state = StateStore(settings.state_dir)
+        existing = _candidate(root, "existing:POST:0", "dhash:1111111111111111")
+        restored = {
+            "alpha": [_candidate(root, "alpha:OLD:0", "dhash:2222222222222222")],
+            "beta": [_candidate(root, "beta:OLD:0", "dhash:4444444444444444")],
+            "gamma": [_candidate(root, "gamma:OLD:0", "dhash:8888888888888888")],
+            "blocked": [
+                _candidate(root, "blocked:OLD:0", "dhash:eeeeeeeeeeeeeeee")
+            ],
+        }
+        service = MediaPoolService(
+            settings,
+            state,
+            MappingCollector(restored),
+            FakePlanSelector(),  # type: ignore[arg-type]
+        )
+        state.write_media_pool(
+            {
+                "version": 1,
+                "cursor_by_type": {VideoType.TYPE_1.value: "existing"},
+                "items": [
+                    service._candidate_to_item(
+                        existing,
+                        [
+                            VideoType.TYPE_1.value,
+                            VideoType.TYPE_2.value,
+                            VideoType.TYPE_3.value,
+                        ],
+                    )
+                ],
+            }
+        )
+        state.exclude_account("blocked")
+
+        summary = service.restore_cached_candidates(
+            ["alpha", "beta", "gamma", "alpha", "blocked"]
+        )
+        pool = state.read_media_pool()
+        item_ids = {item["source_id"] for item in pool["items"]}
+
+        assert summary["accounts_checked"] == 3
+        assert summary["accounts_with_cache"] == 3
+        assert summary["cached_candidates"] == 3
+        assert summary["restored_count"] == 3
+        assert summary["pool_items_before"] == 1
+        assert summary["pool_items_after"] == 4
+        assert item_ids == {
+            existing.source_id,
+            restored["alpha"][0].source_id,
+            restored["beta"][0].source_id,
+            restored["gamma"][0].source_id,
+        }
+        assert pool["cursor_by_type"] == {VideoType.TYPE_1.value: "existing"}
+
+        repeated = service.restore_cached_candidates(["alpha", "beta", "gamma"])
+
+        assert repeated["restored_count"] == 0
+        assert len(state.read_media_pool()["items"]) == 4
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
