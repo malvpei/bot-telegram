@@ -269,10 +269,17 @@ class StateStore:
         self,
         video_type: VideoType,
         language: Language,
+        *,
+        profile: str | None = None,
     ) -> str | None:
         with self._exclusive():
             recent = self._read_json(self._recent_text_choices_path, {})
-        value = recent.get(self._bucket_key(video_type, language))
+        key = (
+            self._profile_text_choice_key(video_type, language, profile)
+            if profile
+            else self._bucket_key(video_type, language)
+        )
+        value = recent.get(key)
         return value if isinstance(value, str) else None
 
     def get_last_shared_text_choice(self, video_type: VideoType) -> str | None:
@@ -286,11 +293,17 @@ class StateStore:
         video_type: VideoType,
         language: Language,
         choice_key: str,
+        *,
+        profile: str | None = None,
     ) -> None:
         with self._exclusive():
             recent = self._read_json(self._recent_text_choices_path, {})
             recent[self._bucket_key(video_type, language)] = choice_key
             recent[self._shared_text_choice_key(video_type)] = choice_key
+            if profile:
+                recent[
+                    self._profile_text_choice_key(video_type, language, profile)
+                ] = choice_key
             self._write_json(self._recent_text_choices_path, recent)
 
     def get_last_social_choice(
@@ -1250,6 +1263,14 @@ class StateStore:
     @staticmethod
     def _shared_text_choice_key(video_type: VideoType) -> str:
         return f"{video_type.value}:shared"
+
+    @staticmethod
+    def _profile_text_choice_key(
+        video_type: VideoType,
+        language: Language,
+        profile: str,
+    ) -> str:
+        return f"{video_type.value}:{language.value}:profile:{profile}"
 
     @staticmethod
     def _normalize_account_name(account: Any) -> str:

@@ -16,7 +16,13 @@ from app.models import (
     TYPE_1_ROLES,
     TYPE_2_ROLES,
     TYPE_3_ROLES,
+    VideoGender,
     VideoType,
+)
+from app.parkez import (
+    PARKEZ_FEMALE_FIXED_IMAGE_NAME,
+    PARKEZ_MALE_FIXED_IMAGE_NAME,
+    PARKEZ_ROLES,
 )
 from app.selector import (
     ImageSelector,
@@ -39,6 +45,16 @@ def temp_workspace():
     _write_sample_image(
         fixed_dir / TYPE_2_TIP3_FIXED_IMAGE_NAME,
         color=(80, 90, 100),
+        landscape=False,
+    )
+    _write_sample_image(
+        fixed_dir / PARKEZ_MALE_FIXED_IMAGE_NAME,
+        color=(20, 80, 180),
+        landscape=False,
+    )
+    _write_sample_image(
+        fixed_dir / PARKEZ_FEMALE_FIXED_IMAGE_NAME,
+        color=(180, 80, 140),
         landscape=False,
     )
     type3_backgrounds = root / "tipo3" / "fondocolores"
@@ -183,6 +199,45 @@ def test_type_2_plan_fixed_tip3_and_hook_requires_face(temp_workspace):
     assert tip3_slide.fixed_asset is True
     assert tip3_slide.media.source_account == "fixed"
     assert tip3_slide.media.source_id == "fixed:tip3_dropradar"
+
+
+def test_parkez_plan_uses_three_unique_people_and_gender_specific_fixed_close(
+    temp_workspace,
+):
+    settings, state = temp_workspace
+    account_dir = settings.downloads_dir / "parkez_person"
+    account_dir.mkdir()
+    candidates = [
+        _make_candidate(account_dir, username="parkez_person", idx=index)
+        for index in range(5)
+    ]
+    for candidate in candidates:
+        candidate.metrics = _metrics_stub(
+            quality=0.82,
+            daylight=0.75,
+            faces=1,
+            is_landscape=False,
+        )
+
+    selector = ImageSelector(settings, state)
+    for gender, expected_name in (
+        (VideoGender.MALE, PARKEZ_MALE_FIXED_IMAGE_NAME),
+        (VideoGender.FEMALE, PARKEZ_FEMALE_FIXED_IMAGE_NAME),
+    ):
+        plan = selector.create_plan(
+            {"parkez_person": candidates},
+            VideoType.PARKEZ,
+            Language.ES,
+            gender=gender,
+        )
+
+        assert [slide.role for slide in plan.slides] == list(PARKEZ_ROLES)
+        assert len({slide.media.source_id for slide in plan.slides[:3]}) == 3
+        assert all(not slide.fixed_asset for slide in plan.slides[:3])
+        assert plan.slides[-1].fixed_asset is True
+        assert plan.slides[-1].media.local_path.name == expected_name
+        assert plan.slides[-1].media.source_id == f"fixed:parkez:{gender.value}"
+        assert all("fixed:parkez" not in key for key in plan.used_media_ids)
 
 
 def test_type_2_rejects_pool_without_visible_people(temp_workspace):

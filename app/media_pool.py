@@ -8,23 +8,37 @@ from typing import Any
 
 from app.config import Settings
 from app.instagram import InstagramCollector
-from app.models import ImageMetrics, Language, MediaCandidate, VideoPlan, VideoType
+from app.models import (
+    ImageMetrics,
+    Language,
+    MediaCandidate,
+    VideoGender,
+    VideoPlan,
+    VideoType,
+)
 from app.selector import ImageSelector
 from app.state import StateStore
 
 
 LOGGER = logging.getLogger(__name__)
 POOL_VERSION = 1
-ALL_VIDEO_TYPES = (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3)
+ALL_VIDEO_TYPES = (
+    VideoType.TYPE_1,
+    VideoType.TYPE_2,
+    VideoType.TYPE_3,
+    VideoType.PARKEZ,
+)
 COMPATIBLE_SOURCE_TYPES_BY_REQUESTED = {
     VideoType.TYPE_1: (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3),
     VideoType.TYPE_2: (VideoType.TYPE_2, VideoType.TYPE_3),
     VideoType.TYPE_3: (VideoType.TYPE_3,),
+    VideoType.PARKEZ: (VideoType.TYPE_2,),
 }
 MIN_POOL_ITEMS_BY_TYPE = {
     VideoType.TYPE_1: 6,
     VideoType.TYPE_2: 4,
     VideoType.TYPE_3: 1,
+    VideoType.PARKEZ: 3,
 }
 POOL_READINESS_CHECK_INTERVAL = 16
 
@@ -216,6 +230,7 @@ class MediaPoolService:
         language: Language,
         *,
         skip_accounts: list[str] | None = None,
+        gender: VideoGender = VideoGender.MALE,
     ) -> tuple[VideoPlan, list[str]]:
         pool = self._normalise_pool(self.state.read_media_pool())
         used_media = self.state.read_used_media()
@@ -236,11 +251,19 @@ class MediaPoolService:
         for account in ordered_accounts:
             tried.append(account)
             try:
-                plan = self.selector.create_plan(
-                    {account: candidates_by_account[account]},
-                    video_type,
-                    language,
-                )
+                if video_type == VideoType.PARKEZ:
+                    plan = self.selector.create_plan(
+                        {account: candidates_by_account[account]},
+                        video_type,
+                        language,
+                        gender=gender,
+                    )
+                else:
+                    plan = self.selector.create_plan(
+                        {account: candidates_by_account[account]},
+                        video_type,
+                        language,
+                    )
             except ValueError as error:
                 last_error = str(error)
                 LOGGER.info("Pool account @%s no viable: %s", account, error)
@@ -883,7 +906,7 @@ class MediaPoolService:
         candidate: MediaCandidate,
         video_type: VideoType,
     ) -> bool:
-        if video_type == VideoType.TYPE_2:
+        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ}:
             return self.selector._is_type_2_user_visible_media(candidate)
         return any(
             self._candidate_matches_type_rules(candidate, source_type)
@@ -966,7 +989,7 @@ class MediaPoolService:
         *,
         include_landscape_exceptions: bool,
     ) -> bool:
-        if video_type == VideoType.TYPE_2:
+        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ}:
             return self.selector._is_type_2_user_visible_media(candidate)
         if not include_landscape_exceptions:
             return not self.selector._is_landscape_media(candidate)

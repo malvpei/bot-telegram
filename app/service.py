@@ -33,12 +33,14 @@ from app.models import (
     TemplateVideoResult,
     TYPE_4_ROLES,
     TYPE_5_ROLES,
+    VideoGender,
     VideoPlan,
     VideoRequest,
     VideoType,
     SlidePlan,
     SlideRole,
 )
+from app.parkez import build_parkez_script, parkez_fixed_image_name
 from app.r2_storage import R2StorageClient
 from app.render import VideoRenderer
 from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
@@ -360,6 +362,15 @@ class VideoCreationService:
                 "Falta la imagen fija obligatoria para el consejo 3 del tipo 2: "
                 f"{type_2_tip3_fixed_path}"
             )
+        for gender in VideoGender:
+            parkez_fixed_path = (
+                self.settings.fixed_assets_dir / parkez_fixed_image_name(gender)
+            )
+            if not parkez_fixed_path.exists():
+                warnings.append(
+                    "Falta la imagen fija obligatoria de ParkEz para "
+                    f"{gender.value}: {parkez_fixed_path}"
+                )
         if not self.settings.fonts_dir.exists():
             LOGGER.info(
                 "No fonts directory at %s; will fall back to system fonts.",
@@ -539,22 +550,29 @@ class VideoCreationService:
         self._assert_single_source_account(plan)
 
         try:
-            script_package = self.script_generator.generate(
-                request.video_type,
-                request.language,
-                gender=request.gender,
-                lowercase_text=request.lowercase_text,
-            )
+            if request.video_type == VideoType.PARKEZ:
+                script_package = build_parkez_script(self.state, request.gender)
+            else:
+                script_package = self.script_generator.generate(
+                    request.video_type,
+                    request.language,
+                    gender=request.gender,
+                    lowercase_text=request.lowercase_text,
+                )
 
             # Bind text to slides by role so order changes never desync them.
             for slide in plan.slides:
                 slide.text = script_package.slides_by_role[slide.role]
 
             job_dir = self._job_output_dir(job_id, request.user_id)
+            separate_slide_text = (
+                request.separate_slide_text
+                or request.video_type == VideoType.PARKEZ
+            )
             video_path, script_path = self._render_outputs(
                 plan,
                 job_dir,
-                embed_slide_text=not request.separate_slide_text,
+                embed_slide_text=not separate_slide_text,
             )
 
             self.state.set_last_signature(
@@ -565,6 +583,11 @@ class VideoCreationService:
                     request.video_type,
                     request.language,
                     script_package.choice_key,
+                    profile=(
+                        request.gender.value
+                        if request.video_type == VideoType.PARKEZ
+                        else None
+                    ),
                 )
             if script_package.social_choice_key:
                 self.state.set_last_social_choice(
@@ -630,7 +653,7 @@ class VideoCreationService:
             slides=list(plan.slides),
             pool_remaining=pool_remaining,
             pool_low_stock=pool_low_stock,
-            separate_slide_text=request.separate_slide_text,
+            separate_slide_text=separate_slide_text,
         )
 
     def _create_advice_card_locked(self, request: VideoRequest) -> GenerationResult:
@@ -1297,12 +1320,21 @@ class VideoCreationService:
     ) -> tuple[VideoPlan, list[str], str]:
         if hasattr(self, "pool"):
             try:
-                plan, tried = self.pool.select_plan(
-                    usernames,
-                    request.video_type,
-                    request.language,
-                    skip_accounts=request.skip_accounts,
-                )
+                if request.video_type == VideoType.PARKEZ:
+                    plan, tried = self.pool.select_plan(
+                        usernames,
+                        request.video_type,
+                        request.language,
+                        skip_accounts=request.skip_accounts,
+                        gender=request.gender,
+                    )
+                else:
+                    plan, tried = self.pool.select_plan(
+                        usernames,
+                        request.video_type,
+                        request.language,
+                        skip_accounts=request.skip_accounts,
+                    )
                 return plan, tried, "pool"
             except ValueError as error:
                 LOGGER.info(
@@ -1364,9 +1396,19 @@ class VideoCreationService:
                 collected_by_account[username] = candidates
 
             try:
-                plan = self.selector.create_plan(
-                    {username: candidates}, request.video_type, request.language
-                )
+                if request.video_type == VideoType.PARKEZ:
+                    plan = self.selector.create_plan(
+                        {username: candidates},
+                        request.video_type,
+                        request.language,
+                        gender=request.gender,
+                    )
+                else:
+                    plan = self.selector.create_plan(
+                        {username: candidates},
+                        request.video_type,
+                        request.language,
+                    )
                 LOGGER.info(
                     "Selected random viable account @%s after %d attempt(s)",
                     plan.chosen_account,
@@ -1698,6 +1740,13 @@ class VideoCreationService:
         for slide in plan.slides:
             source_path = slide.media.local_path
             if not source_path.exists():
+                continue
+            if (
+                plan.video_type == VideoType.PARKEZ
+                and slide.role == SlideRole.PARKEZ_PROMO
+            ):
+                # The user supplied these clean closing images explicitly and
+                # expects that exact asset, not a resized or recompressed copy.
                 continue
             out_path = slides_dir / f"slide_{slide.index:02d}.jpg"
             try:

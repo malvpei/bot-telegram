@@ -12,6 +12,7 @@ class VideoType(str, Enum):
     TYPE_4 = "4"
     TYPE_5 = "5"
     ADVICE = "advice"
+    PARKEZ = "parkez"
 
 
 class VideoGender(str, Enum):
@@ -53,6 +54,7 @@ class SlideRole(str, Enum):
     TYPE_5_CLIPPING = "type_5_clipping"
     TYPE_5_AI_DROPSHIPPING = "type_5_ai_dropshipping"
     ADVICE_CARD = "advice_card"
+    PARKEZ_PROMO = "parkez_promo"
 
 
 TYPE_1_ROLES: tuple[SlideRole, ...] = (

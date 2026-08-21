@@ -31,10 +31,12 @@ from app.models import (
     TYPE_1_ROLES,
     TYPE_2_ROLES,
     TYPE_3_ROLES,
+    VideoGender,
     VideoPlan,
     VideoType,
 )
 from app.opencv_compat import build_cascade, build_people_detector
+from app.parkez import PARKEZ_ROLES, parkez_fixed_image_name
 from app.state import StateStore
 
 
@@ -142,6 +144,7 @@ class ImageSelector:
         self._people_detector = build_people_detector()
         self._fixed_media_cache: MediaCandidate | None = None
         self._type_2_tip3_fixed_media_cache: MediaCandidate | None = None
+        self._parkez_fixed_media_cache: dict[VideoGender, MediaCandidate] = {}
         self._type_3_backgrounds_cache: tuple[MediaCandidate, ...] | None = None
         self._used_media_snapshot: dict[str, object] | None = None
 
@@ -154,6 +157,8 @@ class ImageSelector:
         catalog: dict[str, list[MediaCandidate]],
         video_type: VideoType,
         language: Language,
+        *,
+        gender: VideoGender = VideoGender.MALE,
     ) -> VideoPlan:
         previous_snapshot = self._used_media_snapshot
         snapshot = self.state.read_used_media()
@@ -181,6 +186,12 @@ class ImageSelector:
                 return self._create_type_2_plan(available_catalog, language)
             if video_type == VideoType.TYPE_3:
                 return self._create_type_3_plan(available_catalog, language)
+            if video_type == VideoType.PARKEZ:
+                return self._create_parkez_plan(
+                    available_catalog,
+                    language,
+                    gender,
+                )
             raise ValueError(
                 f"El tipo {video_type.value} no usa selector de Instagram."
             )
@@ -621,6 +632,70 @@ class ImageSelector:
     # ------------------------------------------------------------------
     # Helpers — composition
     # ------------------------------------------------------------------
+
+    def _create_parkez_plan(
+        self,
+        catalog: dict[str, list[MediaCandidate]],
+        language: Language,
+        gender: VideoGender,
+    ) -> VideoPlan:
+        fixed_image = self._build_parkez_fixed_media(gender)
+        photo_roles = PARKEZ_ROLES[:-1]
+        ranked: list[tuple[float, VideoPlan]] = []
+
+        for account, raw_candidates in catalog.items():
+            available = [
+                candidate
+                for candidate in raw_candidates
+                if not self._is_candidate_used(candidate)
+                and self._is_type_2_user_visible_media(candidate)
+            ]
+            if len(available) < len(photo_roles):
+                continue
+
+            picked: dict[SlideRole, MediaCandidate] = {}
+            role_scores: dict[SlideRole, float] = {}
+            for role in photo_roles:
+                best = self._pick_best_with_post_preference(
+                    available,
+                    picked=picked,
+                    score_fn=lambda media, current_role=role: self._score_type_2(
+                        media,
+                        current_role,
+                    ),
+                )
+                if best is None:
+                    break
+                picked[role] = best.media
+                role_scores[role] = best.score
+
+            if len(picked) != len(photo_roles):
+                continue
+
+            slides = self._build_slide_plans(
+                PARKEZ_ROLES,
+                picked=picked,
+                fixed_role=SlideRole.PARKEZ_PROMO,
+                fixed_media=fixed_image,
+            )
+            plan = VideoPlan(
+                chosen_account=account,
+                video_type=VideoType.PARKEZ,
+                language=language,
+                slides=slides,
+                used_media_ids=self._reservation_keys(picked.values()),
+                fallback_accounts=[],
+            )
+            ranked.append((self._plan_score(role_scores, VideoType.PARKEZ), plan))
+
+        if not ranked:
+            label = "mujer" if gender == VideoGender.FEMALE else "hombre"
+            raise ValueError(
+                "No encontré tres fotos nuevas con una persona visible para "
+                f"crear el carrusel ParkEz de {label}."
+            )
+        ranked.sort(key=lambda entry: entry[0], reverse=True)
+        return ranked[0][1]
 
     def _create_type_3_plan(
         self,
@@ -2034,6 +2109,35 @@ class ImageSelector:
         )
         candidate.metrics = self._analyze_image(candidate)
         self._type_2_tip3_fixed_media_cache = candidate
+        return candidate
+
+    def _build_parkez_fixed_media(
+        self,
+        gender: VideoGender,
+    ) -> MediaCandidate:
+        cached = self._parkez_fixed_media_cache.get(gender)
+        if cached is not None:
+            return cached
+
+        fixed_path = self.settings.fixed_assets_dir / parkez_fixed_image_name(gender)
+        if not fixed_path.exists():
+            raise FileNotFoundError(
+                "Falta la imagen fija de ParkEz en "
+                f"{fixed_path}."
+            )
+        with Image.open(fixed_path) as fixed_image:
+            width, height = fixed_image.size
+        candidate = MediaCandidate(
+            source_account="fixed",
+            source_id=f"fixed:parkez:{gender.value}",
+            local_path=fixed_path,
+            permalink=f"fixed://parkez/{gender.value}",
+            caption=fixed_path.name,
+            width=width,
+            height=height,
+            created_at="fixed",
+        )
+        self._parkez_fixed_media_cache[gender] = candidate
         return candidate
 
     def _type_3_backgrounds(self) -> tuple[MediaCandidate, ...]:

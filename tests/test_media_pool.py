@@ -6,10 +6,18 @@ from pathlib import Path
 from uuid import uuid4
 
 from PIL import Image
+import pytest
 
 from app.config import get_settings
 from app.media_pool import MediaPoolService
-from app.models import ImageMetrics, Language, MediaCandidate, VideoPlan, VideoType
+from app.models import (
+    ImageMetrics,
+    Language,
+    MediaCandidate,
+    VideoGender,
+    VideoPlan,
+    VideoType,
+)
 from app.selector import ImageSelector
 from app.state import StateStore
 
@@ -82,6 +90,28 @@ class TypeCompatibilitySelector(FakePlanSelector):
 
     def _score_type_3_hook(self, candidate):
         return 1.0 if candidate.source_id.endswith(":TYPE3:0") else 0.0
+
+
+class ParkEzSelector(FakePlanSelector):
+    def __init__(self) -> None:
+        self.genders: list[VideoGender] = []
+
+    def create_plan(self, catalog, video_type, language, *, gender):
+        self.genders.append(gender)
+        account = next(iter(catalog))
+        candidates = catalog[account]
+        if len(candidates) < 3:
+            raise ValueError("need three")
+        return VideoPlan(
+            chosen_account=account,
+            video_type=video_type,
+            language=language,
+            slides=[],
+            used_media_ids=[candidate.source_id for candidate in candidates[:3]],
+        )
+
+    def _score_type_3_hook(self, candidate):
+        return 0.0
 
 
 class CachedOnlyCollector:
@@ -661,6 +691,74 @@ def test_pool_select_plan_tries_all_local_accounts_without_attempt_limit():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_pool_selects_three_type_2_compatible_photos_for_parkez_and_forwards_gender():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            data_dir=root,
+            state_dir=root / "state",
+            pool_low_stock_threshold=1,
+        )
+        state = StateStore(settings.state_dir)
+        items = []
+        for index in range(3):
+            image_path = root / f"alpha_{index}.jpg"
+            Image.new("RGB", (32, 48), (10 + index, 20, 30)).save(image_path)
+            items.append(
+                _pool_item(
+                    "alpha",
+                    f"alpha:POST{index}:0",
+                    image_path,
+                    eligible_types=[VideoType.TYPE_2.value],
+                )
+            )
+        state.write_media_pool(
+            {"version": 1, "cursor_by_type": {}, "items": items}
+        )
+        selector = ParkEzSelector()
+        service = MediaPoolService(
+            settings,
+            state,
+            None,  # type: ignore[arg-type]
+            selector,  # type: ignore[arg-type]
+        )
+
+        plan, tried = service.select_plan(
+            ["alpha"],
+            VideoType.PARKEZ,
+            Language.ES,
+            gender=VideoGender.FEMALE,
+        )
+
+        assert tried == ["alpha"]
+        assert len(plan.used_media_ids) == 3
+        assert selector.genders == [VideoGender.FEMALE]
+        counts = service.stock_counts(["alpha"])
+        assert counts["by_type"][VideoType.PARKEZ.value] == 3
+        assert not service.is_low_stock(VideoType.PARKEZ, ["alpha"])
+        audit = service.account_audit(["alpha"])
+        assert audit["accounts"][0]["status"] == "ready"
+        assert audit["accounts"][0]["viable_by_type"] == {
+            VideoType.TYPE_1.value: False,
+            VideoType.TYPE_2.value: False,
+            VideoType.TYPE_3.value: False,
+            VideoType.PARKEZ.value: True,
+        }
+
+        state.mark_media_used(plan.used_media_ids, "parkez-job")
+        with pytest.raises(ValueError, match="No hay una cuenta del pool"):
+            service.select_plan(
+                ["alpha"],
+                VideoType.PARKEZ,
+                Language.ES,
+                gender=VideoGender.MALE,
+            )
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_pool_select_plan_continues_past_fast_account_batch():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -1144,6 +1242,7 @@ def test_pool_eligibility_flows_from_higher_types_to_lower_types():
         assert service._eligible_types(type_2_photo) == [
             VideoType.TYPE_1.value,
             VideoType.TYPE_2.value,
+            VideoType.PARKEZ.value,
         ]
         assert service._eligible_types(type_3_photo) == [
             VideoType.TYPE_1.value,

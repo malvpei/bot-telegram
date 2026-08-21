@@ -122,18 +122,23 @@ def run_bot() -> None:
     wizard_handler = ConversationHandler(
         entry_points=[
             CommandHandler("create", create_command),
+            CommandHandler("createp", createp_command),
             CommandHandler("wizard", create_command),
             CommandHandler("story_carousel", story_carousel_command),
         ],
         states={
             GENDER_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:4|5|advice)$"),
-                CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:"),
+                CallbackQueryHandler(parkez_gender, pattern=r"^parkez:gender:(?:female|male)$"),
+                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:5|advice)$"),
+                CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:male$"),
             ],
             TYPE_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:"),
+                CallbackQueryHandler(
+                    wizard_type,
+                    pattern=r"^wizard:type:(?:1|2|3|5|advice)$",
+                ),
             ],
             DELIVERY_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
@@ -849,11 +854,11 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
         "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
         "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
-        "/story_carousel [es|en] - crear una historia IA desde una foto enviada al bot\n"
         "/batch [cantidad] - crear ahora un lote rotativo (5 por defecto)\n"
         "/schedule 5 08:00 17:00 - programar lotes diarios\n"
         "/schedule off - desactivar la programacion\n"
-        "/create — elegir tipo e idioma y generar el video\n"
+        "/create — crear contenido con fotos de hombres\n"
+        "/createp — crear un carrusel promocional de ParkEz\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
         "/cancel — cancelar el wizard actual"
@@ -946,8 +951,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     message = (
         "Flujo:\n"
         "1. /create\n"
-        "2. elige Hombres o Mujeres\n"
-        "3. elige Tipo 1, Tipo 2, Tipo 3, Tipo 4, Tipo 5 o la Historia IA\n"
+        "2. elige el tipo de contenido\n"
+        "3. elige Tipo 1, Tipo 2, Tipo 3, Tipo 4 o Tipo 5\n"
         "4. elige si quieres texto incrustado en la imagen o separado\n"
         "5. elige Español o English\n"
         "6. elige si quieres textos normales o todo en minúscula\n"
@@ -958,11 +963,13 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "3 = hook + herramientas para empezar dropshipping en 2026\n"
         "4 = cuatro consejos rotativos sobre fondo negro, blanco o ilustrado\n"
         "5 = comparación de negocios con cuatro fotos tomadas de una cola R2\n"
-        "IA = historia vertical de 6 escenas + la foto original, con el texto "
-        "compuesto fuera de la IA para que siempre se lea bien\n\n"
-        "Las cuentas de hombres se leen de accounts.txt y las de mujeres de "
-        "accounts_women.txt (una por línea). Para cambiarlas edita el archivo "
-        "y guarda; se releen en cada /create.\n\n"
+        "\nParkEz:\n"
+        "1. /createp\n"
+        "2. elige Mujer u Hombre\n"
+        "3. el bot entrega tres fotos del banco correspondiente y un cierre "
+        "fijo de ParkEz, siempre con los cuatro textos separados\n\n"
+        "Las cuentas de hombres se leen de accounts.txt. Las de mujeres se "
+        "leen de accounts_women.txt para el flujo /createp (una por línea).\n\n"
         "/create usa primero el pool local si hay fotos aptas. "
         "Si no hay stock, busca dinamicamente en las cuentas y guarda "
         "las fotos validas sobrantes para acelerar los siguientes videos. "
@@ -1457,7 +1464,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         for gender, accounts in accounts_by_gender.items()
     }
 
-    if not any(accounts_by_gender.values()):
+    if not accounts_by_gender[VideoGender.MALE]:
         keyboard = InlineKeyboardMarkup(
             [
                 [
@@ -1476,12 +1483,6 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                         callback_data="wizard:type:advice",
                     ),
                     InlineKeyboardButton(
-                        "Historia IA desde R2",
-                        callback_data="wizard:type:4",
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
                         "Tipo 5 - Negocios",
                         callback_data="wizard:type:5",
                     ),
@@ -1492,7 +1493,7 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             (
                 "Que quieres crear?\n\n"
                 "No encontre cuentas cargadas, asi que puedes crear el video "
-                "de herramientas R2, el Tipo 4, el Tipo 5 o la historia IA desde R2."
+                "de herramientas R2, el Tipo 4 o el Tipo 5."
             ),
             reply_markup=keyboard,
         )
@@ -1515,22 +1516,12 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"Hombres ({len(accounts_by_gender[VideoGender.MALE])})",
                     callback_data="wizard:gender:male",
                 ),
-                InlineKeyboardButton(
-                    f"Mujeres ({len(accounts_by_gender[VideoGender.FEMALE])})",
-                    callback_data="wizard:gender:female",
-                ),
             ],
             [
                 InlineKeyboardButton(
                     "Tipo 4 - Consejos",
                     callback_data="wizard:type:advice",
                 ),
-                InlineKeyboardButton(
-                    "Historia IA desde R2",
-                    callback_data="wizard:type:4",
-                ),
-            ],
-            [
                 InlineKeyboardButton(
                     "Tipo 5 - Negocios",
                     callback_data="wizard:type:5",
@@ -1543,6 +1534,81 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         reply_markup=keyboard,
     )
     return GENDER_STATE
+
+
+async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not await _ensure_allowed(update):
+        return ConversationHandler.END
+
+    _clear_wizard_state(context)
+    accounts_by_gender = _load_accounts_by_gender(get_settings())
+    context.user_data["accounts_by_gender"] = {
+        gender.value: accounts
+        for gender, accounts in accounts_by_gender.items()
+    }
+    keyboard = InlineKeyboardMarkup(
+        [
+            [
+                InlineKeyboardButton(
+                    "Mujer",
+                    callback_data="parkez:gender:female",
+                ),
+                InlineKeyboardButton(
+                    "Hombre",
+                    callback_data="parkez:gender:male",
+                ),
+            ]
+        ]
+    )
+    await update.effective_message.reply_text(
+        "¿Qué tipo de contenido de ParkEz quieres crear?",
+        reply_markup=keyboard,
+    )
+    return GENDER_STATE
+
+
+async def parkez_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    try:
+        gender = VideoGender(query.data.rsplit(":", maxsplit=1)[-1])
+    except ValueError:
+        await query.edit_message_text(
+            "Opción no reconocida. Lanza /createp otra vez."
+        )
+        return ConversationHandler.END
+
+    accounts_by_gender = context.user_data.get("accounts_by_gender")
+    accounts = (
+        list(accounts_by_gender.get(gender.value) or [])
+        if isinstance(accounts_by_gender, dict)
+        else []
+    )
+    if not accounts:
+        path = _accounts_path_for_gender(get_settings(), gender)
+        await query.edit_message_text(
+            f"No hay cuentas de {_gender_label_plural(gender)} en {path}. "
+            "Añade enlaces, guarda el archivo y lanza /createp otra vez."
+        )
+        _clear_wizard_state(context)
+        return ConversationHandler.END
+
+    await query.edit_message_text(
+        "Preparando el carrusel ParkEz con tres fotos limpias y el texto separado."
+    )
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.PARKEZ,
+        language=Language.ES,
+        account_inputs=accounts,
+        gender=gender,
+        lowercase_text=False,
+        separate_slide_text=True,
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
 
 
 async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1586,12 +1652,6 @@ async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
                     "Tipo 4 - Consejos",
                     callback_data="wizard:type:advice",
                 ),
-                InlineKeyboardButton(
-                    "Historia IA",
-                    callback_data="wizard:type:4",
-                ),
-            ],
-            [
                 InlineKeyboardButton(
                     "Tipo 5 - Negocios",
                     callback_data="wizard:type:5",
@@ -2092,6 +2152,11 @@ async def _execute_job(
                 "fija de Dropradar."
             )
         )
+    elif request.video_type == VideoType.PARKEZ:
+        status_text = (
+            "Estoy seleccionando tres fotos limpias y preparando el cierre "
+            "fijo de ParkEz."
+        )
     else:
         status_text = (
             "Estoy seleccionando imagenes. Uso el pool si hay stock; "
@@ -2140,6 +2205,12 @@ async def _execute_job(
                 "Entrega: 4 imágenes limpias + textos separados"
             )
         )
+    elif result.video_type == VideoType.PARKEZ:
+        header = (
+            "Carrusel ParkEz listo\n"
+            f"Protagonista: {_gender_label_plural(request.gender)}\n"
+            "Entrega: 4 imágenes limpias + 4 textos separados"
+        )
     else:
         header = (
             f"Cuenta elegida: @{result.chosen_account}\n"
@@ -2175,6 +2246,7 @@ async def _execute_job(
             VideoType.TYPE_4,
             VideoType.TYPE_5,
             VideoType.ADVICE,
+            VideoType.PARKEZ,
         }:
             return
         context.user_data["repeat_request"] = {

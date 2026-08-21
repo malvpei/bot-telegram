@@ -6,3 +6,7 @@ Puedes dejarla en esta ruta:
 O indicar otra ubicación en el `.env` usando:
 `FIXED_IMAGE_PATH=C:\ruta\hacia\imagen6.png`
 
+El flujo `/createp` usa además dos cierres fijos de ParkEz:
+
+- `parkez_male.png` para Hombre.
+- `parkez_female.png` para Mujer.

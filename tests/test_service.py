@@ -13,7 +13,16 @@ import pytest
 
 from app.advice_cards import AdviceBackground
 from app.config import get_settings
-from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoRequest, VideoType
+from app.models import (
+    Language,
+    MediaCandidate,
+    SlidePlan,
+    SlideRole,
+    VideoGender,
+    VideoPlan,
+    VideoRequest,
+    VideoType,
+)
 from app.r2_storage import R2Object
 from app.service import TYPE_5_DROPRADAR_FIXED_IMAGE_NAME, VideoCreationService
 from app.state import StateStore
@@ -934,6 +943,126 @@ def test_type_5_uses_three_random_clean_photos_and_rotates_social_copy(monkeypat
 
         assert second.social_copy.title != result.social_copy.title
         assert second.social_copy.description != result.social_copy.description
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_parkez_binds_four_texts_but_renders_every_image_clean():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        settings = replace(
+            get_settings(),
+            root_dir=root,
+            data_dir=root,
+            outputs_dir=root / "outputs",
+            state_dir=root / "state",
+            width=72,
+            height=128,
+        )
+        source_media = []
+        for index in range(1, 4):
+            path = root / f"source_{index}.jpg"
+            Image.new("RGB", (90, 160), (index * 20, 40, 60)).save(path)
+            source_media.append(
+                MediaCandidate(
+                    source_account="alpha",
+                    source_id=f"alpha:{index}",
+                    local_path=path,
+                    permalink="",
+                    caption="",
+                    width=90,
+                    height=160,
+                    created_at="",
+                )
+            )
+        fixed_path = root / "parkez_female.png"
+        Image.new("RGB", (90, 120), (180, 80, 140)).save(fixed_path)
+        fixed_media = MediaCandidate(
+            source_account="fixed",
+            source_id="fixed:parkez:female",
+            local_path=fixed_path,
+            permalink="",
+            caption=fixed_path.name,
+            width=90,
+            height=120,
+            created_at="fixed",
+        )
+
+        class ParkEzCollector:
+            def collect_one(self, username, *, max_posts=None):
+                assert username == "alpha"
+                return list(source_media)
+
+        class ParkEzSelector:
+            def __init__(self):
+                self.genders = []
+
+            def create_plan(self, catalog, video_type, language, *, gender):
+                self.genders.append(gender)
+                roles = (
+                    SlideRole.HOOK,
+                    SlideRole.TIP1,
+                    SlideRole.TIP2,
+                    SlideRole.PARKEZ_PROMO,
+                )
+                media = [*source_media, fixed_media]
+                return VideoPlan(
+                    chosen_account="alpha",
+                    video_type=video_type,
+                    language=language,
+                    slides=[
+                        SlidePlan(
+                            index=index,
+                            role=role,
+                            text="",
+                            media=item,
+                            fixed_asset=index == 4,
+                        )
+                        for index, (role, item) in enumerate(
+                            zip(roles, media, strict=True),
+                            start=1,
+                        )
+                    ],
+                    used_media_ids=[item.source_id for item in source_media],
+                )
+
+        selector = ParkEzSelector()
+        renderer = FakeRenderer()
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.collector = ParkEzCollector()
+        service.selector = selector
+        service.renderer = renderer
+
+        result = service._create_video_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=1,
+                video_type=VideoType.PARKEZ,
+                language=Language.ES,
+                account_inputs=["alpha"],
+                gender=VideoGender.FEMALE,
+                separate_slide_text=False,
+            )
+        )
+
+        assert selector.genders == [VideoGender.FEMALE]
+        assert len(result.slides) == 4
+        assert result.slides[-1].media.source_id == "fixed:parkez:female"
+        assert all(slide.text for slide in result.slides)
+        assert "ParkEz" in result.slides[-1].text
+        assert result.social_copy.messages == []
+        assert result.separate_slide_text is True
+        assert renderer.render_slide_still_texts == ["", "", ""]
+        assert result.slides[-1].media.local_path == fixed_path
+        assert result.slides[-1].media.width == 90
+        assert result.slides[-1].media.height == 120
+        assert service.state.any_media_used(
+            [item.source_id for item in source_media]
+        )
+        assert not service.state.is_media_used("fixed:parkez:female")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

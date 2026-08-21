@@ -2,7 +2,7 @@
 
 Este proyecto monta un bot de Telegram que:
 
-- lee un archivo local `accounts.txt` con las cuentas de Instagram a usar
+- lee `accounts.txt` y `accounts_women.txt` con las cuentas de Instagram a usar
 - pregunta tipo de video e idioma mediante un wizard corto
 - descarga una vez una biblioteca local por cuenta y luego selecciona desde disco
   (sin reutilizar imágenes entre videos, salvo `imagen6.png`)
@@ -10,6 +10,8 @@ Este proyecto monta un bot de Telegram que:
 - genera el texto en español o en inglés
 - evita repetir el mismo guion seguido y mantiene un historial de firmas
 - renderiza un video vertical `.mp4` listo para subir
+- crea carruseles promocionales de ParkEz con `/createp`, siempre con el texto
+  separado de las imágenes
 
 ## Lo que hace el pipeline
 
@@ -61,6 +63,8 @@ app/
   bot.py         — handlers del bot, error handler que responde al chat
 assets/
   fixed/imagen6.png      — imagen fija obligatoria
+  fixed/parkez_male.png  — cierre limpio de ParkEz para Hombre
+  fixed/parkez_female.png — cierre limpio de ParkEz para Mujer
   fonts/*.ttf            — opcional, fuentes preferidas para el render
 data/
   downloads/             — cache de imágenes por cuenta
@@ -85,6 +89,8 @@ Coloca la imagen fija:
 
 ```
 assets/fixed/imagen6.png
+assets/fixed/parkez_male.png
+assets/fixed/parkez_female.png
 ```
 
 (o indica otra ruta absoluta en `FIXED_IMAGE_PATH`).
@@ -106,6 +112,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `INSTAGRAM_SESSION_PATH` | `data/state/instagram_session` | session file de instaloader |
 | `FIXED_IMAGE_PATH` | `assets/fixed/imagen6.png` | ubicación de imagen6 |
 | `ACCOUNTS_FILE` | `accounts.txt` | archivo con cuentas (una por línea) |
+| `WOMEN_ACCOUNTS_FILE` | `accounts_women.txt` | cuentas femeninas usadas por `/createp` |
 | `MAX_POSTS_PER_ACCOUNT` | 100 | posts con foto a escanear por cuenta |
 | `DYNAMIC_PICK_MAX_POSTS_PER_ACCOUNT` | 24 | posts maximos por cuenta cuando `/create` cae a busqueda dinamica fuera del pool |
 | `MAX_URLS_PER_JOB` | 8 | URLs máximas por job (del archivo) |
@@ -156,6 +163,7 @@ el bot.
 /download_pool — rellena el pool precargado de fotos aptas
 /pool         — muestra el stock del pool por tipo y cuenta
 /create       — lanza el wizard (tipo → idioma → render)
+/createp      — crea un carrusel ParkEz para Mujer u Hombre
 /wizard       — alias de /create
 /cancel       — cancela el wizard en curso
 ```
@@ -165,7 +173,14 @@ cuentas de Instagram. Rota entre fondo negro, fondo blanco y un diseño
 ilustrado con tarjetas e iconos de dropshipping. También rota cuatro guiones en
 español e inglés; el cuarto consejo siempre recomienda Dropradar. Cada entrega
 incluye fuera de la imagen la frase de apertura correspondiente al idioma.
-La **Historia IA** continúa disponible como una opción independiente.
+La Historia IA no aparece como opción dentro de `/create`.
+
+El flujo **/createp** pregunta si el contenido será de Mujer u Hombre. Elige
+tres fotos nuevas de una sola cuenta del banco correspondiente y añade como
+cuarta imagen el cierre limpio de ParkEz del perfil elegido. Entrega el hook,
+dos consejos y la promoción de ParkEz como cuatro mensajes independientes;
+ningún texto se incrusta en las fotos. Los packs de copy rotan y no repiten el
+mismo pack en dos ejecuciones consecutivas del mismo perfil.
 
 El **Tipo 5** toma directamente cuatro imágenes diferentes del prefijo R2
 `tipo4/imagenstipo4`, las recorre con una cola persistente independiente y
@@ -377,5 +392,3 @@ python -m pytest tests
 - Revisar `script.txt`: slide 6 tipo 1 debe decir `Fuente: fixed` y el
   texto debe mencionar Dropradar; slide 4 tipo 2 idem para el consejo 3.
 - En Linux/Docker, dejar una fuente en `assets/fonts/` antes de renderizar.
-#   b o t - t e l e g r a m  
- 
