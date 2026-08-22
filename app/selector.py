@@ -1908,7 +1908,7 @@ class ImageSelector:
                 self._score_type_1(media, SlideRole.OCTOBER),
                 self._score_type_1(media, SlideRole.MARCH),
             )
-        if video_type == VideoType.TYPE_2:
+        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ}:
             return max(
                 self._score_type_2(media, SlideRole.HOOK),
                 self._score_type_2(media, SlideRole.TIP1),
@@ -1932,7 +1932,7 @@ class ImageSelector:
                 self._score_type_1(media, SlideRole.OCTOBER),
                 self._score_type_1(media, SlideRole.MARCH),
             )
-        if video_type == VideoType.TYPE_2:
+        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ}:
             if not self._is_type_2_user_visible_media(media):
                 return 0.0
             return max(

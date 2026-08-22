@@ -24,6 +24,11 @@ PARKEZ_ROLES: tuple[SlideRole, ...] = (
     SlideRole.PARKEZ_PROMO,
 )
 
+PARKEZ_HOOK_BY_GENDER: dict[VideoGender, str] = {
+    VideoGender.FEMALE: "Cómo bajar el cortisol con 3 sencillos tips 😉",
+    VideoGender.MALE: "Trucos de vida que deberían ser ilegales 🤫",
+}
+
 
 _PARKEZ_TEXT_VARIANTS: dict[
     VideoGender,
@@ -33,7 +38,7 @@ _PARKEZ_TEXT_VARIANTS: dict[
         (
             "female-a",
             {
-                SlideRole.HOOK: "Cómo bajar el cortisol con 3 sencillos tips 😉",
+                SlideRole.HOOK: PARKEZ_HOOK_BY_GENDER[VideoGender.FEMALE],
                 SlideRole.TIP1: (
                     "Cuando sientas estrés mastica chicle, esto hace que tu "
                     "cuerpo se relaje inconscientemente."
@@ -51,10 +56,7 @@ _PARKEZ_TEXT_VARIANTS: dict[
         (
             "female-b",
             {
-                SlideRole.HOOK: (
-                    "3 trucos sencillos para bajar revoluciones cuando notas "
-                    "el estrés ✨"
-                ),
+                SlideRole.HOOK: PARKEZ_HOOK_BY_GENDER[VideoGender.FEMALE],
                 SlideRole.TIP1: (
                     "Prueba el suspiro fisiológico: dos inhalaciones cortas por "
                     "la nariz y una exhalación larga por la boca."
@@ -72,9 +74,7 @@ _PARKEZ_TEXT_VARIANTS: dict[
         (
             "female-c",
             {
-                SlideRole.HOOK: (
-                    "Si hoy vas a mil, guarda estos 3 tips para volver a la calma 🤍"
-                ),
+                SlideRole.HOOK: PARKEZ_HOOK_BY_GENDER[VideoGender.FEMALE],
                 SlideRole.TIP1: (
                     "Nombra cinco cosas que ves, cuatro que sientes y tres que "
                     "oyes para volver al presente."
@@ -92,9 +92,7 @@ _PARKEZ_TEXT_VARIANTS: dict[
         (
             "female-d",
             {
-                SlideRole.HOOK: (
-                    "3 formas rápidas de resetearte cuando el estrés se dispara 😌"
-                ),
+                SlideRole.HOOK: PARKEZ_HOOK_BY_GENDER[VideoGender.FEMALE],
                 SlideRole.TIP1: (
                     "Aprieta todos los músculos durante cinco segundos y suéltalos "
                     "de golpe; notar el contraste ayuda a relajar el cuerpo."
@@ -114,7 +112,7 @@ _PARKEZ_TEXT_VARIANTS: dict[
         (
             "male-a",
             {
-                SlideRole.HOOK: "Trucos de vida que deberían ser ilegales 🤫",
+                SlideRole.HOOK: PARKEZ_HOOK_BY_GENDER[VideoGender.MALE],
                 SlideRole.TIP1: (
                     "Si sientes ansiedad, lávate las manos con agua caliente. "
                     "Engañarás a tu cerebro pensando que estás a salvo."
@@ -132,7 +130,7 @@ _PARKEZ_TEXT_VARIANTS: dict[
         (
             "male-b",
             {
-                SlideRole.HOOK: "3 trucos cotidianos que parecen hacer trampa 👀",
+                SlideRole.HOOK: PARKEZ_HOOK_BY_GENDER[VideoGender.MALE],
                 SlideRole.TIP1: (
                     "Si necesitas concentrarte, mastica un chicle de un sabor que "
                     "no uses a menudo y conviértelo en tu señal para entrar en modo foco."
@@ -150,9 +148,7 @@ _PARKEZ_TEXT_VARIANTS: dict[
         (
             "male-c",
             {
-                SlideRole.HOOK: (
-                    "Trucos simples que te solucionan más de lo que parece 🤫"
-                ),
+                SlideRole.HOOK: PARKEZ_HOOK_BY_GENDER[VideoGender.MALE],
                 SlideRole.TIP1: (
                     "Si una canción no sale de tu cabeza, escúchala hasta el final. "
                     "Cerrar la melodía puede ayudar a cortar el bucle."
@@ -170,7 +166,7 @@ _PARKEZ_TEXT_VARIANTS: dict[
         (
             "male-d",
             {
-                SlideRole.HOOK: "3 trucos para hacerte la vida un poco más fácil 🧠",
+                SlideRole.HOOK: PARKEZ_HOOK_BY_GENDER[VideoGender.MALE],
                 SlideRole.TIP1: (
                     "Si dudas entre dos opciones, lanza una moneda: mientras está "
                     "en el aire suele quedar claro qué resultado esperas."

@@ -731,7 +731,7 @@ def test_manual_type_5_sends_one_title_description_four_texts_and_clean_album():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_parkez_sends_only_header_four_separate_texts_and_clean_album():
+def test_parkez_sends_clean_album_and_offers_another_photo():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -810,14 +810,31 @@ def test_parkez_sends_only_header_four_separate_texts_and_clean_album():
         asyncio.run(_execute_job(update, context, request))
 
         messages = [text for event, text in context.bot.events if event == "message"]
-        assert len(messages) == 6
+        assert len(messages) == 7
         assert messages[1].startswith("Carrusel ParkEz listo")
-        assert messages[2:] == [f"Texto ParkEz {index}" for index in range(1, 5)]
-        assert context.bot.events[-1] == (
+        assert messages[2:6] == [f"Texto ParkEz {index}" for index in range(1, 5)]
+        assert context.bot.events[-2] == (
             "album",
             "parkez_1.jpg,parkez_2.jpg,parkez_3.jpg,parkez_4.jpg",
         )
-        assert "repeat_request" not in context.user_data
+        assert messages[-1] == (
+            "¿Quieres otra imagen distinta de @alpha por si alguna no te convence?"
+        )
+        assert context.user_data["repeat_request"] == {
+            "chosen_account": "alpha",
+            "requested_accounts": ["alpha"],
+            "video_type": VideoType.PARKEZ.value,
+            "language": Language.ES.value,
+            "video_gender": VideoGender.MALE.value,
+            "lowercase_text": False,
+            "separate_slide_text": True,
+        }
+        buttons = context.bot.reply_markup.inline_keyboard[0]
+        assert [button.text for button in buttons] == [
+            "Aceptar",
+            "Pasar cuenta",
+            "Cancelar",
+        ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1061,6 +1078,40 @@ def test_repeat_prompt_has_accept_and_cancel_buttons():
         REGENERATE_SKIP_ACCOUNT,
         REGENERATE_CANCEL,
     ]
+
+
+def test_parkez_accept_requests_another_photo_from_the_same_account():
+    async def allow(update):
+        return True
+
+    captured = {}
+
+    async def capture_extra_image(update, context, request):
+        captured["request"] = request
+
+    context = FakeContext()
+    context.user_data["repeat_request"] = {
+        "chosen_account": "alpha",
+        "requested_accounts": ["alpha", "beta"],
+        "video_type": VideoType.PARKEZ.value,
+        "language": Language.ES.value,
+        "video_gender": VideoGender.FEMALE.value,
+        "lowercase_text": False,
+        "separate_slide_text": True,
+    }
+    update = FakeRegenerateUpdate(FakeRegenerateQuery(REGENERATE_ACCEPT))
+
+    with patch("app.bot._ensure_allowed", allow), patch(
+        "app.bot._execute_extra_image",
+        capture_extra_image,
+    ):
+        asyncio.run(regenerate_choice(update, context))
+
+    request = captured["request"]
+    assert request.video_type == VideoType.PARKEZ
+    assert request.account_inputs == ["alpha"]
+    assert request.gender == VideoGender.FEMALE
+    assert request.separate_slide_text is True
 
 
 def test_skip_account_button_removes_account_file_entry_and_uses_next_account(tmp_path):

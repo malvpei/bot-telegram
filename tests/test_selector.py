@@ -758,7 +758,12 @@ def test_extra_image_requires_non_landscape_person_for_every_type(temp_workspace
 
     selector = ImageSelector(settings, state)
 
-    for video_type in (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3):
+    for video_type in (
+        VideoType.TYPE_1,
+        VideoType.TYPE_2,
+        VideoType.TYPE_3,
+        VideoType.PARKEZ,
+    ):
         picked = selector.pick_extra_image(
             [landscape, object_photo, person],
             video_type,

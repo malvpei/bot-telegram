@@ -180,7 +180,10 @@ tres fotos nuevas de una sola cuenta del banco correspondiente y añade como
 cuarta imagen el cierre limpio de ParkEz del perfil elegido. Entrega el hook,
 dos consejos y la promoción de ParkEz como cuatro mensajes independientes;
 ningún texto se incrusta en las fotos. Los packs de copy rotan y no repiten el
-mismo pack en dos ejecuciones consecutivas del mismo perfil.
+misma variante en dos ejecuciones consecutivas del mismo perfil. El hook original
+permanece fijo para Mujer y Hombre; solo varían los consejos y la promoción.
+Después del álbum, el bot permite pedir otra foto distinta de la misma cuenta,
+pasar a otra cuenta o terminar.
 
 El **Tipo 5** toma directamente cuatro imágenes diferentes del prefijo R2
 `tipo4/imagenstipo4`, las recorre con una cola persistente independiente y

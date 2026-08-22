@@ -7,6 +7,7 @@ from PIL import Image
 from app.models import Language, SlideRole, VideoGender, VideoType
 from app.parkez import (
     PARKEZ_FEMALE_FIXED_IMAGE_NAME,
+    PARKEZ_HOOK_BY_GENDER,
     PARKEZ_MALE_FIXED_IMAGE_NAME,
     PARKEZ_ROLES,
     build_parkez_script,
@@ -21,6 +22,14 @@ class _FirstChoice:
         return values[0]
 
 
+class _IndexedChoice:
+    def __init__(self, index: int) -> None:
+        self.index = index
+
+    def choice(self, values):
+        return values[self.index]
+
+
 def test_parkez_copy_has_four_separate_messages_and_promotes_parkez(tmp_path):
     store = StateStore(tmp_path / "state")
 
@@ -32,6 +41,19 @@ def test_parkez_copy_has_four_separate_messages_and_promotes_parkez(tmp_path):
         assert package.ordered_slides[0]
         assert "ParkEz" in package.slides_by_role[SlideRole.PARKEZ_PROMO]
         assert package.social_copy.messages == []
+
+
+def test_parkez_hook_never_changes_between_variants(tmp_path):
+    for gender, expected_hook in PARKEZ_HOOK_BY_GENDER.items():
+        for variant_index in range(4):
+            package = build_parkez_script(
+                StateStore(tmp_path / f"state-{gender.value}-{variant_index}"),
+                gender,
+                rng=_IndexedChoice(variant_index),  # type: ignore[arg-type]
+            )
+
+            assert package.slides_by_role[SlideRole.HOOK] == expected_hook
+            assert package.ordered_slides[0] == expected_hook
 
 
 def test_parkez_base_packs_keep_the_attached_hooks_and_tips(tmp_path):

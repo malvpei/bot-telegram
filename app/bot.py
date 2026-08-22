@@ -967,7 +967,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "1. /createp\n"
         "2. elige Mujer u Hombre\n"
         "3. el bot entrega tres fotos del banco correspondiente y un cierre "
-        "fijo de ParkEz, siempre con los cuatro textos separados\n\n"
+        "fijo de ParkEz, siempre con los cuatro textos separados\n"
+        "4. puedes pedir otra foto distinta de la misma cuenta\n\n"
         "Las cuentas de hombres se leen de accounts.txt. Las de mujeres se "
         "leen de accounts_women.txt para el flujo /createp (una por línea).\n\n"
         "/create usa primero el pool local si hay fotos aptas. "
@@ -2246,7 +2247,6 @@ async def _execute_job(
             VideoType.TYPE_4,
             VideoType.TYPE_5,
             VideoType.ADVICE,
-            VideoType.PARKEZ,
         }:
             return
         context.user_data["repeat_request"] = {
