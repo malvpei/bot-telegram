@@ -576,15 +576,30 @@ def test_type_4_social_titles_and_descriptions_rotate_without_repeating(state_di
     generator = _make_generator(state_dir)
     variants = generator._social_copy_variants(VideoType.TYPE_4, Language.ES)
 
-    assert list(variants) == [f"es_story_{index}" for index in range(1, 11)]
+    assert list(variants) == [f"es_story_{index}" for index in range(1, 21)]
     titles = [title for title, _description, _hashtags in variants.values()]
     descriptions = [
         description
         for _title, description, _hashtags in variants.values()
     ]
-    assert len(set(titles)) == 10
-    assert len(set(descriptions)) == 10
+    assert len(set(titles)) == 20
+    assert len(set(descriptions)) == 20
     assert all(len(description) >= 300 for description in descriptions)
+    assert all(
+        any(
+            anchor in description.lower()
+            for anchor in (
+                "venta",
+                "producto",
+                "tienda",
+                "dropradar",
+                "mcdonald",
+                "porsche",
+                "datos",
+            )
+        )
+        for description in descriptions
+    )
 
     generated_titles: list[str] = []
     generated_descriptions: list[str] = []
@@ -600,8 +615,8 @@ def test_type_4_social_titles_and_descriptions_rotate_without_repeating(state_di
             package.social_choice_key,
         )
 
-    assert len(set(generated_titles)) == 10
-    assert len(set(generated_descriptions)) == 10
+    assert len(set(generated_titles)) == 20
+    assert len(set(generated_descriptions)) == 20
 
     restarted = generator.generate(VideoType.TYPE_4, Language.ES)
     assert restarted.social_choice_key == "es_story_1"
@@ -619,11 +634,49 @@ def test_type_4_has_complete_english_story_and_rotating_social_copy(state_dir):
     assert package.slides_by_role[SlideRole.STORY_SUCCESS_COMIC] == (
         "A year and a half later..."
     )
-    assert list(variants) == [f"en_story_{index}" for index in range(1, 11)]
-    assert len({title for title, _description, _tags in variants.values()}) == 10
-    assert len({description for _title, description, _tags in variants.values()}) == 10
+    assert list(variants) == [f"en_story_{index}" for index in range(1, 21)]
+    titles = [title for title, _description, _tags in variants.values()]
+    descriptions = [description for _title, description, _tags in variants.values()]
+    assert len(set(titles)) == 20
+    assert len(set(descriptions)) == 20
+    assert all(len(description) >= 250 for description in descriptions)
+    assert all(
+        any(
+            anchor in description.lower()
+            for anchor in (
+                "sale",
+                "product",
+                "store",
+                "dropradar",
+                "mcdonald",
+                "porsche",
+                "data",
+            )
+        )
+        for description in descriptions
+    )
     assert package.social_choice_key == "en_story_1"
     assert package.social_copy.title == variants["en_story_1"][0]
+
+    generated_titles: list[str] = []
+    generated_descriptions: list[str] = []
+    for expected_key in variants:
+        generated = generator.generate(VideoType.TYPE_4, Language.EN)
+        assert generated.social_choice_key == expected_key
+        generated_titles.append(generated.social_copy.title)
+        generated_descriptions.append(generated.social_copy.description)
+        assert "#dropshipping" in generated.social_copy.hashtags
+        generator.state.set_last_social_choice(
+            VideoType.TYPE_4,
+            Language.EN,
+            generated.social_choice_key,
+        )
+
+    assert len(set(generated_titles)) == 20
+    assert len(set(generated_descriptions)) == 20
+    assert generator.generate(VideoType.TYPE_4, Language.EN).social_choice_key == (
+        "en_story_1"
+    )
 
 
 def test_type_3_can_use_paypal_and_instagram(state_dir, monkeypatch):
