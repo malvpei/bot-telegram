@@ -3,6 +3,9 @@ from app.advice_cards import (
     ADVICE_EXTERNAL_PHRASES,
     ADVICE_PACKS,
     ADVICE_ROTATION_CYCLE_LENGTH,
+    ADVICE_SOCIAL_CYCLE_LENGTH,
+    ADVICE_SOCIAL_DESCRIPTIONS,
+    ADVICE_SOCIAL_TITLES,
     AdviceBackground,
     advice_selection,
     advice_social_copy,
@@ -41,7 +44,8 @@ def test_advice_backgrounds_and_scripts_complete_full_rotation():
         AdviceBackground.EDITORIAL,
         AdviceBackground.BROWN,
     )
-    assert ADVICE_ROTATION_CYCLE_LENGTH == 60
+    assert ADVICE_SOCIAL_CYCLE_LENGTH == 24
+    assert ADVICE_ROTATION_CYCLE_LENGTH == 120
 
     selections = [
         advice_selection(phase, Language.ES)
@@ -71,7 +75,7 @@ def test_advice_backgrounds_and_scripts_complete_full_rotation():
         0,
         1,
     ]
-    assert advice_selection(60, Language.ES) == advice_selection(0, Language.ES)
+    assert advice_selection(120, Language.ES) == advice_selection(0, Language.ES)
 
 
 def test_editorial_advice_background_adds_a_fifth_dropshipping_tip():
@@ -120,15 +124,40 @@ def test_advice_social_copy_has_description_and_related_hashtags():
     ]
 
 
-def test_advice_social_copy_rotates_three_titles_and_descriptions_per_pack():
-    copies = [
-        advice_social_copy(Language.EN, 0, rotation_index=phase)
-        for phase in (0, 4, 8)
-    ]
+def test_each_advice_pack_has_six_matching_social_copy_pairs():
+    for language in (Language.ES, Language.EN):
+        assert len(ADVICE_SOCIAL_TITLES[language]) == len(ADVICE_PACKS[language])
+        assert len(ADVICE_SOCIAL_DESCRIPTIONS[language]) == len(
+            ADVICE_PACKS[language]
+        )
+        for titles, descriptions in zip(
+            ADVICE_SOCIAL_TITLES[language],
+            ADVICE_SOCIAL_DESCRIPTIONS[language],
+            strict=True,
+        ):
+            assert len(titles) == 6
+            assert len(descriptions) == 6
+            assert len(set(titles)) == 6
+            assert len(set(descriptions)) == 6
 
-    assert len({copy[0] for copy in copies}) == 3
-    assert len({copy[1] for copy in copies}) == 3
-    assert all("hook" in copy[1].lower() for copy in copies)
+
+def test_advice_social_copy_rotates_six_titles_and_descriptions_per_pack():
+    phases = (0, 4, 8, 12, 16, 20)
+
+    for language in (Language.ES, Language.EN):
+        for pack_index in range(len(ADVICE_PACKS[language])):
+            copies = [
+                advice_social_copy(language, pack_index, rotation_index=phase)
+                for phase in phases
+            ]
+            assert len({copy[0] for copy in copies}) == 6
+            assert len({copy[1] for copy in copies}) == 6
+
+    english_first_pack = [
+        advice_social_copy(Language.EN, 0, rotation_index=phase)
+        for phase in phases
+    ]
+    assert all("hook" in copy[1].lower() for copy in english_first_pack)
 
 
 def test_social_copy_keeps_advice_hook_separate_from_title():

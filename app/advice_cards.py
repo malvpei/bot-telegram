@@ -269,21 +269,33 @@ ADVICE_SOCIAL_TITLES: dict[Language, tuple[tuple[str, ...], ...]] = {
             "la regla #1 no es perseguir visitas",
             "el consejo detrás del hook: explica mejor el problema",
             "cómo comprobar si una idea merece una prueba",
+            "el ángulo vende antes que la ficha técnica",
+            "enseña pronto qué vendes y después demuestra por qué",
+            "cuatro filtros para no lanzar otra idea a ciegas",
         ),
         (
             "antes de lanzar, separa señal de ruido",
             "una pregunta de cliente vale más que una moda",
             "qué revisar cuando un producto parece demasiado fácil",
+            "una tendencia no siempre es una oportunidad",
+            "ordena la oferta antes de perseguir otro viral",
+            "producto, atención y precio: la prueba completa",
         ),
         (
             "lo que los anuncios antiguos te enseñan",
             "organiza el trabajo antes de buscar más apps",
             "lee la conversación, no solo las visitas",
+            "las mejores señales suelen durar más de un día",
+            "comentarios, anuncios antiguos y pedidos bien ordenados",
+            "investiga lo que sigue vendiendo, no solo lo que explota",
         ),
         (
             "elige con criterio antes de gastar",
             "la regla #1 también se aplica a la gestión",
             "qué significa validar de verdad",
+            "validar también es poder cumplir lo prometido",
+            "antes de escalar, revisa producto, oferta y operación",
+            "una señal, una prueba y una decisión",
         ),
     ),
     Language.EN: (
@@ -291,21 +303,33 @@ ADVICE_SOCIAL_TITLES: dict[Language, tuple[tuple[str, ...], ...]] = {
             "the #1 rule is not chasing views",
             "the advice behind the hook: explain the problem better",
             "how to check whether an idea deserves a test",
+            "the angle sells before the feature list",
+            "show the product early, then prove why it matters",
+            "four filters before you launch another blind test",
         ),
         (
             "before launching, separate signal from noise",
             "one customer question beats a passing trend",
             "what to check when a product looks too easy",
+            "a trend is not always an opportunity",
+            "shape the offer before chasing another viral product",
+            "product, service and price: test the whole offer",
         ),
         (
             "what older ads can teach you",
             "organize the work before adding more apps",
             "read the conversation, not just the views",
+            "the strongest signals usually last longer than a day",
+            "comments, older ads and a cleaner order workflow",
+            "research what keeps selling, not only what explodes",
         ),
         (
             "choose with evidence before spending",
             "the #1 rule also applies to operations",
             "what real validation actually means",
+            "validation also means delivering what you promise",
+            "before scaling, review product, offer and operations",
+            "one signal, one test and one decision",
         ),
     ),
 }
@@ -355,6 +379,25 @@ ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[tuple[str, ...], ...]] = {
             "trates como una respuesta automática, sino como una forma de comparar señales "
             "antes de construir la tienda. Elegir mejor no elimina el riesgo, pero evita que "
             "cada lanzamiento empiece desde una intuición distinta.",
+            "El producto puede ser el mismo; lo que cambia el resultado es el ángulo. El hook "
+            "funciona cuando presenta un problema que el cliente reconoce, no cuando se limita "
+            "a enseñar otro objeto. Muestra el producto antes del segundo 2 y utiliza el resto "
+            "del anuncio para demostrar por qué importa en vez de recitar características. Antes "
+            "de invertir, compara señales en Dropradar y define qué resultado justificaría seguir. "
+            "Si llegan pedidos, ChatGPT puede clasificarlos, resumir incidencias y preparar "
+            "respuestas para revisar sin quitarte el control.",
+            "Los primeros segundos deben responder dos preguntas: qué vendes y qué problema "
+            "resuelve. Un buen hook abre la curiosidad, pero esconder el producto demasiado tiempo "
+            "hace que la persona abandone antes de entender la oferta. Prueba varios ángulos sobre "
+            "la misma idea, valida la demanda con datos de Dropradar y automatiza con ChatGPT "
+            "únicamente la parte repetitiva de los pedidos. Enseñar pronto qué vendes y explicar "
+            "después por qué merece atención suele importar más que una edición complicada.",
+            "Antes de lanzar, pasa la idea por cuatro filtros: qué problema vas a explicar, cómo "
+            "mostrarás el producto en los dos primeros segundos, qué señal considerarás suficiente "
+            "para continuar y cómo gestionarás los pedidos si la prueba funciona. El hook debe "
+            "conducir a una demostración, no quedarse en una promesa. Usa Dropradar para comparar "
+            "oportunidades y no para sustituir el criterio. Después de la venta, ChatGPT puede "
+            "ordenar pedidos y preparar seguimientos, siempre con revisión humana.",
         ),
         (
             "El hook habla de vender fácilmente, pero elegir un producto no debería ser una "
@@ -396,6 +439,26 @@ ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[tuple[str, ...], ...]] = {
             "aportar contexto sobre productos y señales de mercado; ChatGPT puede ayudarte a "
             "ordenar la información y preparar tareas. Ninguna de las dos cosas reemplaza leer "
             "las condiciones del proveedor ni hablar con tus clientes.",
+            "Que un producto aparezca en todas partes no demuestra que aún quede una buena "
+            "oportunidad; también puede indicar que el mercado está lleno de copias. Busca "
+            "preguntas reales, anuncios que continúan activos y señales comparables en Dropradar. "
+            "Después construye una oferta con una opción principal clara y un pack superior que "
+            "aporte valor de verdad. ChatGPT puede agrupar consultas y priorizar pedidos, pero la "
+            "promesa, el precio y la decisión final siguen siendo tuyos. La regla del hook sirve "
+            "para separar evidencia de ruido, no para perseguir cada nueva tendencia.",
+            "Antes de cambiar de producto, comprueba si el problema está en la oferta. Una opción "
+            "premium bien explicada puede hacer más atractiva la alternativa intermedia, siempre "
+            "que la diferencia sea real y el margen tenga sentido. Usa Dropradar para evitar elegir "
+            "a ciegas y separa demanda de simple ruido viral. Cuando lleguen consultas, ChatGPT "
+            "puede resumirlas y dejar respuestas preparadas para revisión; esas preguntas también "
+            "te dirán qué parte del producto, el precio o el pack todavía no se entiende.",
+            "La prueba completa no termina al encontrar un producto: también incluye la atención "
+            "y la estructura de precios. Un pack más caro debe mostrar qué recibe el cliente al "
+            "subir de nivel y dar contexto a la opción principal, no ser un truco vacío. Confirma "
+            "primero que la idea no depende únicamente de una moda saturada y compara señales en "
+            "Dropradar. Después estudia las dudas repetidas. ChatGPT puede clasificarlas y preparar "
+            "borradores, pero tú decides si la diferencia entre packs es honesta, rentable y fácil "
+            "de explicar.",
         ),
         (
             "El hook menciona una regla #1, y una forma práctica de aplicarla es mirar el "
@@ -433,6 +496,24 @@ ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[tuple[str, ...], ...]] = {
             "proveedor. La automatización ahorra tiempo cuando parte de información fiable; si "
             "no, solo multiplica una respuesta incorrecta. Mira también anuncios antiguos y "
             "productos con ventas repetidas para separar una oportunidad de un momento de ruido.",
+            "Un pico de visitas puede durar horas; un anuncio que sigue activo durante semanas "
+            "aporta una señal más estable. Estudia qué promete, cómo demuestra el producto y qué "
+            "preguntas aparecen en los comentarios. Contrasta esas pistas con Dropradar para "
+            "encontrar productos que mantienen ventas, no solo atención. Si decides probar uno, "
+            "define desde el principio el flujo del pedido y usa ChatGPT para extraer datos, "
+            "detectar retrasos y preparar tareas de seguimiento con tu supervisión.",
+            "Las visitas enseñan cuánto se vio un anuncio; los comentarios explican qué entendió "
+            "la gente. Preguntas como dónde comprar, qué incluye o cuánto tarda el envío pueden "
+            "revelar interés y objeciones antes del lanzamiento. Compara esas conversaciones con "
+            "anuncios antiguos y datos de Dropradar. Después convierte cada pedido en un flujo "
+            "claro: ChatGPT puede organizar la información y preparar seguimientos, pero cada dato "
+            "sobre el producto y la entrega debe comprobarse antes de comunicarlo.",
+            "No bases una decisión en un solo vídeo favorecido por el algoritmo. Busca anuncios "
+            "que continúan activos, comentarios con intención de compra y productos que muestran "
+            "ventas repetidas en Dropradar. Juntas, esas señales forman una hipótesis más útil que "
+            "una cifra de visitas aislada. Antes de escalar, diseña también qué ocurrirá después "
+            "del pago: ChatGPT puede crear tareas, avisar de posibles retrasos y ordenar el "
+            "seguimiento mientras tú supervisas las excepciones.",
         ),
         (
             "El hook presenta una regla para vender fácilmente, pero la parte más útil ocurre "
@@ -472,6 +553,24 @@ ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[tuple[str, ...], ...]] = {
             "pero conserva la revisión humana y anota lo que aprendiste. Un método sencillo que "
             "puedas repetir vale más que una lista de herramientas que solo consultas el día del "
             "lanzamiento.",
+            "Encontrar demanda es solo una parte de validar. También debes poder confirmar pedidos, "
+            "comunicar el envío y resolver incidencias sin improvisar. ChatGPT puede ayudarte a "
+            "organizar esos pasos y preparar mensajes, pero necesita reglas claras y revisión "
+            "humana. Comprueba en Dropradar que el producto tiene señales reales y presenta una "
+            "opción premium que haga más comprensible el valor del pack principal, no una "
+            "alternativa inflada sin motivo. Cumplir lo prometido forma parte de la oferta.",
+            "Una señal de demanda no basta si la oferta se entiende mal o la gestión se rompe "
+            "después de la compra. Revisa anuncios que llevan tiempo activos, contrasta el producto "
+            "en Dropradar y asegúrate de que cada pack tiene una diferencia fácil de explicar. "
+            "Después recorre el pedido completo, desde el pago hasta el seguimiento. ChatGPT puede "
+            "ordenar tareas y redactar mensajes, mientras tú compruebas precios, plazos y las "
+            "decisiones importantes antes de escalar.",
+            "Una buena señal necesita una prueba pequeña y una decisión escrita de antemano. Un "
+            "producto validado reduce incertidumbre, pero no elimina la necesidad de probar tu "
+            "propio ángulo y tu oferta. Empieza con un presupuesto limitado, cambia una variable "
+            "cada vez y observa si el pack principal resulta más atractivo junto a una opción "
+            "superior útil. Usa Dropradar para investigar y ChatGPT para organizar pedidos y "
+            "respuestas. Si no puedes explicar qué aprendiste, todavía no hay base para escalar.",
         ),
     ),
     Language.EN: (
@@ -512,6 +611,23 @@ ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[tuple[str, ...], ...]] = {
             "story around it. If you use Dropradar, treat it as a way to compare signals before "
             "building the store, not as an automatic answer. Better selection does not remove risk, "
             "but it stops every launch from starting with a different guess.",
+            "The product can stay the same while the angle changes the result. The hook works when "
+            "it frames a problem the customer recognizes, not when it simply shows another object. "
+            "Reveal the product before second two, then use the rest of the ad to demonstrate why it "
+            "matters instead of listing features. Before spending, compare signals in Dropradar and "
+            "define the result that would justify continuing. If orders arrive, ChatGPT can sort "
+            "them, summarize issues and draft replies for review without taking control away from you.",
+            "The opening seconds should answer two questions: what are you selling and which problem "
+            "does it solve? A strong hook creates curiosity, but hiding the product for too long makes "
+            "people leave before understanding the offer. Test several angles around the same idea, "
+            "validate demand with Dropradar data and use ChatGPT only for repetitive order admin. "
+            "Showing the product early and then proving why it matters usually beats complicated editing.",
+            "Before launching, use four filters: which problem you will explain, how the product will "
+            "appear in the first two seconds, which signal will be enough to continue and how orders "
+            "will be handled if the test works. The hook should lead into a demonstration instead of "
+            "ending as an unsupported promise. Use Dropradar to compare opportunities, not to replace "
+            "judgment. After a sale, ChatGPT can organize orders and prepare follow-up while every "
+            "important action remains under human review.",
         ),
         (
             "The hook talks about selling easily, but choosing a product should not be a guess. "
@@ -547,6 +663,24 @@ ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[tuple[str, ...], ...]] = {
             "Dropradar can add context about products and market signals, while ChatGPT can help "
             "organize information and prepare tasks. Neither replaces reading supplier terms or "
             "speaking with customers.",
+            "Seeing a product everywhere does not prove there is still a strong opportunity; it may "
+            "also mean the market is full of copies. Look for real customer questions, ads that remain "
+            "active and comparable signals in Dropradar. Then build an offer with one clear main option "
+            "and a premium bundle that adds genuine value. ChatGPT can group questions and prioritize "
+            "orders, but the promise, pricing and final decision remain yours. The hook's rule should "
+            "separate evidence from noise, not send you after every new trend.",
+            "Before replacing the product, check whether the offer is the real problem. A well-explained "
+            "premium option can make the middle choice more attractive, provided the difference is "
+            "genuine and the margin works. Use Dropradar to avoid choosing blindly and separate demand "
+            "from viral noise. When questions arrive, ChatGPT can summarize them and prepare replies "
+            "for review; those questions also reveal which part of the product, price or bundle "
+            "customers still do not understand.",
+            "A complete test includes the product, customer service and pricing. A more expensive "
+            "bundle should show what the customer receives at the next level and give context to the "
+            "main offer, not act as an empty pricing trick. First confirm that the idea is not surviving "
+            "on a saturated trend alone and compare signals in Dropradar. Then study repeated questions. "
+            "ChatGPT can classify them and draft replies, but you must decide whether the difference "
+            "between bundles is honest, profitable and easy to explain.",
         ),
         (
             "The hook mentions a number one rule, and one practical way to apply it is to watch "
@@ -579,6 +713,21 @@ ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[tuple[str, ...], ...]] = {
             "the supplier. Automation saves time when it starts with reliable information; otherwise it "
             "only multiplies a wrong answer. Look at older ads and products with repeated sales to separate "
             "an opportunity from a moment of noise.",
+            "A spike in views may last a few hours; an ad that remains active for weeks provides a more "
+            "stable signal. Study its promise, how it demonstrates the product and which questions appear "
+            "in the comments. Compare those clues with Dropradar to find products sustaining sales rather "
+            "than attention alone. If you test one, define the order workflow first and use ChatGPT to "
+            "extract details, flag delays and prepare follow-up tasks under your supervision.",
+            "Views show how often an ad was seen; comments reveal what people actually understood. "
+            "Questions about where to buy, what is included or how long delivery takes can expose interest "
+            "and objections before launch. Compare those conversations with older ads and Dropradar data. "
+            "Then turn every order into a clear workflow: ChatGPT can organize information and prepare "
+            "follow-up, but every product and shipping detail still needs verification before it is shared.",
+            "Do not base a decision on one video favored by the algorithm. Look for ads that remain active, "
+            "comments showing buying intent and products with repeated sales signals in Dropradar. Together, "
+            "those clues create a stronger hypothesis than an isolated view count. Before scaling, design "
+            "what happens after payment as well: ChatGPT can create tasks, flag possible delays and organize "
+            "follow-up while you supervise every exception.",
         ),
         (
             "The hook presents a rule for selling easily, but the useful part happens before you "
@@ -611,6 +760,23 @@ ADVICE_SOCIAL_DESCRIPTIONS: dict[Language, tuple[tuple[str, ...], ...]] = {
             "not when it becomes another promise of easy money. Use Dropradar for research and ChatGPT to "
             "organize notes, orders and replies, but keep human review and write down what you learned. A "
             "simple method you can repeat is worth more than a list of tools you only open on launch day.",
+            "Finding demand is only one part of validation. You must also be able to confirm orders, "
+            "communicate shipping and resolve issues without improvising. ChatGPT can help organize those "
+            "steps and draft messages, but it needs clear rules and human review. Confirm that the product "
+            "has meaningful signals in Dropradar and use a premium option to clarify the value of the main "
+            "bundle, not as an inflated alternative with no purpose. Delivering what you promise is part "
+            "of the offer.",
+            "A demand signal is not enough when the offer is confusing or the operation breaks after "
+            "purchase. Study ads that have remained active, compare the product in Dropradar and make sure "
+            "each bundle has a difference customers can understand. Then walk through the complete order "
+            "journey, from payment to follow-up. ChatGPT can organize tasks and draft messages while you "
+            "verify prices, delivery promises and every important decision before scaling.",
+            "A strong signal still needs a small test and a decision written in advance. A validated product "
+            "reduces uncertainty, but it does not remove the need to test your own angle and offer. Start "
+            "with a limited budget, change one variable at a time and observe whether the main bundle feels "
+            "more attractive beside a genuinely useful premium option. Use Dropradar for research and "
+            "ChatGPT to organize orders and replies. If you cannot explain what the test taught you, the "
+            "evidence is not strong enough to scale yet.",
         ),
     ),
 }
