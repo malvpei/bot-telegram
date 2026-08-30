@@ -49,6 +49,7 @@ from app.bot import (
 )
 from app.config import get_settings
 from app.batches import BatchItem, BatchItemKind
+from app.car_tools import CAR_TOOLS_HOOK
 from app.state import StateStore
 from app.models import (
     CAR_TOOLS_ROLES,
@@ -733,7 +734,7 @@ def test_manual_type_5_sends_one_title_description_four_texts_and_clean_album():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_car_tools_sends_five_image_album_without_separate_copy_or_repeat_prompt():
+def test_car_tools_sends_hook_then_album_without_slide_copy_or_repeat_prompt():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -767,7 +768,12 @@ def test_car_tools_sends_five_image_album_without_separate_copy_or_repeat_prompt
                     video_path=None,
                     script_path=root / "script.txt",
                     preview_text="",
-                    social_copy=SocialCopy(title="", description="", hashtags=[]),
+                    social_copy=SocialCopy(
+                        title="",
+                        description="",
+                        hashtags=[],
+                        hook=CAR_TOOLS_HOOK,
+                    ),
                     chosen_account="r2:cartools",
                     video_type=VideoType.TOOLS,
                     language=Language.ES,
@@ -808,13 +814,15 @@ def test_car_tools_sends_five_image_album_without_separate_copy_or_repeat_prompt
         asyncio.run(_execute_job(update, context, request))
 
         messages = [text for event, text in context.bot.events if event == "message"]
-        assert len(messages) == 2
+        assert len(messages) == 3
         assert "tools" in messages[1].lower()
         assert "5" in messages[1]
+        assert messages[2] == CAR_TOOLS_HOOK
         assert all(
             f"Texto incrustado {index}" not in messages
             for index in range(1, 5)
         )
+        assert context.bot.events[-2] == ("message", CAR_TOOLS_HOOK)
         assert context.bot.events[-1] == (
             "album",
             "car_tools_1.jpg,car_tools_2.jpg,car_tools_3.jpg,"

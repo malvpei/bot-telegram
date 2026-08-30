@@ -17,6 +17,7 @@ from app.advice_cards import (
     AdviceBackground,
     AdviceTip,
 )
+from app.car_tools import CAR_TOOLS_BODY_LINES
 from app.config import Settings
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
 from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
@@ -162,6 +163,7 @@ TYPE_3_TITLE_FONT_SIZE = 66
 TYPE_3_BODY_FONT_SIZE = 58
 TYPE_3_TOOL_VERTICAL_NUDGE_RATIO = 0.015
 CAR_TOOLS_TITLE_FONT_SIZE = 74
+CAR_TOOLS_TEXT_BOLD = False
 CAR_TOOLS_TITLE_CENTER_RATIO = 0.263
 CAR_TOOLS_TEXT_EDGE_MARGIN = 80
 CAR_TOOLS_BODY_TOP_RATIOS: dict[SlideRole, float] = {
@@ -2858,23 +2860,44 @@ class VideoRenderer:
             width,
         )
 
-        title_font = self._fit_single_line_text(
-            title,
-            draw,
-            max_width=max_text_width,
-            base_size=title_font_size,
-            min_size=title_font_size,
-            bold=True,
-            stroke_width=stroke_width,
-        )
-        body_font = self._load_overlay_font(TYPE_3_BODY_FONT_SIZE, True)
-        body_lines = self._type_3_body_lines(
-            subtitle,
-            cta,
-            draw=draw,
-            font=body_font,
-            max_width=max_text_width,
-        )
+        if is_car_tools:
+            title_font = self._load_font(
+                size=title_font_size,
+                bold=CAR_TOOLS_TEXT_BOLD,
+            )
+            body_lines = list(CAR_TOOLS_BODY_LINES[slide.role])
+            body_font = self._fit_prebroken_lines(
+                body_lines,
+                draw,
+                max_width=max_text_width,
+                max_height=height,
+                base_size=_scale_x(TYPE_3_BODY_FONT_SIZE, width),
+                min_size=max(12, _scale_x(36, width)),
+                bold=CAR_TOOLS_TEXT_BOLD,
+                stroke_width=stroke_width,
+                font_loader=lambda size, _bold: self._load_font(
+                    size=size,
+                    bold=CAR_TOOLS_TEXT_BOLD,
+                ),
+            )
+        else:
+            title_font = self._fit_single_line_text(
+                title,
+                draw,
+                max_width=max_text_width,
+                base_size=title_font_size,
+                min_size=title_font_size,
+                bold=True,
+                stroke_width=stroke_width,
+            )
+            body_font = self._load_overlay_font(TYPE_3_BODY_FONT_SIZE, True)
+            body_lines = self._type_3_body_lines(
+                subtitle,
+                cta,
+                draw=draw,
+                font=body_font,
+                max_width=max_text_width,
+            )
         title_lines = [title] if title else []
         title_height = self._block_height(
             title_lines,

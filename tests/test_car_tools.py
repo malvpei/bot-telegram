@@ -8,6 +8,8 @@ from PIL import Image, ImageDraw
 
 from app.car_tools import (
     CAR_TOOLS_BACKGROUND_FILES,
+    CAR_TOOLS_BODY_LINES,
+    CAR_TOOLS_HOOK,
     CAR_TOOLS_ICON_FILES,
     CAR_TOOLS_SLIDE_TEXTS,
     car_tools_slide_texts,
@@ -24,6 +26,7 @@ from app.render import (
     CAR_TOOLS_BODY_LINE_GAPS,
     CAR_TOOLS_BODY_TOP_RATIOS,
     CAR_TOOLS_TEXT_EDGE_MARGIN,
+    CAR_TOOLS_TEXT_BOLD,
     TYPE_3_BODY_FONT_SIZE,
     VideoRenderer,
 )
@@ -48,6 +51,26 @@ EXPECTED_CAR_TOOLS_TEXTS = {
         "restaurantes ect"
     ),
     SlideRole.CAR_TOOL_R2: "",
+}
+
+EXPECTED_CAR_TOOLS_BODY_LINES = {
+    SlideRole.CAR_TOOL_RADARBOT: (
+        "Evita todos los radares, que no te",
+        "llegue una multa de sorpresa",
+    ),
+    SlideRole.CAR_TOOL_PARKEZ: (
+        "Te enseña donde habra",
+        "aparcamiento en la calle",
+    ),
+    SlideRole.CAR_TOOL_WAZE: (
+        "Encuentra la mejor ruta para",
+        "navegar, evita el trafico",
+    ),
+    SlideRole.CAR_TOOL_GOOGLE_MAPS: (
+        "Buena opccion para viajes largos, y",
+        "para encontrar cines, restaurantes",
+        "ect",
+    ),
 }
 
 EXPECTED_CAR_TOOLS_ICON_FILES = {
@@ -109,6 +132,7 @@ def test_car_tools_copy_preserves_the_supplied_text_exactly():
     ]
     assert CAR_TOOLS_SLIDE_TEXTS == EXPECTED_CAR_TOOLS_TEXTS
     assert car_tools_slide_texts() == EXPECTED_CAR_TOOLS_TEXTS
+    assert CAR_TOOLS_HOOK == "apps que son lirteralmente obligatorias si tiene coche"
 
 
 def test_car_tools_icon_assets_use_stable_names_and_have_visible_alpha():
@@ -184,7 +208,7 @@ def test_car_tools_renderer_resolves_each_role_icon_from_cartools_directory(
         assert matching_icon_pixels.mean() > 0.01
 
 
-def test_car_tools_reference_wraps_and_role_specific_vertical_spacing():
+def test_car_tools_reference_wraps_and_uses_regular_text_weight():
     renderer = VideoRenderer(
         replace(
             get_settings(),
@@ -193,38 +217,31 @@ def test_car_tools_reference_wraps_and_role_specific_vertical_spacing():
         )
     )
     draw = ImageDraw.Draw(Image.new("RGB", (1080, 1920)))
-    font = renderer._load_overlay_font(TYPE_3_BODY_FONT_SIZE, True)
-    expected_lines = {
-        SlideRole.CAR_TOOL_RADARBOT: [
-            "Evita todos los radares, que no te",
-            "llegue una multa de sorpresa",
-        ],
-        SlideRole.CAR_TOOL_PARKEZ: [
-            "Te enseña donde habra",
-            "aparcamiento en la calle",
-        ],
-        SlideRole.CAR_TOOL_WAZE: [
-            "Encuentra la mejor ruta para",
-            "navegar, evita el trafico",
-        ],
-        SlideRole.CAR_TOOL_GOOGLE_MAPS: [
-            "Buena opccion para viajes largos, y",
-            "para encontrar cines, restaurantes",
-            "ect",
-        ],
-    }
+    font = renderer._load_font(
+        size=TYPE_3_BODY_FONT_SIZE,
+        bold=CAR_TOOLS_TEXT_BOLD,
+    )
+    expected_lines = EXPECTED_CAR_TOOLS_BODY_LINES
+
+    assert CAR_TOOLS_BODY_LINES == EXPECTED_CAR_TOOLS_BODY_LINES
+    assert [len(lines) for lines in CAR_TOOLS_BODY_LINES.values()] == [2, 2, 2, 3]
+    assert CAR_TOOLS_TEXT_BOLD is False
 
     for role, expected in expected_lines.items():
         _title, body, cta = renderer._split_type_3_tool_text(
             EXPECTED_CAR_TOOLS_TEXTS[role]
         )
-        assert renderer._type_3_body_lines(
-            body,
-            cta,
-            draw=draw,
-            font=font,
-            max_width=1080 - CAR_TOOLS_TEXT_EDGE_MARGIN * 2,
-        ) == expected
+        assert " ".join(expected) == " ".join(
+            piece for piece in (body, cta) if piece
+        )
+        for line in expected:
+            line_width = renderer._text_size(
+                draw,
+                line,
+                font,
+                stroke_width=4,
+            )[0]
+            assert line_width <= 1080 - CAR_TOOLS_TEXT_EDGE_MARGIN * 2
 
     assert CAR_TOOLS_BODY_TOP_RATIOS == {
         SlideRole.CAR_TOOL_RADARBOT: 0.315,

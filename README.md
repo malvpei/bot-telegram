@@ -204,6 +204,8 @@ siguiente carrusel Tools avanza al siguiente de su rotación. El carrusel se
 completa con una quinta imagen limpia obtenida del
 prefijo R2 configurado por `R2_CARTOOLS_IMAGE_PREFIX` (`cartools` por defecto,
 sin incluir el nombre de `R2_BUCKET`).
+Junto al álbum, el bot envía la frase «apps que son lirteralmente obligatorias
+si tiene coche» como mensaje separado.
 Esta quinta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,
 sin eliminarlos del bucket y solo avanza cuando el carrusel termina de renderizar.
 Las posiciones de ambas colas persisten en

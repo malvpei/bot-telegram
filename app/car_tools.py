@@ -3,6 +3,9 @@ from __future__ import annotations
 from app.models import CAR_TOOLS_ROLES, SlideRole
 
 
+CAR_TOOLS_HOOK = "apps que son lirteralmente obligatorias si tiene coche"
+
+
 # Curated from catalog numbers 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16 and 17.
 # Keep the exact filenames and order: this tuple is also the Tools rotation.
 CAR_TOOLS_BACKGROUND_FILES: tuple[str, ...] = (
@@ -63,6 +66,29 @@ CAR_TOOLS_SLIDE_TEXTS: dict[SlideRole, str] = {
         "restaurantes ect"
     ),
     SlideRole.CAR_TOOL_R2: "",
+}
+
+
+# Fixed visual wrapping from the supplied references. Keeping it separate from
+# the copy makes the line distribution deterministic across operating systems.
+CAR_TOOLS_BODY_LINES: dict[SlideRole, tuple[str, ...]] = {
+    SlideRole.CAR_TOOL_RADARBOT: (
+        "Evita todos los radares, que no te",
+        "llegue una multa de sorpresa",
+    ),
+    SlideRole.CAR_TOOL_PARKEZ: (
+        "Te enseña donde habra",
+        "aparcamiento en la calle",
+    ),
+    SlideRole.CAR_TOOL_WAZE: (
+        "Encuentra la mejor ruta para",
+        "navegar, evita el trafico",
+    ),
+    SlideRole.CAR_TOOL_GOOGLE_MAPS: (
+        "Buena opccion para viajes largos, y",
+        "para encontrar cines, restaurantes",
+        "ect",
+    ),
 }
 
 

@@ -24,6 +24,7 @@ from app.advice_cards import (
 )
 from app.car_tools import (
     CAR_TOOLS_BACKGROUND_FILES,
+    CAR_TOOLS_HOOK,
     CAR_TOOLS_ICON_FILES,
     car_tools_slide_texts,
 )
@@ -914,7 +915,12 @@ class VideoCreationService:
                 for role in CAR_TOOLS_ROLES
                 if slide_texts[role]
             ),
-            social_copy=SocialCopy(title="", description="", hashtags=[]),
+            social_copy=SocialCopy(
+                title="",
+                description="",
+                hashtags=[],
+                hook=CAR_TOOLS_HOOK,
+            ),
             chosen_account=plan.chosen_account,
             video_type=VideoType.TOOLS,
             language=Language.ES,

@@ -12,6 +12,7 @@ from PIL import Image
 import pytest
 
 from app.advice_cards import AdviceBackground
+from app.car_tools import CAR_TOOLS_HOOK
 from app.config import get_settings
 from app.models import (
     CAR_TOOLS_ROLES,
@@ -1106,6 +1107,7 @@ def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
     )
 
     assert result.video_type == VideoType.TOOLS
+    assert result.social_copy.messages == [CAR_TOOLS_HOOK]
     assert [slide.role for slide in result.slides] == list(CAR_TOOLS_ROLES)
     assert renderer.render_slide_still_sources[:4] == [backgrounds[1].local_path] * 4
     assert renderer.render_slide_still_calls == [VideoType.TOOLS] * 5
