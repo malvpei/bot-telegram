@@ -38,6 +38,7 @@ from app.bot import (
     create_command,
     createp_command,
     parkez_gender,
+    parkez_tools,
     story_carousel_command,
     wizard_delivery,
     wizard_advice_language,
@@ -50,6 +51,7 @@ from app.config import get_settings
 from app.batches import BatchItem, BatchItemKind
 from app.state import StateStore
 from app.models import (
+    CAR_TOOLS_ROLES,
     GenerationResult,
     ImageMetrics,
     MediaCandidate,
@@ -727,6 +729,99 @@ def test_manual_type_5_sends_one_title_description_four_texts_and_clean_album():
             "album",
             "type5_1.jpg,type5_2.jpg,type5_3.jpg,type5_4.jpg",
         )
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
+def test_car_tools_sends_five_image_album_without_separate_copy_or_repeat_prompt():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        slides = []
+        for index, role in enumerate(CAR_TOOLS_ROLES, start=1):
+            image_path = root / f"car_tools_{index}.jpg"
+            Image.new("RGB", (10, 16), (index * 20, 30, 40)).save(image_path)
+            slides.append(
+                SlidePlan(
+                    index=index,
+                    role=role,
+                    text=(f"Texto incrustado {index}" if index < 5 else ""),
+                    media=MediaCandidate(
+                        source_account=("r2_cartools" if index == 5 else "cartools"),
+                        source_id=f"car-tools:{index}",
+                        local_path=image_path,
+                        permalink="",
+                        caption="",
+                        width=10,
+                        height=16,
+                        created_at="",
+                    ),
+                    fixed_asset=index < 5,
+                )
+            )
+
+        class FakeCarToolsService:
+            def create_video(self, request):
+                assert request.video_type == VideoType.TOOLS
+                return GenerationResult(
+                    video_path=None,
+                    script_path=root / "script.txt",
+                    preview_text="",
+                    social_copy=SocialCopy(title="", description="", hashtags=[]),
+                    chosen_account="r2:videos/cartools",
+                    video_type=VideoType.TOOLS,
+                    language=Language.ES,
+                    fallback_accounts=[],
+                    slides=slides,
+                    separate_slide_text=False,
+                )
+
+        class FakeCarToolsBot(FakeTelegramBot):
+            async def send_message(
+                self,
+                *,
+                chat_id: int,
+                text: str,
+                reply_markup=None,
+            ):
+                await super().send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                )
+                return FakeStatusMessage()
+
+        context = FakeContext()
+        context.bot = FakeCarToolsBot()
+        context.application = FakeApplication(FakeCarToolsService())
+        update = FakeUpdate()
+        update.effective_chat = FakeChat()
+        request = VideoRequest(
+            chat_id=123,
+            user_id=456,
+            video_type=VideoType.TOOLS,
+            language=Language.ES,
+            account_inputs=[],
+            separate_slide_text=False,
+        )
+
+        asyncio.run(_execute_job(update, context, request))
+
+        messages = [text for event, text in context.bot.events if event == "message"]
+        assert len(messages) == 2
+        assert "tools" in messages[1].lower()
+        assert "5" in messages[1]
+        assert all(
+            f"Texto incrustado {index}" not in messages
+            for index in range(1, 5)
+        )
+        assert context.bot.events[-1] == (
+            "album",
+            "car_tools_1.jpg,car_tools_2.jpg,car_tools_3.jpg,"
+            "car_tools_4.jpg,car_tools_5.jpg",
+        )
+        assert "repeat_request" not in context.user_data
+        assert context.bot.reply_markup is None
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1427,11 +1522,12 @@ def test_wizard_gender_offers_advice_without_ai_story():
     )
 
 
-def test_createp_offers_exactly_woman_and_man():
+def test_createp_offers_woman_man_and_tools():
     async def allow(update):
         return True
 
     context = FakeContext()
+    context.user_data["repeat_request"] = {"chosen_account": "stale"}
     update = FakeUpdate()
     accounts = {
         VideoGender.MALE: ["alpha"],
@@ -1447,11 +1543,43 @@ def test_createp_offers_exactly_woman_and_man():
     assert state == GENDER_STATE
     buttons = update.effective_message.reply_markup.inline_keyboard
     assert [[button.text for button in row] for row in buttons] == [
-        ["Mujer", "Hombre"]
+        ["Mujer", "Hombre"],
+        ["Tools"],
     ]
     assert [[button.callback_data for button in row] for row in buttons] == [
-        ["parkez:gender:female", "parkez:gender:male"]
+        ["parkez:gender:female", "parkez:gender:male"],
+        ["parkez:tools"],
     ]
+    assert "repeat_request" not in context.user_data
+
+
+def test_createp_tools_callback_starts_embedded_spanish_carousel_without_accounts():
+    captured: list[VideoRequest] = []
+
+    async def capture_execute_job(update, context, request):
+        captured.append(request)
+
+    context = FakeContext()
+    context.user_data["accounts_by_gender"] = {
+        VideoGender.MALE.value: [],
+        VideoGender.FEMALE.value: [],
+    }
+    context.user_data["repeat_request"] = {"chosen_account": "stale"}
+    query = FakeRegenerateQuery("parkez:tools")
+    update = FakeRegenerateUpdate(query)
+
+    with patch("app.bot._execute_job", capture_execute_job):
+        state = asyncio.run(parkez_tools(update, context))
+
+    assert state == ConversationHandler.END
+    assert query.answered is True
+    assert context.user_data == {}
+    assert len(captured) == 1
+    request = captured[0]
+    assert request.account_inputs == []
+    assert request.video_type == VideoType.TOOLS
+    assert request.language == Language.ES
+    assert request.separate_slide_text is False
 
 
 def test_createp_gender_uses_matching_accounts_and_forces_separate_spanish_copy():

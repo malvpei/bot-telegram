@@ -130,6 +130,7 @@ def run_bot() -> None:
             GENDER_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(parkez_gender, pattern=r"^parkez:gender:(?:female|male)$"),
+                CallbackQueryHandler(parkez_tools, pattern=r"^parkez:tools$"),
                 CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:5|advice)$"),
                 CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:male$"),
             ],
@@ -858,7 +859,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/schedule 5 08:00 17:00 - programar lotes diarios\n"
         "/schedule off - desactivar la programacion\n"
         "/create — crear contenido con fotos de hombres\n"
-        "/createp — crear un carrusel promocional de ParkEz\n"
+        "/createp — crear carruseles promocionales de ParkEz y Tools\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
         "/cancel — cancelar el wizard actual"
@@ -962,13 +963,15 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "2 = 4 consejos + hook (slide 3 = tip3_dropradar.jpg, tip3)\n"
         "3 = hook + herramientas para empezar dropshipping en 2026\n"
         "4 = cuatro consejos rotativos sobre fondo negro, blanco o ilustrado\n"
-        "5 = comparación de negocios con cuatro fotos tomadas de una cola R2\n"
+        "5 = comparación de negocios con tres fotos R2 aleatorias y cierre fijo\n"
         "\nParkEz:\n"
         "1. /createp\n"
-        "2. elige Mujer u Hombre\n"
+        "2. elige Mujer, Hombre o Tools\n"
         "3. el bot entrega tres fotos del banco correspondiente y un cierre "
         "fijo de ParkEz, siempre con los cuatro textos separados\n"
-        "4. puedes pedir otra foto distinta de la misma cuenta\n\n"
+        "4. Tools entrega cuatro diseños con texto incrustado y una quinta "
+        "imagen de la cola R2 videos/cartools\n"
+        "5. en Mujer u Hombre puedes pedir otra foto distinta de la misma cuenta\n\n"
         "Las cuentas de hombres se leen de accounts.txt. Las de mujeres se "
         "leen de accounts_women.txt para el flujo /createp (una por línea).\n\n"
         "/create usa primero el pool local si hay fotos aptas. "
@@ -1542,6 +1545,7 @@ async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return ConversationHandler.END
 
     _clear_wizard_state(context)
+    context.user_data.pop("repeat_request", None)
     accounts_by_gender = _load_accounts_by_gender(get_settings())
     context.user_data["accounts_by_gender"] = {
         gender.value: accounts
@@ -1558,14 +1562,41 @@ async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     "Hombre",
                     callback_data="parkez:gender:male",
                 ),
-            ]
+            ],
+            [
+                InlineKeyboardButton(
+                    "Tools",
+                    callback_data="parkez:tools",
+                ),
+            ],
         ]
     )
     await update.effective_message.reply_text(
-        "¿Qué tipo de contenido de ParkEz quieres crear?",
+        "¿Qué carrusel quieres crear?",
         reply_markup=keyboard,
     )
     return GENDER_STATE
+
+
+async def parkez_tools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("repeat_request", None)
+    await query.edit_message_text(
+        "Preparando Tools: cuatro diseños con texto y la siguiente imagen de R2."
+    )
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.TOOLS,
+        language=Language.ES,
+        account_inputs=[],
+        lowercase_text=False,
+        separate_slide_text=False,
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
 
 
 async def parkez_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2158,6 +2189,11 @@ async def _execute_job(
             "Estoy seleccionando tres fotos limpias y preparando el cierre "
             "fijo de ParkEz."
         )
+    elif request.video_type == VideoType.TOOLS:
+        status_text = (
+            "Estoy creando cuatro diseños de herramientas para el coche y "
+            "añadiendo la siguiente imagen de R2."
+        )
     else:
         status_text = (
             "Estoy seleccionando imagenes. Uso el pool si hay stock; "
@@ -2212,6 +2248,11 @@ async def _execute_job(
             f"Protagonista: {_gender_label_plural(request.gender)}\n"
             "Entrega: 4 imágenes limpias + 4 textos separados"
         )
+    elif result.video_type == VideoType.TOOLS:
+        header = (
+            "Carrusel Tools listo\n"
+            "Entrega: 5 imágenes (4 con texto incrustado + 1 limpia de R2)"
+        )
     else:
         header = (
             f"Cuenta elegida: @{result.chosen_account}\n"
@@ -2247,6 +2288,7 @@ async def _execute_job(
             VideoType.TYPE_4,
             VideoType.TYPE_5,
             VideoType.ADVICE,
+            VideoType.TOOLS,
         }:
             return
         context.user_data["repeat_request"] = {

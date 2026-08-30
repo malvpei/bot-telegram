@@ -104,6 +104,10 @@ TYPE_3_ROLE_TOOL_OPTIONS: dict[SlideRole, tuple[str, ...]] = {
     SlideRole.TOOL_PAYMENTS: ("paypal", "stripe"),
     SlideRole.TOOL_EDITING: ("canva", "capcut"),
     SlideRole.TOOL_MARKETING: ("instagram", "tiktok"),
+    SlideRole.CAR_TOOL_RADARBOT: ("radarbot",),
+    SlideRole.CAR_TOOL_PARKEZ: ("parkez",),
+    SlideRole.CAR_TOOL_WAZE: ("waze",),
+    SlideRole.CAR_TOOL_GOOGLE_MAPS: ("google_maps",),
 }
 TYPE_3_ICON_ALIASES: dict[str, tuple[str, ...]] = {
     "shopify": ("shopify",),
@@ -116,6 +120,10 @@ TYPE_3_ICON_ALIASES: dict[str, tuple[str, ...]] = {
     "instagram": ("instagram", "istagram"),
     "tiktok": ("tiktok", "tikok"),
     "meta_ads": ("meta", "facebook"),
+    "radarbot": ("radarbot",),
+    "parkez": ("parkez",),
+    "waze": ("waze",),
+    "google_maps": ("google_maps", "google maps"),
 }
 TYPE_3_ICON_VISUAL_SCALE: dict[str, float] = {
     "canva": 0.94,
@@ -123,6 +131,9 @@ TYPE_3_ICON_VISUAL_SCALE: dict[str, float] = {
     "chatgpt": 0.94,
     "instagram": 0.94,
     "tiktok": 0.94,
+    "radarbot": 0.94,
+    "waze": 0.92,
+    "google_maps": 0.98,
 }
 TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
     "shopify": 0.441,
@@ -134,11 +145,37 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
     "capcut": 0.421,
     "instagram": 0.429,
     "tiktok": 0.429,
+    "radarbot": 0.429,
+    "parkez": 0.430,
+    "waze": 0.430,
+    "google_maps": 0.438,
+}
+TYPE_3_STYLE_VIDEO_TYPES = {VideoType.TYPE_3, VideoType.TOOLS}
+CAR_TOOLS_OVERLAY_ROLES = {
+    SlideRole.CAR_TOOL_RADARBOT,
+    SlideRole.CAR_TOOL_PARKEZ,
+    SlideRole.CAR_TOOL_WAZE,
+    SlideRole.CAR_TOOL_GOOGLE_MAPS,
 }
 TYPE_3_TEXT_STROKE_WIDTH = 4
 TYPE_3_TITLE_FONT_SIZE = 66
 TYPE_3_BODY_FONT_SIZE = 58
 TYPE_3_TOOL_VERTICAL_NUDGE_RATIO = 0.015
+CAR_TOOLS_TITLE_FONT_SIZE = 74
+CAR_TOOLS_TITLE_CENTER_RATIO = 0.263
+CAR_TOOLS_TEXT_EDGE_MARGIN = 80
+CAR_TOOLS_BODY_TOP_RATIOS: dict[SlideRole, float] = {
+    SlideRole.CAR_TOOL_RADARBOT: 0.315,
+    SlideRole.CAR_TOOL_PARKEZ: 0.323,
+    SlideRole.CAR_TOOL_WAZE: 0.315,
+    SlideRole.CAR_TOOL_GOOGLE_MAPS: 0.324,
+}
+CAR_TOOLS_BODY_LINE_GAPS: dict[SlideRole, int] = {
+    SlideRole.CAR_TOOL_RADARBOT: 11,
+    SlideRole.CAR_TOOL_PARKEZ: 22,
+    SlideRole.CAR_TOOL_WAZE: 11,
+    SlideRole.CAR_TOOL_GOOGLE_MAPS: 9,
+}
 TYPE_4_TARGET_SECONDS = 7.5
 TYPE_4_TITLE_STROKE_WIDTH = 3
 TYPE_4_TITLE_INNER_STROKE_WIDTH = 1
@@ -286,6 +323,7 @@ class VideoRenderer:
         self._font_dir = settings.fonts_dir
         self._type_3_icons_dir = settings.root_dir / "tipo3" / "iconos"
         self._type_4_icons_dir = settings.root_dir / "tipo4" / "iconos"
+        self._car_tools_icons_dir = settings.root_dir / "cartools" / "iconos"
         self._advice_emoji_assets_dir = (
             settings.root_dir / "assets" / "advice_emojis"
         )
@@ -380,8 +418,8 @@ class VideoRenderer:
     def render_slide_still(self, slide: SlidePlan, video_type: VideoType) -> Image.Image:
         if slide.fixed_asset:
             canvas = self._cached_fixed_slide_canvas(slide, video_type).convert("RGBA")
-            if video_type == VideoType.TYPE_3:
-                if slide.role != SlideRole.HOOK:
+            if video_type in TYPE_3_STYLE_VIDEO_TYPES:
+                if slide.role != SlideRole.HOOK and slide.text:
                     self._composite_type_3_tool_overlay(canvas, slide)
             else:
                 self._draw_text(canvas, slide, video_type)
@@ -2147,7 +2185,7 @@ class VideoRenderer:
             )
         except OSError:
             file_signature = (str(path),)
-        fit_mode = "cover" if video_type == VideoType.TYPE_3 else "fixed"
+        fit_mode = "cover" if video_type in TYPE_3_STYLE_VIDEO_TYPES else "fixed"
         cache_key = (
             *file_signature,
             fit_mode,
@@ -2292,7 +2330,7 @@ class VideoRenderer:
         progress: float,
         video_type: VideoType,
     ) -> np.ndarray:
-        if video_type == VideoType.TYPE_3:
+        if video_type in TYPE_3_STYLE_VIDEO_TYPES:
             return self._render_type_3_slide_frame(slide, source_image, progress)
         image_progress = 0.0 if slide.fixed_asset else progress
         if slide.fixed_asset:
@@ -2490,7 +2528,7 @@ class VideoRenderer:
         source_image: Image.Image,
         video_type: VideoType,
     ) -> None:
-        if not slide.text or video_type == VideoType.TYPE_3:
+        if not slide.text or video_type in TYPE_3_STYLE_VIDEO_TYPES:
             return
         cache_key = self._slide_overlay_cache_key(
             slide,
@@ -2611,7 +2649,7 @@ class VideoRenderer:
         progress: float,
     ) -> np.ndarray:
         canvas = self._cover_image(source_image, progress).convert("RGBA")
-        if slide.role == SlideRole.HOOK:
+        if slide.role == SlideRole.HOOK or not slide.text:
             return np.asarray(canvas.convert("RGB"))
         else:
             self._composite_type_3_tool_overlay(canvas, slide)
@@ -2803,12 +2841,22 @@ class VideoRenderer:
     def _draw_type_3_tool_slide(self, image: Image.Image, slide: SlidePlan) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
+        is_car_tools = slide.role in CAR_TOOLS_OVERLAY_ROLES
         title, subtitle, cta = self._split_type_3_tool_text(slide.text)
-        edge_margin = _scale_x(TEXT_CARD_EDGE_MARGIN, width)
+        edge_margin = _scale_x(
+            CAR_TOOLS_TEXT_EDGE_MARGIN if is_car_tools else TEXT_CARD_EDGE_MARGIN,
+            width,
+        )
         max_text_width = width - edge_margin * 2
         stroke_width = max(2, _scale_x(TYPE_3_TEXT_STROKE_WIDTH, width))
-        body_line_gap = _scale_y(8, height)
-        title_font_size = _scale_x(TYPE_3_TITLE_FONT_SIZE, width)
+        body_line_gap = _scale_y(
+            CAR_TOOLS_BODY_LINE_GAPS.get(slide.role, 11) if is_car_tools else 8,
+            height,
+        )
+        title_font_size = _scale_x(
+            CAR_TOOLS_TITLE_FONT_SIZE if is_car_tools else TYPE_3_TITLE_FONT_SIZE,
+            width,
+        )
 
         title_font = self._fit_single_line_text(
             title,
@@ -2835,8 +2883,17 @@ class VideoRenderer:
             stroke_width=stroke_width,
             line_gap=0,
         )
-        vertical_nudge = int(height * TYPE_3_TOOL_VERTICAL_NUDGE_RATIO)
-        title_y = int(height * 0.270) - title_height // 2 + vertical_nudge
+        vertical_nudge = (
+            0 if is_car_tools else int(height * TYPE_3_TOOL_VERTICAL_NUDGE_RATIO)
+        )
+        title_center_ratio = (
+            CAR_TOOLS_TITLE_CENTER_RATIO if is_car_tools else 0.270
+        )
+        title_y = (
+            int(height * title_center_ratio)
+            - title_height // 2
+            + vertical_nudge
+        )
         self._draw_lines(
             draw,
             title_lines,
@@ -2853,7 +2910,15 @@ class VideoRenderer:
                 draw,
                 body_lines,
                 body_font,
-                start_y=int(height * 0.32) + vertical_nudge,
+                start_y=int(
+                    height
+                    * (
+                        CAR_TOOLS_BODY_TOP_RATIOS.get(slide.role, 0.315)
+                        if is_car_tools
+                        else 0.32
+                    )
+                )
+                + vertical_nudge,
                 width=width,
                 fill=(255, 255, 255),
                 stroke_width=stroke_width,
@@ -2863,7 +2928,9 @@ class VideoRenderer:
 
         tool_key = self._type_3_tool_key(slide.role, slide.text)
         icon_box_size = int(width * 0.44)
-        icon_top = int(height * TYPE_3_ICON_TOP_RATIO.get(tool_key, 0.434)) + vertical_nudge
+        icon_top = int(height * TYPE_3_ICON_TOP_RATIO.get(tool_key, 0.434)) + int(
+            height * TYPE_3_TOOL_VERTICAL_NUDGE_RATIO
+        )
         self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
 
     def _fit_single_line_text(
@@ -3051,7 +3118,26 @@ class VideoRenderer:
         *,
         visual_scale: float = 1.0,
     ) -> Image.Image:
-        alpha_bbox = icon.getbbox()
+        alpha = np.asarray(icon.getchannel("A"))
+        visible = alpha > 0
+        row_counts = visible.sum(axis=1)
+        column_counts = visible.sum(axis=0)
+        significant_rows = np.flatnonzero(
+            row_counts >= max(2, int(round(icon.width * 0.01)))
+        )
+        significant_columns = np.flatnonzero(
+            column_counts >= max(2, int(round(icon.height * 0.01)))
+        )
+        alpha_bbox = None
+        if significant_rows.size and significant_columns.size:
+            alpha_bbox = (
+                int(significant_columns[0]),
+                int(significant_rows[0]),
+                int(significant_columns[-1]) + 1,
+                int(significant_rows[-1]) + 1,
+            )
+        else:
+            alpha_bbox = icon.getbbox()
         if alpha_bbox is not None:
             icon = icon.crop(alpha_bbox)
         scale = min(box_size / icon.width, box_size / icon.height) * visual_scale
@@ -3076,7 +3162,11 @@ class VideoRenderer:
         needles = TYPE_3_ICON_ALIASES.get(tool_key)
         if not needles:
             return None
-        for icons_dir in (self._type_4_icons_dir, self._type_3_icons_dir):
+        for icons_dir in (
+            self._car_tools_icons_dir,
+            self._type_4_icons_dir,
+            self._type_3_icons_dir,
+        ):
             if not icons_dir.exists():
                 continue
             for path in sorted(icons_dir.iterdir(), key=lambda item: item.name.lower()):

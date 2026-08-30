@@ -10,8 +10,8 @@ Este proyecto monta un bot de Telegram que:
 - genera el texto en español o en inglés
 - evita repetir el mismo guion seguido y mantiene un historial de firmas
 - renderiza un video vertical `.mp4` listo para subir
-- crea carruseles promocionales de ParkEz con `/createp`, siempre con el texto
-  separado de las imágenes
+- crea carruseles promocionales de ParkEz con `/createp`, tanto para Mujer u
+  Hombre con texto separado como en formato Tools con texto incrustado
 
 ## Lo que hace el pipeline
 
@@ -66,6 +66,11 @@ assets/
   fixed/parkez_male.png  — cierre limpio de ParkEz para Hombre
   fixed/parkez_female.png — cierre limpio de ParkEz para Mujer
   fonts/*.ttf            — opcional, fuentes preferidas para el render
+cartools/
+  iconos/radarbot.png    — icono de RadarBot para `/createp` Tools
+  iconos/parkez.png      — icono de ParkEz para `/createp` Tools
+  iconos/waze.png        — icono de Waze para `/createp` Tools
+  iconos/google_maps.png — icono de Google Maps para `/createp` Tools
 data/
   downloads/             — cache de imágenes por cuenta
   outputs/users/<telegram_user_id>/<job_id>/ — salidas aisladas por usuario
@@ -91,6 +96,10 @@ Coloca la imagen fija:
 assets/fixed/imagen6.png
 assets/fixed/parkez_male.png
 assets/fixed/parkez_female.png
+cartools/iconos/radarbot.png
+cartools/iconos/parkez.png
+cartools/iconos/waze.png
+cartools/iconos/google_maps.png
 ```
 
 (o indica otra ruta absoluta en `FIXED_IMAGE_PATH`).
@@ -129,7 +138,8 @@ Todas las variables viven en `.env`. Las interesantes:
 | `OUTPUT_RETENTION_DAYS` | 7 | días que se guardan outputs |
 | `ACCOUNT_CACHE_TTL_HOURS` | 0 | 0 = cache permanente; las cuentas ya descargadas se leen de `data/downloads/<cuenta>` |
 | `ACCOUNT_PICK_ATTEMPTS` | 0 | objetivo inicial heredado; el selector puede seguir probando más cuentas para evitar falsos "sin imágenes" |
-| `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 usada por la cola de cuatro imágenes del Tipo 5 |
+| `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 de la que el Tipo 5 toma tres imágenes al azar |
+| `R2_CARTOOLS_IMAGE_PREFIX` | `videos/cartools` | carpeta R2 recorrida por la cola cíclica de imágenes limpias de `/createp` Tools |
 
 ### Instagram y 2FA
 
@@ -163,7 +173,7 @@ el bot.
 /download_pool — rellena el pool precargado de fotos aptas
 /pool         — muestra el stock del pool por tipo y cuenta
 /create       — lanza el wizard (tipo → idioma → render)
-/createp      — crea un carrusel ParkEz para Mujer u Hombre
+/createp      — crea un carrusel ParkEz para Mujer, Hombre o Tools
 /wizard       — alias de /create
 /cancel       — cancela el wizard en curso
 ```
@@ -175,26 +185,39 @@ español e inglés; el cuarto consejo siempre recomienda Dropradar. Cada entrega
 incluye fuera de la imagen la frase de apertura correspondiente al idioma.
 La Historia IA no aparece como opción dentro de `/create`.
 
-El flujo **/createp** pregunta si el contenido será de Mujer u Hombre. Elige
-tres fotos nuevas de una sola cuenta del banco correspondiente y añade como
-cuarta imagen el cierre limpio de ParkEz del perfil elegido. Entrega el hook,
-dos consejos y la promoción de ParkEz como cuatro mensajes independientes;
-ningún texto se incrusta en las fotos. Los packs de copy rotan y no repiten el
+El flujo **/createp** permite elegir Mujer, Hombre o Tools. Para Mujer y Hombre,
+elige tres fotos nuevas de una sola cuenta del banco correspondiente y añade
+como cuarta imagen el cierre limpio de ParkEz del perfil elegido. Entrega el
+hook, dos consejos y la promoción de ParkEz como cuatro mensajes independientes;
+ningún texto se incrusta en las fotos. Los packs de copy rotan y no repiten la
 misma variante en dos ejecuciones consecutivas del mismo perfil. El hook original
 permanece fijo para Mujer y Hombre; solo varían los consejos y la promoción.
 Después del álbum, el bot permite pedir otra foto distinta de la misma cuenta,
 pasar a otra cuenta o terminar.
 
-El **Tipo 5** toma directamente cuatro imágenes diferentes del prefijo R2
-`tipo4/imagenstipo4`, las recorre con una cola persistente independiente y
-no borra objetos del bucket. Entrega las cuatro imágenes limpias, sin texto ni
-iconos, y manda el hook «Top negocios para jubilar a tus padres 🫡» y las
-comparaciones de Traiding, Clipping y AI + Dropshipping como cuatro mensajes
-separados. Cada vídeo recibe un único título y una única descripción con
-hashtags, en mensajes distintos, rotando entre doce parejas. Las rotaciones se
-guardan en `DATA_DIR/state/type5_image_queue.json` y
-`DATA_DIR/state/type5_social_queue.json`, por lo que continúan después de
-reinicios o redeploys.
+La opción **Tools** de `/createp` crea cuatro slides dedicados a RadarBot,
+ParkEz, Waze y Google Maps. Cada uno lleva su icono y su texto incrustado sobre
+el mismo fondo. Tools solo usa los 13 fondos seleccionados en
+`app/car_tools.py`, manteniendo el orden elegido y una rotación propia que no
+modifica la del Tipo 3 normal. Las cuatro slides mantienen ese fondo y el
+siguiente carrusel Tools avanza al siguiente de su rotación. El carrusel se
+completa con una quinta imagen limpia obtenida del
+prefijo R2 configurado por `R2_CARTOOLS_IMAGE_PREFIX` (`videos/cartools` por defecto).
+Esta quinta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,
+sin eliminarlos del bucket y solo avanza cuando el carrusel termina de renderizar.
+Las posiciones de ambas colas persisten en
+`DATA_DIR/state/cartools_background_queue.json` y
+`DATA_DIR/state/cartools_image_queue.json`, incluso tras reinicios o redeploys.
+
+El **Tipo 5** elige tres imágenes diferentes al azar del prefijo R2
+`tipo4/imagenstipo4` y añade como cuarta imagen el cierre fijo de Dropradar. Las
+cuatro se entregan limpias, sin texto ni iconos, mientras el bot manda por
+separado el hook «Top negocios para jubilar a tus padres 🫡» y las comparaciones
+de Traiding, Clipping y AI + Dropshipping. Cada vídeo recibe un único título y
+una única descripción con hashtags, en mensajes distintos, rotando entre doce
+parejas. Esta rotación de copy se guarda en
+`DATA_DIR/state/type5_social_queue.json`; la selección de imágenes R2 es
+aleatoria y no usa una cola persistente.
 
 Flujo recomendado: ejecuta **/download_pool** para poblar un lote de fotos aptas
 en `data/state/media_pool.json`. El comando revisa cuentas una por una, descarga
@@ -322,6 +345,8 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `data/state/recent_scripts.json` — última firma generada por (tipo, idioma)
 - `data/state/script_history.json` — historial acotado de firmas
 - `data/state/jobs_log.json` — histórico de jobs
+- `data/state/cartools_background_queue.json` — rotación de los 13 fondos seleccionados de Tools
+- `data/state/cartools_image_queue.json` — cola cíclica de la imagen R2 de `/createp` Tools
 - `data/state/telegram_users.json` — usuarios autorizados y último acceso
 - `data/state/.state.lock` — lock de `filelock` cross-proceso
 

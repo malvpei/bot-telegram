@@ -13,6 +13,7 @@ class VideoType(str, Enum):
     TYPE_5 = "5"
     ADVICE = "advice"
     PARKEZ = "parkez"
+    TOOLS = "tools"
 
 
 class VideoGender(str, Enum):
@@ -55,6 +56,11 @@ class SlideRole(str, Enum):
     TYPE_5_AI_DROPSHIPPING = "type_5_ai_dropshipping"
     ADVICE_CARD = "advice_card"
     PARKEZ_PROMO = "parkez_promo"
+    CAR_TOOL_RADARBOT = "car_tool_radarbot"
+    CAR_TOOL_PARKEZ = "car_tool_parkez"
+    CAR_TOOL_WAZE = "car_tool_waze"
+    CAR_TOOL_GOOGLE_MAPS = "car_tool_google_maps"
+    CAR_TOOL_R2 = "car_tool_r2"
 
 
 TYPE_1_ROLES: tuple[SlideRole, ...] = (
@@ -100,6 +106,14 @@ TYPE_5_ROLES: tuple[SlideRole, ...] = (
     SlideRole.TYPE_5_TRADING,
     SlideRole.TYPE_5_CLIPPING,
     SlideRole.TYPE_5_AI_DROPSHIPPING,
+)
+
+CAR_TOOLS_ROLES: tuple[SlideRole, ...] = (
+    SlideRole.CAR_TOOL_RADARBOT,
+    SlideRole.CAR_TOOL_PARKEZ,
+    SlideRole.CAR_TOOL_WAZE,
+    SlideRole.CAR_TOOL_GOOGLE_MAPS,
+    SlideRole.CAR_TOOL_R2,
 )
 
 FIXED_ROLE_BY_TYPE: dict[VideoType, SlideRole] = {

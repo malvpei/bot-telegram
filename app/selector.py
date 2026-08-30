@@ -198,6 +198,10 @@ class ImageSelector:
         finally:
             self._used_media_snapshot = previous_snapshot
 
+    def type_3_backgrounds(self) -> tuple[MediaCandidate, ...]:
+        """Expose the validated decorative backgrounds for shared carousels."""
+        return self._type_3_backgrounds()
+
     def pick_extra_image(
         self,
         media_items: list[MediaCandidate],

@@ -218,6 +218,40 @@ def test_r2_settings_are_loaded_from_env(monkeypatch):
         get_settings.cache_clear()
 
 
+def test_r2_cartools_image_prefix_defaults_to_bucket_folder(monkeypatch):
+    monkeypatch.delenv("R2_CARTOOLS_IMAGE_PREFIX", raising=False)
+    monkeypatch.setattr("app.config.load_dotenv", lambda *_args, **_kwargs: False)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.r2_cartools_image_prefix == "videos/cartools"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_r2_cartools_image_prefix_is_loaded_and_normalized(monkeypatch):
+    monkeypatch.setenv("R2_CARTOOLS_IMAGE_PREFIX", " /videos/cartools/campaign/ ")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.r2_cartools_image_prefix == "videos/cartools/campaign"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_r2_cartools_image_prefix_blank_value_falls_back_to_safe_folder(monkeypatch):
+    monkeypatch.setenv("R2_CARTOOLS_IMAGE_PREFIX", " / ")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.r2_cartools_image_prefix == "videos/cartools"
+    finally:
+        get_settings.cache_clear()
+
+
 def test_pool_refill_fresh_account_limit_env(monkeypatch):
     monkeypatch.setenv("POOL_REFILL_MAX_FRESH_ACCOUNTS", "3")
     get_settings.cache_clear()

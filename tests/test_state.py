@@ -169,6 +169,27 @@ def test_type_3_background_queue_rotates_globally(state_dir):
     assert store.get_next_type_3_background_id(background_ids) == "bg-1"
 
 
+def test_type_3_background_batch_is_peeked_then_committed_together(state_dir):
+    background_ids = [f"bg-{index}" for index in range(1, 6)]
+    store = StateStore(state_dir)
+
+    selected = store.get_next_type_3_background_ids(background_ids, count=4)
+
+    assert selected == background_ids[:4]
+    assert store.get_next_type_3_background_ids(background_ids, count=4) == selected
+    assert StateStore(state_dir).get_next_type_3_background_ids(
+        background_ids,
+        count=4,
+    ) == selected
+
+    store.remember_type_3_background_choices(selected, background_ids)
+
+    assert StateStore(state_dir).get_next_type_3_background_ids(
+        background_ids,
+        count=4,
+    ) == ["bg-5", "bg-1", "bg-2", "bg-3"]
+
+
 def test_type_4_advice_rotation_persists_and_wraps(state_dir):
     store = StateStore(state_dir)
 
@@ -445,3 +466,64 @@ def test_type_5_social_copy_rotates_one_pair_and_survives_restart(state_dir):
     assert second == "type5-01"
     assert first_restarted is False
     assert second_restarted is False
+
+
+def test_cartools_image_queue_persists_and_restarts_after_full_cycle(state_dir):
+    image_ids = ["etag:first:10", "etag:second:20"]
+
+    first, first_restarted = StateStore(state_dir).get_next_cartools_image_id(image_ids)
+    second, second_restarted = StateStore(state_dir).get_next_cartools_image_id(image_ids)
+    restarted, queue_restarted = StateStore(state_dir).get_next_cartools_image_id(
+        image_ids
+    )
+
+    assert (first, first_restarted) == (image_ids[0], False)
+    assert (second, second_restarted) == (image_ids[1], False)
+    assert (restarted, queue_restarted) == (image_ids[0], True)
+    assert (state_dir / "cartools_image_queue.json").exists()
+
+
+def test_cartools_image_queue_peek_only_advances_after_commit(state_dir):
+    image_ids = ["etag:first:10", "etag:second:20"]
+    store = StateStore(state_dir)
+
+    first, first_restarted = store.peek_next_cartools_image_id(image_ids)
+
+    assert (first, first_restarted) == (image_ids[0], False)
+    assert StateStore(state_dir).peek_next_cartools_image_id(image_ids) == (
+        image_ids[0],
+        False,
+    )
+    assert store.remember_cartools_image_choice(first or "", image_ids) is True
+    assert StateStore(state_dir).peek_next_cartools_image_id(image_ids) == (
+        image_ids[1],
+        False,
+    )
+
+
+def test_cartools_background_queue_is_separate_persistent_and_cyclic(state_dir):
+    background_ids = ["blue.jpg", "grey.jpg"]
+    store = StateStore(state_dir)
+
+    first, first_restarted = store.peek_next_cartools_background_id(background_ids)
+
+    assert (first, first_restarted) == ("blue.jpg", False)
+    assert StateStore(state_dir).peek_next_cartools_background_id(
+        background_ids
+    ) == ("blue.jpg", False)
+    assert store.remember_cartools_background_choice(
+        first or "",
+        background_ids,
+    ) is True
+    assert StateStore(state_dir).peek_next_cartools_background_id(
+        background_ids
+    ) == ("grey.jpg", False)
+    assert StateStore(state_dir).remember_cartools_background_choice(
+        "grey.jpg",
+        background_ids,
+    ) is True
+    assert StateStore(state_dir).peek_next_cartools_background_id(
+        background_ids
+    ) == ("blue.jpg", True)
+    assert (state_dir / "cartools_background_queue.json").is_file()
+    assert not (state_dir / "type3_background_queue.json").exists()

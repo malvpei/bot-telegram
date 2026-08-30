@@ -14,6 +14,7 @@ import pytest
 from app.advice_cards import AdviceBackground
 from app.config import get_settings
 from app.models import (
+    CAR_TOOLS_ROLES,
     Language,
     MediaCandidate,
     SlidePlan,
@@ -250,6 +251,24 @@ class DuplicateType5R2Storage(Type5R2Storage):
             R2Object(key="tipo4/imagenstipo4/c.jpg", size=120, etag="c"),
             R2Object(key="tipo4/imagenstipo4/d.jpg", size=130, etag="d"),
         ]
+
+
+class CartoolsR2Storage(FakeR2Storage):
+    def __init__(self, objects: list[R2Object]) -> None:
+        super().__init__()
+        self.objects = list(objects)
+        self.listed_image_prefixes: list[str] = []
+        self.downloaded_keys: list[str] = []
+
+    def list_images(self, prefix: str):
+        self.listed_image_prefixes.append(prefix)
+        return list(self.objects)
+
+    def download(self, key: str, destination: Path) -> Path:
+        self.downloaded_keys.append(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        Image.new("RGB", (90, 160), (20, 40, 60)).save(destination)
+        return destination
 
 
 class DuplicateTemplateR2Storage(FakeR2Storage):
@@ -859,6 +878,320 @@ def test_type_4_falls_back_to_any_r2_image_when_configured_prefix_is_empty():
         assert result.chosen_account == "r2:otra/carpeta/reference.jpg"
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_cartools_r2_image_queue_uses_exact_prefix_fifo_cycle_and_etag_dedup(
+    tmp_path,
+):
+    storage = CartoolsR2Storage(
+        [
+            R2Object(key="videos/cartools-old/outside.jpg", size=90, etag="outside"),
+            R2Object(key="videos/cartools/c.jpg", size=120, etag="c"),
+            R2Object(key="videos/cartools/z-copy.jpg", size=100, etag="shared"),
+            R2Object(key="videos/cartools/b.jpg", size=110, etag="b"),
+            R2Object(key="videos/cartools/a.jpg", size=100, etag="shared"),
+        ]
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        r2_cartools_image_prefix="/videos/cartools/",
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.r2_storage = storage
+
+    selected: list[str] = []
+    restarted: list[bool] = []
+    for index in range(4):
+        selection = service._download_next_cartools_image_from_r2(
+            tmp_path / f"job-{index}"
+        )
+        selected.append(selection.media.source_id)
+        restarted.append(selection.queue_restarted)
+        assert service.state.remember_cartools_image_choice(
+            selection.queue_id,
+            list(selection.queue_ids),
+        )
+
+    assert storage.listed_image_prefixes == ["videos/cartools/"] * 4
+    assert storage.downloaded_keys == [
+        "videos/cartools/a.jpg",
+        "videos/cartools/b.jpg",
+        "videos/cartools/c.jpg",
+        "videos/cartools/a.jpg",
+    ]
+    assert "videos/cartools/z-copy.jpg" not in storage.downloaded_keys
+    assert "videos/cartools-old/outside.jpg" not in storage.downloaded_keys
+    assert selected == [
+        "r2-cartools:videos/cartools/a.jpg",
+        "r2-cartools:videos/cartools/b.jpg",
+        "r2-cartools:videos/cartools/c.jpg",
+        "r2-cartools:videos/cartools/a.jpg",
+    ]
+    assert restarted == [False, False, False, True]
+
+
+def test_cartools_queues_do_not_advance_when_rendering_fails(
+    tmp_path,
+    monkeypatch,
+):
+    backgrounds: list[MediaCandidate] = []
+    for index in range(4):
+        path = tmp_path / f"failed-background-{index}.jpg"
+        Image.new("RGB", (90, 160), (index * 20, 40, 60)).save(path)
+        backgrounds.append(
+            MediaCandidate(
+                source_account="tipo3_fondo",
+                source_id=f"tipo3_fondo:{index}",
+                local_path=path,
+                permalink=f"asset://{path.name}",
+                caption=path.stem,
+                width=90,
+                height=160,
+                created_at="fixed",
+            )
+        )
+
+    class CartoolsSelector:
+        def type_3_backgrounds(self):
+            return tuple(backgrounds)
+
+    class FailingRenderer(FakeRenderer):
+        def render_slide_still(self, slide, video_type):
+            raise RuntimeError("render failed")
+
+    allowed_background_names = tuple(
+        background.local_path.name for background in backgrounds[:2]
+    )
+    monkeypatch.setattr(
+        "app.service.CAR_TOOLS_BACKGROUND_FILES",
+        allowed_background_names,
+    )
+
+    storage = CartoolsR2Storage(
+        [
+            R2Object(key="videos/cartools/a.jpg", size=100, etag="a"),
+            R2Object(key="videos/cartools/b.jpg", size=110, etag="b"),
+        ]
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        r2_cartools_image_prefix="videos/cartools",
+        width=72,
+        height=128,
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.selector = CartoolsSelector()
+    service.renderer = FailingRenderer()
+    service.r2_storage = storage
+    request = VideoRequest(
+        chat_id=1,
+        user_id=2,
+        video_type=VideoType.TOOLS,
+        language=Language.ES,
+        account_inputs=[],
+    )
+
+    with pytest.raises(RuntimeError, match="render failed"):
+        service._create_video_locked(request)
+
+    selection = service._download_next_cartools_image_from_r2(tmp_path / "retry")
+    assert selection.media.source_id == "r2-cartools:videos/cartools/a.jpg"
+    assert selection.queue_restarted is False
+    assert service.state.peek_next_cartools_background_id(
+        list(allowed_background_names)
+    ) == (allowed_background_names[0], False)
+
+
+def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
+    tmp_path,
+    monkeypatch,
+):
+    backgrounds: list[MediaCandidate] = []
+    for index in range(5):
+        path = tmp_path / f"background-{index}.jpg"
+        Image.new("RGB", (90, 160), (index * 20, 40, 60)).save(path)
+        backgrounds.append(
+            MediaCandidate(
+                source_account="tipo3_fondo",
+                source_id=f"tipo3_fondo:{index}",
+                local_path=path,
+                permalink=f"asset://{path.name}",
+                caption=path.stem,
+                width=90,
+                height=160,
+                created_at="fixed",
+            )
+        )
+
+    class CartoolsSelector:
+        def type_3_backgrounds(self):
+            return tuple(backgrounds)
+
+    allowed_background_names = (
+        backgrounds[1].local_path.name,
+        backgrounds[3].local_path.name,
+    )
+    monkeypatch.setattr(
+        "app.service.CAR_TOOLS_BACKGROUND_FILES",
+        allowed_background_names,
+    )
+
+    storage = CartoolsR2Storage(
+        [R2Object(key="videos/cartools/closing.jpg", size=123, etag="closing")]
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        r2_cartools_image_prefix="videos/cartools",
+        width=72,
+        height=128,
+    )
+    renderer = FakeRenderer()
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.selector = CartoolsSelector()
+    service.renderer = renderer
+    service.r2_storage = storage
+
+    result = service._create_video_locked(
+        VideoRequest(
+            chat_id=1,
+            user_id=2,
+            video_type=VideoType.TOOLS,
+            language=Language.ES,
+            account_inputs=[],
+        )
+    )
+
+    assert result.video_type == VideoType.TOOLS
+    assert [slide.role for slide in result.slides] == list(CAR_TOOLS_ROLES)
+    assert renderer.render_slide_still_sources[:4] == [backgrounds[1].local_path] * 4
+    assert renderer.render_slide_still_calls == [VideoType.TOOLS] * 5
+    assert all(renderer.render_slide_still_texts[:4])
+    assert renderer.render_slide_still_texts[-1] == ""
+    assert all(slide.fixed_asset for slide in result.slides[:4])
+    assert result.slides[-1].fixed_asset is False
+    assert result.slides[-1].role == SlideRole.CAR_TOOL_R2
+    assert result.slides[-1].text == ""
+    assert result.slides[-1].media.source_account == "r2_cartools"
+    assert result.slides[-1].media.source_id == (
+        "r2-cartools:videos/cartools/closing.jpg"
+    )
+    assert result.slides[-1].media.local_path.name == "slide_05.jpg"
+    assert storage.listed_image_prefixes == ["videos/cartools/"]
+    assert service.state.peek_next_cartools_background_id(
+        list(allowed_background_names)
+    ) == (allowed_background_names[1], False)
+    assert not (settings.state_dir / "type3_background_queue.json").exists()
+    assert service.state.get_next_type_3_background_ids(
+        [background.source_id for background in backgrounds],
+        count=4,
+    ) == [
+        "tipo3_fondo:0",
+        "tipo3_fondo:1",
+        "tipo3_fondo:2",
+        "tipo3_fondo:3",
+    ]
+    assert service.state.peek_next_cartools_image_id(
+        ["etag:closing:123"]
+    ) == ("etag:closing:123", True)
+
+    service._create_video_locked(
+        VideoRequest(
+            chat_id=1,
+            user_id=2,
+            video_type=VideoType.TOOLS,
+            language=Language.ES,
+            account_inputs=[],
+        )
+    )
+
+    assert renderer.render_slide_still_sources[5:9] == [
+        backgrounds[3].local_path
+    ] * 4
+    assert all(
+        source not in {backgrounds[0].local_path, backgrounds[2].local_path}
+        for source in renderer.render_slide_still_sources[:4]
+        + renderer.render_slide_still_sources[5:9]
+    )
+    assert service.state.peek_next_cartools_background_id(
+        list(allowed_background_names)
+    ) == (allowed_background_names[0], True)
+
+
+def test_car_tools_rejects_an_incomplete_selected_background_catalog(
+    tmp_path,
+    monkeypatch,
+):
+    available_path = tmp_path / "available.jpg"
+    Image.new("RGB", (90, 160), (20, 40, 60)).save(available_path)
+    available = MediaCandidate(
+        source_account="tipo3_fondo",
+        source_id="tipo3_fondo:0",
+        local_path=available_path,
+        permalink="asset://available.jpg",
+        caption="available",
+        width=90,
+        height=160,
+        created_at="fixed",
+    )
+
+    class CartoolsSelector:
+        def type_3_backgrounds(self):
+            return (available,)
+
+    class UntouchedStorage:
+        is_configured = True
+
+        def list_images(self, prefix):
+            raise AssertionError("R2 must not be queried when a background is missing")
+
+    monkeypatch.setattr(
+        "app.service.CAR_TOOLS_BACKGROUND_FILES",
+        ("available.jpg", "missing.jpg"),
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.selector = CartoolsSelector()
+    service.renderer = FakeRenderer()
+    service.r2_storage = UntouchedStorage()
+
+    with pytest.raises(ValueError, match=r"missing\.jpg"):
+        service._create_video_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=2,
+                video_type=VideoType.TOOLS,
+                language=Language.ES,
+                account_inputs=[],
+            )
+        )
+
+    assert not (settings.state_dir / "cartools_background_queue.json").exists()
 
 
 def test_type_5_uses_three_random_clean_photos_and_rotates_social_copy(monkeypatch):

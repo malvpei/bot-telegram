@@ -52,6 +52,10 @@ class StateStore:
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
         self._type_5_social_queue_path = self.state_dir / "type5_social_queue.json"
+        self._cartools_background_queue_path = (
+            self.state_dir / "cartools_background_queue.json"
+        )
+        self._cartools_image_queue_path = self.state_dir / "cartools_image_queue.json"
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
@@ -359,8 +363,20 @@ class StateStore:
             self._write_json(self._jobs_log_path, jobs)
 
     def get_next_type_3_background_id(self, background_ids: list[str]) -> str | None:
+        selected = self.get_next_type_3_background_ids(background_ids, count=1)
+        return selected[0] if selected else None
+
+    def get_next_type_3_background_ids(
+        self,
+        background_ids: list[str],
+        *,
+        count: int,
+    ) -> list[str]:
         if not background_ids:
-            return None
+            return []
+        normalized_count = max(0, int(count))
+        if normalized_count == 0:
+            return []
         with self._exclusive():
             queue = self._read_json(self._type_3_background_queue_path, {})
             normalized = self._normalize_type_3_background_order(queue, background_ids)
@@ -369,22 +385,34 @@ class StateStore:
                     self._type_3_background_queue_path,
                     {"order": normalized},
                 )
-        return normalized[0] if normalized else None
+        return normalized[:normalized_count]
 
     def remember_type_3_background_choice(
         self,
         background_id: str,
         background_ids: list[str],
     ) -> None:
-        if not background_id or not background_ids:
+        self.remember_type_3_background_choices([background_id], background_ids)
+
+    def remember_type_3_background_choices(
+        self,
+        selected_ids: list[str],
+        background_ids: list[str],
+    ) -> None:
+        if not selected_ids or not background_ids:
             return
         with self._exclusive():
             queue = self._read_json(self._type_3_background_queue_path, {})
             normalized = self._normalize_type_3_background_order(queue, background_ids)
-            if background_id not in normalized:
+            remembered: list[str] = []
+            for background_id in selected_ids:
+                if background_id not in normalized or background_id in remembered:
+                    continue
+                normalized.remove(background_id)
+                remembered.append(background_id)
+            normalized.extend(remembered)
+            if not remembered:
                 return
-            normalized.remove(background_id)
-            normalized.append(background_id)
             self._write_json(
                 self._type_3_background_queue_path,
                 {"order": normalized},
@@ -524,29 +552,9 @@ class StateStore:
         if not item_ids:
             return None, False
         with self._exclusive():
-            queue = self._read_json(path, {})
-            if not isinstance(queue, dict):
-                queue = {}
-            order = self._normalize_template_video_order(queue, item_ids)
-            remaining_raw = queue.get("remaining")
-            if isinstance(remaining_raw, list):
-                remaining = self._normalize_template_video_order(
-                    {},
-                    [item for item in remaining_raw if item in order],
-                )
-                old_order = set(queue.get("order", []))
-                remaining.extend(
-                    item
-                    for item in order
-                    if item not in old_order and item not in remaining
-                )
-                started = bool(queue.get("started", True))
-            else:
-                remaining = list(order)
-                started = False
-            restarted = bool(started and not remaining)
-            if not remaining:
-                remaining = list(order)
+            queue, order, remaining, started, restarted = (
+                self._simple_cycle_queue_state(path, item_ids)
+            )
             selected = remaining.pop(0) if remaining else None
             self._write_json(
                 path,
@@ -558,6 +566,85 @@ class StateStore:
                 },
             )
         return selected, restarted
+
+    def _simple_cycle_queue_state(
+        self,
+        path: Path,
+        item_ids: list[str],
+    ) -> tuple[dict[str, Any], list[str], list[str], bool, bool]:
+        queue = self._read_json(path, {})
+        if not isinstance(queue, dict):
+            queue = {}
+        order = self._normalize_template_video_order(queue, item_ids)
+        remaining_raw = queue.get("remaining")
+        if isinstance(remaining_raw, list):
+            remaining = self._normalize_template_video_order(
+                {},
+                [item for item in remaining_raw if item in order],
+            )
+            old_order = set(queue.get("order", []))
+            remaining.extend(
+                item
+                for item in order
+                if item not in old_order and item not in remaining
+            )
+            started = bool(queue.get("started", True))
+        else:
+            remaining = list(order)
+            started = False
+        restarted = bool(started and not remaining)
+        if not remaining:
+            remaining = list(order)
+        return queue, order, remaining, started, restarted
+
+    def _peek_simple_cycle_id(
+        self,
+        path: Path,
+        item_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        if not item_ids:
+            return None, False
+        with self._exclusive():
+            queue, order, remaining, started, restarted = (
+                self._simple_cycle_queue_state(path, item_ids)
+            )
+            selected = remaining[0] if remaining else None
+            self._write_json(
+                path,
+                {
+                    "order": order,
+                    "remaining": remaining,
+                    "last_selected": queue.get("last_selected"),
+                    "started": started,
+                },
+            )
+        return selected, restarted
+
+    def _remember_simple_cycle_choice(
+        self,
+        path: Path,
+        selected_id: str,
+        item_ids: list[str],
+    ) -> bool:
+        if not selected_id or not item_ids:
+            return False
+        with self._exclusive():
+            _queue, order, remaining, _started, _restarted = (
+                self._simple_cycle_queue_state(path, item_ids)
+            )
+            if selected_id not in remaining:
+                return False
+            remaining.remove(selected_id)
+            self._write_json(
+                path,
+                {
+                    "order": order,
+                    "remaining": remaining,
+                    "last_selected": selected_id,
+                    "started": True,
+                },
+            )
+        return True
 
     def get_next_story_reference_image_id(
         self,
@@ -608,6 +695,60 @@ class StateStore:
         return self._get_next_simple_cycle_id(
             self._type_5_social_queue_path,
             copy_ids,
+        )
+
+    def get_next_cartools_image_id(
+        self,
+        image_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        """Rotate one R2 car-tools image per carousel without deleting it."""
+        return self._get_next_simple_cycle_id(
+            self._cartools_image_queue_path,
+            image_ids,
+        )
+
+    def peek_next_cartools_image_id(
+        self,
+        image_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        """Inspect the next car-tools image without consuming it."""
+        return self._peek_simple_cycle_id(
+            self._cartools_image_queue_path,
+            image_ids,
+        )
+
+    def remember_cartools_image_choice(
+        self,
+        selected_id: str,
+        image_ids: list[str],
+    ) -> bool:
+        """Consume a previously peeked image after its carousel rendered."""
+        return self._remember_simple_cycle_choice(
+            self._cartools_image_queue_path,
+            selected_id,
+            image_ids,
+        )
+
+    def peek_next_cartools_background_id(
+        self,
+        background_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        """Inspect the next curated Tools background without consuming it."""
+        return self._peek_simple_cycle_id(
+            self._cartools_background_queue_path,
+            background_ids,
+        )
+
+    def remember_cartools_background_choice(
+        self,
+        selected_id: str,
+        background_ids: list[str],
+    ) -> bool:
+        """Consume a Tools background only after its carousel rendered."""
+        return self._remember_simple_cycle_choice(
+            self._cartools_background_queue_path,
+            selected_id,
+            background_ids,
         )
 
     def read_media_pool(self) -> dict[str, Any]:

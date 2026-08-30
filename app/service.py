@@ -7,7 +7,7 @@ import random
 import re
 import shutil
 import time
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
@@ -22,7 +22,16 @@ from app.advice_cards import (
     advice_selection,
     format_advice_script,
 )
-from app.config import DEFAULT_ACCOUNT_PICK_ATTEMPTS, get_settings
+from app.car_tools import (
+    CAR_TOOLS_BACKGROUND_FILES,
+    CAR_TOOLS_ICON_FILES,
+    car_tools_slide_texts,
+)
+from app.config import (
+    DEFAULT_ACCOUNT_PICK_ATTEMPTS,
+    DEFAULT_R2_CARTOOLS_IMAGE_PREFIX,
+    get_settings,
+)
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
 from app.media_pool import MediaPoolService
 from app.models import (
@@ -31,6 +40,7 @@ from app.models import (
     MediaCandidate,
     SocialCopy,
     TemplateVideoResult,
+    CAR_TOOLS_ROLES,
     TYPE_4_ROLES,
     TYPE_5_ROLES,
     VideoGender,
@@ -41,7 +51,7 @@ from app.models import (
     SlideRole,
 )
 from app.parkez import build_parkez_script, parkez_fixed_image_name
-from app.r2_storage import R2StorageClient
+from app.r2_storage import R2_IMAGE_EXTENSIONS, R2StorageClient
 from app.render import VideoRenderer
 from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.state import StateStore
@@ -56,6 +66,17 @@ VIDEO_TEMPLATE_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 R2_TEMPLATE_CACHE_MAX_ITEMS = 8
 R2_TEMPLATE_CACHE_MAX_BYTES = 512 * 1024 * 1024
 R2_TEMPLATE_PARTIAL_MAX_AGE_SECONDS = 6 * 60 * 60
+
+
+@dataclass(frozen=True)
+class _CarToolsR2Selection:
+    media: MediaCandidate
+    prefix: str
+    queue_id: str
+    queue_ids: tuple[str, ...]
+    queue_restarted: bool
+
+
 TEMPLATE_VIDEO_SOCIAL_COPIES: dict[Language, tuple[SocialCopy, ...]] = {
     Language.ES: (
         SocialCopy(
@@ -371,6 +392,26 @@ class VideoCreationService:
                     "Falta la imagen fija obligatoria de ParkEz para "
                     f"{gender.value}: {parkez_fixed_path}"
                 )
+        car_tools_icons_dir = self.settings.root_dir / "cartools" / "iconos"
+        for icon_name in CAR_TOOLS_ICON_FILES.values():
+            icon_path = car_tools_icons_dir / icon_name
+            if not icon_path.exists():
+                warnings.append(
+                    "Falta el icono obligatorio del carrusel Tools: "
+                    f"{icon_path}"
+                )
+        car_tools_backgrounds_dir = (
+            self.settings.root_dir / "tipo3" / "fondocolores"
+        )
+        if not car_tools_backgrounds_dir.exists():
+            car_tools_backgrounds_dir = self.settings.root_dir / "tipo3" / "colores"
+        for background_name in CAR_TOOLS_BACKGROUND_FILES:
+            background_path = car_tools_backgrounds_dir / background_name
+            if not background_path.is_file():
+                warnings.append(
+                    "Falta el fondo seleccionado del carrusel Tools: "
+                    f"{background_path}"
+                )
         if not self.settings.fonts_dir.exists():
             LOGGER.info(
                 "No fonts directory at %s; will fall back to system fonts.",
@@ -527,6 +568,8 @@ class VideoCreationService:
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
         if request.video_type == VideoType.ADVICE:
             return self._create_advice_card_locked(request)
+        if request.video_type == VideoType.TOOLS:
+            return self._create_car_tools_carousel_locked(request)
         if request.video_type == VideoType.TYPE_4:
             return self._create_story_carousel_locked(request)
         if request.video_type == VideoType.TYPE_5:
@@ -753,6 +796,207 @@ class VideoCreationService:
             pool_remaining=0,
             pool_low_stock=False,
             separate_slide_text=False,
+        )
+
+    def _create_car_tools_carousel_locked(
+        self,
+        request: VideoRequest,
+    ) -> GenerationResult:
+        slide_texts = car_tools_slide_texts()
+        available_backgrounds = {
+            background.local_path.name: background
+            for background in self.selector.type_3_backgrounds()
+        }
+        missing_backgrounds = [
+            filename
+            for filename in CAR_TOOLS_BACKGROUND_FILES
+            if filename not in available_backgrounds
+        ]
+        if missing_backgrounds:
+            missing = ", ".join(missing_backgrounds)
+            raise ValueError(
+                "Faltan fondos seleccionados para el carrusel Tools en "
+                f"tipo3/fondocolores: {missing}."
+            )
+        background_ids = list(CAR_TOOLS_BACKGROUND_FILES)
+        background_id, background_queue_restarted = (
+            self.state.peek_next_cartools_background_id(background_ids)
+        )
+        if background_id is None:
+            raise ValueError(
+                "No pude seleccionar el siguiente fondo para el carrusel Tools."
+            )
+
+        job_id = self._build_job_id()
+        job_dir = self._job_output_dir(job_id, request.user_id)
+        r2_selection = self._download_next_cartools_image_from_r2(job_dir)
+        r2_media = r2_selection.media
+
+        slides: list[SlidePlan] = []
+        background = available_backgrounds[background_id]
+        for index, role in enumerate(CAR_TOOLS_ROLES[:-1], start=1):
+            slides.append(
+                SlidePlan(
+                    index=index,
+                    role=role,
+                    text=slide_texts[role],
+                    media=replace(
+                        background,
+                        source_id=f"{background.source_id}:cartools:{index}",
+                    ),
+                    fixed_asset=True,
+                )
+            )
+        slides.append(
+            SlidePlan(
+                index=len(CAR_TOOLS_ROLES),
+                role=SlideRole.CAR_TOOL_R2,
+                text=slide_texts[SlideRole.CAR_TOOL_R2],
+                media=r2_media,
+                fixed_asset=False,
+            )
+        )
+
+        plan = VideoPlan(
+            chosen_account=f"r2:{r2_selection.prefix}",
+            video_type=VideoType.TOOLS,
+            language=Language.ES,
+            slides=slides,
+            used_media_ids=[],
+            fallback_accounts=[],
+        )
+        video_path, script_path = self._render_outputs(
+            plan,
+            job_dir,
+            embed_slide_text=True,
+        )
+        self.state.log_job(
+            self.state.build_job_record(
+                job_id=job_id,
+                chosen_account=plan.chosen_account,
+                requested_accounts=[r2_media.source_id],
+                fallback_accounts=[],
+                video_type=VideoType.TOOLS,
+                language=Language.ES,
+                video_path=str(video_path) if video_path is not None else None,
+                script_path=str(script_path),
+                gender=request.gender.value,
+                user_id=request.user_id,
+                chat_id=request.chat_id,
+            )
+        )
+        if not self.state.remember_cartools_background_choice(
+            background_id,
+            background_ids,
+        ):
+            LOGGER.warning(
+                "Car-tools background queue choice %s was already consumed",
+                background_id,
+            )
+        if not self.state.remember_cartools_image_choice(
+            r2_selection.queue_id,
+            list(r2_selection.queue_ids),
+        ):
+            LOGGER.warning(
+                "Car-tools R2 queue choice %s was already consumed",
+                r2_selection.queue_id,
+            )
+        if r2_selection.queue_restarted:
+            LOGGER.info("Car-tools R2 image queue restarted after completing a cycle")
+        if background_queue_restarted:
+            LOGGER.info("Car-tools background queue restarted after completing a cycle")
+        self._cleanup_old_outputs()
+        return GenerationResult(
+            video_path=video_path,
+            script_path=script_path,
+            preview_text="\n\n".join(
+                slide_texts[role]
+                for role in CAR_TOOLS_ROLES
+                if slide_texts[role]
+            ),
+            social_copy=SocialCopy(title="", description="", hashtags=[]),
+            chosen_account=plan.chosen_account,
+            video_type=VideoType.TOOLS,
+            language=Language.ES,
+            fallback_accounts=[],
+            slides=list(plan.slides),
+            pool_remaining=0,
+            pool_low_stock=False,
+            separate_slide_text=False,
+        )
+
+    def _download_next_cartools_image_from_r2(
+        self,
+        job_dir: Path,
+    ) -> _CarToolsR2Selection:
+        prefix = (
+            self.settings.r2_cartools_image_prefix.strip().strip("/")
+            or DEFAULT_R2_CARTOOLS_IMAGE_PREFIX
+        )
+        if (
+            getattr(self, "r2_storage", None) is None
+            or not self.r2_storage.is_configured
+        ):
+            raise ValueError(
+                "El carrusel Tools necesita Cloudflare R2 configurado. Sube una "
+                f"imagen al prefijo {prefix!r}."
+            )
+
+        listing_prefix = f"{prefix}/" if prefix else ""
+        listed_images = sorted(
+            (
+                image
+                for image in self.r2_storage.list_images(listing_prefix)
+                if image.key.startswith(listing_prefix)
+            ),
+            key=lambda item: item.key,
+        )
+        images_by_identity = {}
+        for image in listed_images:
+            identity = self._r2_template_content_identity(image)
+            images_by_identity.setdefault(identity, image)
+        if not images_by_identity:
+            raise ValueError(
+                "El carrusel Tools necesita al menos una imagen en R2 bajo "
+                f"el prefijo {prefix!r}."
+            )
+
+        queue_ids = list(images_by_identity)
+        selected_identity, queue_restarted = self.state.peek_next_cartools_image_id(
+            queue_ids
+        )
+        selected = images_by_identity.get(str(selected_identity or ""))
+        if selected is None:
+            raise RuntimeError("La cola R2 de Tools no devolvió una imagen válida.")
+
+        suffix = Path(selected.key).suffix.lower()
+        if suffix not in R2_IMAGE_EXTENSIONS:
+            suffix = ".jpg"
+        local_path = job_dir / "cartools_inputs" / f"source_05{suffix}"
+        downloaded = self.r2_storage.download(selected.key, local_path)
+        try:
+            with Image.open(downloaded) as image:
+                width, height = ImageOps.exif_transpose(image).size
+        except OSError as error:
+            raise ValueError(
+                f"La imagen {selected.key!r} no se pudo abrir como imagen compatible."
+            ) from error
+
+        return _CarToolsR2Selection(
+            media=MediaCandidate(
+                source_account="r2_cartools",
+                source_id=f"r2-cartools:{selected.key}",
+                local_path=downloaded,
+                permalink=f"r2:{selected.key}",
+                caption="car tools queue image",
+                width=width,
+                height=height,
+                created_at="r2",
+            ),
+            prefix=prefix,
+            queue_id=str(selected_identity),
+            queue_ids=tuple(queue_ids),
+            queue_restarted=queue_restarted,
         )
 
     def _create_type_5_carousel_locked(self, request: VideoRequest) -> GenerationResult:
