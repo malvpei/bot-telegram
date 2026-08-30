@@ -139,7 +139,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `ACCOUNT_CACHE_TTL_HOURS` | 0 | 0 = cache permanente; las cuentas ya descargadas se leen de `data/downloads/<cuenta>` |
 | `ACCOUNT_PICK_ATTEMPTS` | 0 | objetivo inicial heredado; el selector puede seguir probando más cuentas para evitar falsos "sin imágenes" |
 | `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 de la que el Tipo 5 toma tres imágenes al azar |
-| `R2_CARTOOLS_IMAGE_PREFIX` | `videos/cartools` | carpeta R2 recorrida por la cola cíclica de imágenes limpias de `/createp` Tools |
+| `R2_CARTOOLS_IMAGE_PREFIX` | `cartools` | carpeta dentro de `R2_BUCKET` recorrida por la cola cíclica de imágenes limpias de `/createp` Tools |
 
 ### Instagram y 2FA
 
@@ -202,7 +202,8 @@ el mismo fondo. Tools solo usa los 13 fondos seleccionados en
 modifica la del Tipo 3 normal. Las cuatro slides mantienen ese fondo y el
 siguiente carrusel Tools avanza al siguiente de su rotación. El carrusel se
 completa con una quinta imagen limpia obtenida del
-prefijo R2 configurado por `R2_CARTOOLS_IMAGE_PREFIX` (`videos/cartools` por defecto).
+prefijo R2 configurado por `R2_CARTOOLS_IMAGE_PREFIX` (`cartools` por defecto,
+sin incluir el nombre de `R2_BUCKET`).
 Esta quinta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,
 sin eliminarlos del bucket y solo avanza cuando el carrusel termina de renderizar.
 Las posiciones de ambas colas persisten en

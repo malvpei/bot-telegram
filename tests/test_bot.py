@@ -768,7 +768,7 @@ def test_car_tools_sends_five_image_album_without_separate_copy_or_repeat_prompt
                     script_path=root / "script.txt",
                     preview_text="",
                     social_copy=SocialCopy(title="", description="", hashtags=[]),
-                    chosen_account="r2:videos/cartools",
+                    chosen_account="r2:cartools",
                     video_type=VideoType.TOOLS,
                     language=Language.ES,
                     fallback_accounts=[],

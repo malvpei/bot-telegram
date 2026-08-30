@@ -970,7 +970,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "3. el bot entrega tres fotos del banco correspondiente y un cierre "
         "fijo de ParkEz, siempre con los cuatro textos separados\n"
         "4. Tools entrega cuatro diseños con texto incrustado y una quinta "
-        "imagen de la cola R2 videos/cartools\n"
+        "imagen de la cola R2 cartools, dentro del bucket configurado\n"
         "5. en Mujer u Hombre puedes pedir otra foto distinta de la misma cuenta\n\n"
         "Las cuentas de hombres se leen de accounts.txt. Las de mujeres se "
         "leen de accounts_women.txt para el flujo /createp (una por línea).\n\n"

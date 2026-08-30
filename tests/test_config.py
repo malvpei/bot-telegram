@@ -225,7 +225,7 @@ def test_r2_cartools_image_prefix_defaults_to_bucket_folder(monkeypatch):
     try:
         settings = get_settings()
 
-        assert settings.r2_cartools_image_prefix == "videos/cartools"
+        assert settings.r2_cartools_image_prefix == "cartools"
     finally:
         get_settings.cache_clear()
 
@@ -247,7 +247,7 @@ def test_r2_cartools_image_prefix_blank_value_falls_back_to_safe_folder(monkeypa
     try:
         settings = get_settings()
 
-        assert settings.r2_cartools_image_prefix == "videos/cartools"
+        assert settings.r2_cartools_image_prefix == "cartools"
     finally:
         get_settings.cache_clear()
 

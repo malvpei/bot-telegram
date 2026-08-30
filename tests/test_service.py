@@ -262,7 +262,7 @@ class CartoolsR2Storage(FakeR2Storage):
 
     def list_images(self, prefix: str):
         self.listed_image_prefixes.append(prefix)
-        return list(self.objects)
+        return [item for item in self.objects if item.key.startswith(prefix)]
 
     def download(self, key: str, destination: Path) -> Path:
         self.downloaded_keys.append(key)
@@ -934,6 +934,32 @@ def test_cartools_r2_image_queue_uses_exact_prefix_fifo_cycle_and_etag_dedup(
         "r2-cartools:videos/cartools/a.jpg",
     ]
     assert restarted == [False, False, False, True]
+
+
+def test_cartools_r2_falls_back_when_prefix_repeats_bucket_name(tmp_path):
+    storage = CartoolsR2Storage(
+        [R2Object(key="cartools/911.jpeg", size=123, etag="911")]
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        r2_bucket="videos",
+        r2_cartools_image_prefix="videos/cartools",
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.r2_storage = storage
+
+    selection = service._download_next_cartools_image_from_r2(tmp_path / "job")
+
+    assert storage.listed_image_prefixes == ["videos/cartools/", "cartools/"]
+    assert storage.downloaded_keys == ["cartools/911.jpeg"]
+    assert selection.prefix == "cartools"
+    assert selection.media.source_id == "r2-cartools:cartools/911.jpeg"
 
 
 def test_cartools_queues_do_not_advance_when_rendering_fails(

@@ -22,12 +22,17 @@ def test_r2_access_key_id_must_have_expected_length():
 
 
 class FakePaginator:
+    def __init__(self, client):
+        self.client = client
+
     def paginate(self, **kwargs):
+        self.client.paginate_calls.append(kwargs)
         return [
             {
                 "Contents": [
                     {"Key": "imagenes/a.jpg", "Size": 10},
                     {"Key": "imagenes/b.png", "Size": 20},
+                    {"Key": "imagenes/c.jpeg", "Size": 21},
                     {"Key": "imagenes/snap:image/jpeg", "Size": 25},
                     {"Key": "imagenes/cloudflare-upload:image/png", "Size": 24},
                     {"Key": "imagenes/not-image", "Size": 26},
@@ -41,11 +46,12 @@ class FakePaginator:
 class FakeBotoClient:
     def __init__(self):
         self.put_calls = []
+        self.paginate_calls = []
         self.objects = {"imagenes/a.jpg": (b"image", "image/jpeg")}
 
     def get_paginator(self, name):
         assert name == "list_objects_v2"
-        return FakePaginator()
+        return FakePaginator(self)
 
     def put_object(self, **kwargs):
         self.put_calls.append(kwargs)
@@ -86,9 +92,11 @@ def test_r2_lists_and_uploads_images():
     assert [image.key for image in images] == [
         "imagenes/a.jpg",
         "imagenes/b.png",
+        "imagenes/c.jpeg",
         "imagenes/snap:image/jpeg",
         "imagenes/cloudflare-upload:image/png",
     ]
+    assert fake.paginate_calls == [{"Bucket": "bucket", "Prefix": "imagenes"}]
     assert uploaded.key == "imagenes/new.png"
     assert fake.put_calls[0]["Bucket"] == "bucket"
     assert fake.put_calls[0]["ContentType"] == "image/png"

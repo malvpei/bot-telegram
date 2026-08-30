@@ -51,7 +51,7 @@ from app.models import (
     SlideRole,
 )
 from app.parkez import build_parkez_script, parkez_fixed_image_name
-from app.r2_storage import R2_IMAGE_EXTENSIONS, R2StorageClient
+from app.r2_storage import R2_IMAGE_EXTENSIONS, R2Object, R2StorageClient
 from app.render import VideoRenderer
 from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.state import StateStore
@@ -942,23 +942,42 @@ class VideoCreationService:
                 f"imagen al prefijo {prefix!r}."
             )
 
+        attempted_prefixes = [prefix]
         listing_prefix = f"{prefix}/" if prefix else ""
-        listed_images = sorted(
-            (
-                image
-                for image in self.r2_storage.list_images(listing_prefix)
-                if image.key.startswith(listing_prefix)
-            ),
-            key=lambda item: item.key,
-        )
+        listed_images = self._list_cartools_images(listing_prefix)
+        bucket_prefix = self.settings.r2_bucket.strip().strip("/")
+        qualified_bucket_prefix = f"{bucket_prefix}/" if bucket_prefix else ""
+        if (
+            not listed_images
+            and qualified_bucket_prefix
+            and prefix.startswith(qualified_bucket_prefix)
+        ):
+            fallback_prefix = prefix[len(qualified_bucket_prefix) :].strip("/")
+            if fallback_prefix:
+                attempted_prefixes.append(fallback_prefix)
+                fallback_listing_prefix = f"{fallback_prefix}/"
+                fallback_images = self._list_cartools_images(
+                    fallback_listing_prefix
+                )
+                if fallback_images:
+                    LOGGER.info(
+                        "R2 Tools prefix %s included bucket %s; using %s",
+                        prefix,
+                        bucket_prefix,
+                        fallback_prefix,
+                    )
+                    prefix = fallback_prefix
+                    listing_prefix = fallback_listing_prefix
+                    listed_images = fallback_images
         images_by_identity = {}
         for image in listed_images:
             identity = self._r2_template_content_identity(image)
             images_by_identity.setdefault(identity, image)
         if not images_by_identity:
+            attempted = " o ".join(repr(item) for item in attempted_prefixes)
             raise ValueError(
                 "El carrusel Tools necesita al menos una imagen en R2 bajo "
-                f"el prefijo {prefix!r}."
+                f"el prefijo {attempted}."
             )
 
         queue_ids = list(images_by_identity)
@@ -997,6 +1016,16 @@ class VideoCreationService:
             queue_id=str(selected_identity),
             queue_ids=tuple(queue_ids),
             queue_restarted=queue_restarted,
+        )
+
+    def _list_cartools_images(self, listing_prefix: str) -> list[R2Object]:
+        return sorted(
+            (
+                image
+                for image in self.r2_storage.list_images(listing_prefix)
+                if image.key.startswith(listing_prefix)
+            ),
+            key=lambda item: item.key,
         )
 
     def _create_type_5_carousel_locked(self, request: VideoRequest) -> GenerationResult:
