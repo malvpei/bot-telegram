@@ -24,9 +24,12 @@ from app.advice_cards import (
 )
 from app.car_tools import (
     CAR_TOOLS_BACKGROUND_FILES,
-    CAR_TOOLS_HOOK,
     CAR_TOOLS_ICON_FILES,
     car_tools_slide_texts,
+)
+from app.car_tools_social import (
+    CAR_TOOLS_SOCIAL_COPY_IDS,
+    car_tools_social_copies,
 )
 from app.config import (
     DEFAULT_ACCOUNT_PICK_ATTEMPTS,
@@ -871,6 +874,21 @@ class VideoCreationService:
             job_dir,
             embed_slide_text=True,
         )
+        social_copy_ids = list(CAR_TOOLS_SOCIAL_COPY_IDS)
+        social_copy_id, social_copy_queue_restarted = (
+            self.state.peek_next_cartools_social_copy_id(social_copy_ids)
+        )
+        if social_copy_id is None:
+            raise RuntimeError(
+                "No pude seleccionar el título y la descripción del carrusel Tools."
+            )
+        try:
+            social_copy_index = social_copy_ids.index(social_copy_id)
+            social_copy = car_tools_social_copies()[social_copy_index]
+        except (IndexError, ValueError) as exc:
+            raise RuntimeError(
+                "La cola de textos del carrusel Tools contiene una opción inválida."
+            ) from exc
         self.state.log_job(
             self.state.build_job_record(
                 job_id=job_id,
@@ -902,10 +920,20 @@ class VideoCreationService:
                 "Car-tools R2 queue choice %s was already consumed",
                 r2_selection.queue_id,
             )
+        if not self.state.remember_cartools_social_copy_choice(
+            social_copy_id,
+            social_copy_ids,
+        ):
+            LOGGER.warning(
+                "Car-tools social copy queue choice %s was already consumed",
+                social_copy_id,
+            )
         if r2_selection.queue_restarted:
             LOGGER.info("Car-tools R2 image queue restarted after completing a cycle")
         if background_queue_restarted:
             LOGGER.info("Car-tools background queue restarted after completing a cycle")
+        if social_copy_queue_restarted:
+            LOGGER.info("Car-tools social copy queue restarted after completing a cycle")
         self._cleanup_old_outputs()
         return GenerationResult(
             video_path=video_path,
@@ -915,12 +943,7 @@ class VideoCreationService:
                 for role in CAR_TOOLS_ROLES
                 if slide_texts[role]
             ),
-            social_copy=SocialCopy(
-                title="",
-                description="",
-                hashtags=[],
-                hook=CAR_TOOLS_HOOK,
-            ),
+            social_copy=social_copy,
             chosen_account=plan.chosen_account,
             video_type=VideoType.TOOLS,
             language=Language.ES,

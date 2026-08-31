@@ -13,6 +13,10 @@ import pytest
 
 from app.advice_cards import AdviceBackground
 from app.car_tools import CAR_TOOLS_HOOK
+from app.car_tools_social import (
+    CAR_TOOLS_SOCIAL_COPY_IDS,
+    car_tools_social_copies,
+)
 from app.config import get_settings
 from app.models import (
     CAR_TOOLS_ROLES,
@@ -1039,6 +1043,7 @@ def test_cartools_queues_do_not_advance_when_rendering_fails(
     assert service.state.peek_next_cartools_background_id(
         list(allowed_background_names)
     ) == (allowed_background_names[0], False)
+    assert not (settings.state_dir / "cartools_social_copy_queue.json").exists()
 
 
 def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
@@ -1107,7 +1112,11 @@ def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
     )
 
     assert result.video_type == VideoType.TOOLS
-    assert result.social_copy.messages == [CAR_TOOLS_HOOK]
+    expected_social_copies = car_tools_social_copies()
+    assert result.social_copy == expected_social_copies[0]
+    assert result.social_copy.messages == expected_social_copies[0].messages
+    assert result.social_copy.messages[0] == CAR_TOOLS_HOOK
+    assert len(result.social_copy.messages) == 3
     assert [slide.role for slide in result.slides] == list(CAR_TOOLS_ROLES)
     assert renderer.render_slide_still_sources[:4] == [backgrounds[1].local_path] * 4
     assert renderer.render_slide_still_calls == [VideoType.TOOLS] * 5
@@ -1140,7 +1149,7 @@ def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
         ["etag:closing:123"]
     ) == ("etag:closing:123", True)
 
-    service._create_video_locked(
+    second_result = service._create_video_locked(
         VideoRequest(
             chat_id=1,
             user_id=2,
@@ -1150,6 +1159,12 @@ def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
         )
     )
 
+    assert second_result.social_copy == expected_social_copies[1]
+    assert second_result.social_copy.title != result.social_copy.title
+    assert second_result.social_copy.description != result.social_copy.description
+    assert service.state.peek_next_cartools_social_copy_id(
+        list(CAR_TOOLS_SOCIAL_COPY_IDS)
+    ) == (CAR_TOOLS_SOCIAL_COPY_IDS[2], False)
     assert renderer.render_slide_still_sources[5:9] == [
         backgrounds[3].local_path
     ] * 4

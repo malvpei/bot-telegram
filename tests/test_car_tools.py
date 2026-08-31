@@ -14,6 +14,10 @@ from app.car_tools import (
     CAR_TOOLS_SLIDE_TEXTS,
     car_tools_slide_texts,
 )
+from app.car_tools_social import (
+    CAR_TOOLS_SOCIAL_COPY_IDS,
+    car_tools_social_copies,
+)
 from app.config import get_settings
 from app.models import (
     CAR_TOOLS_ROLES,
@@ -133,6 +137,49 @@ def test_car_tools_copy_preserves_the_supplied_text_exactly():
     assert CAR_TOOLS_SLIDE_TEXTS == EXPECTED_CAR_TOOLS_TEXTS
     assert car_tools_slide_texts() == EXPECTED_CAR_TOOLS_TEXTS
     assert CAR_TOOLS_HOOK == "apps que son lirteralmente obligatorias si tiene coche"
+
+
+def test_car_tools_has_15_varied_social_copies_with_driving_hashtags():
+    copies = car_tools_social_copies()
+
+    assert len(copies) == 15
+    assert len(CAR_TOOLS_SOCIAL_COPY_IDS) == 15
+    assert len(set(CAR_TOOLS_SOCIAL_COPY_IDS)) == 15
+    assert len({copy.title for copy in copies}) == 15
+    assert len({copy.description for copy in copies}) == 15
+
+    delivered_description_lengths: list[int] = []
+    for copy in copies:
+        assert copy.hook == CAR_TOOLS_HOOK
+        assert len(copy.messages) == 3
+        assert copy.messages[:2] == [CAR_TOOLS_HOOK, copy.title]
+        assert copy.messages[2].startswith(copy.description)
+        assert 200 <= len(copy.description) <= 2_000
+        assert 200 <= len(copy.messages[2]) <= 2_000
+        assert "#coches" in copy.hashtags
+        assert copy.hashtags
+        assert all(
+            hashtag.startswith("#") and " " not in hashtag
+            for hashtag in copy.hashtags
+        )
+        for app_name in ("RadarBot", "ParkEz", "Waze", "Google Maps"):
+            assert app_name in copy.description
+        delivered_description_lengths.append(len(copy.messages[2]))
+
+    assert len(set(delivered_description_lengths)) >= 10
+    assert (
+        max(delivered_description_lengths) - min(delivered_description_lengths)
+        >= 1_000
+    )
+
+
+def test_car_tools_social_copy_factory_returns_independent_hashtag_lists():
+    first_batch = car_tools_social_copies()
+    second_batch = car_tools_social_copies()
+
+    first_batch[0].hashtags.append("#mutacion")
+
+    assert "#mutacion" not in second_batch[0].hashtags
 
 
 def test_car_tools_icon_assets_use_stable_names_and_have_visible_alpha():

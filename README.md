@@ -204,13 +204,17 @@ siguiente carrusel Tools avanza al siguiente de su rotación. El carrusel se
 completa con una quinta imagen limpia obtenida del
 prefijo R2 configurado por `R2_CARTOOLS_IMAGE_PREFIX` (`cartools` por defecto,
 sin incluir el nombre de `R2_BUCKET`).
-Junto al álbum, el bot envía la frase «apps que son lirteralmente obligatorias
-si tiene coche» como mensaje separado.
+Antes del álbum, el bot envía tres mensajes separados: la frase «apps que son
+lirteralmente obligatorias si tiene coche», un título y una descripción con
+hashtags. Hay 15 parejas de título y descripción relacionadas con las cuatro
+apps; recorren una cola propia antes de volver a empezar.
 Esta quinta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,
 sin eliminarlos del bucket y solo avanza cuando el carrusel termina de renderizar.
-Las posiciones de ambas colas persisten en
+Las posiciones de las tres colas persisten en
 `DATA_DIR/state/cartools_background_queue.json` y
-`DATA_DIR/state/cartools_image_queue.json`, incluso tras reinicios o redeploys.
+`DATA_DIR/state/cartools_image_queue.json` y
+`DATA_DIR/state/cartools_social_copy_queue.json`, incluso tras reinicios o
+redeploys.
 
 El **Tipo 5** elige tres imágenes diferentes al azar del prefijo R2
 `tipo4/imagenstipo4` y añade como cuarta imagen el cierre fijo de Dropradar. Las
@@ -350,6 +354,7 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `data/state/jobs_log.json` — histórico de jobs
 - `data/state/cartools_background_queue.json` — rotación de los 13 fondos seleccionados de Tools
 - `data/state/cartools_image_queue.json` — cola cíclica de la imagen R2 de `/createp` Tools
+- `data/state/cartools_social_copy_queue.json` — rotación de los 15 títulos y descripciones de Tools
 - `data/state/telegram_users.json` — usuarios autorizados y último acceso
 - `data/state/.state.lock` — lock de `filelock` cross-proceso
 

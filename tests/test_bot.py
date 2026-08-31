@@ -734,7 +734,7 @@ def test_manual_type_5_sends_one_title_description_four_texts_and_clean_album():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_car_tools_sends_hook_then_album_without_slide_copy_or_repeat_prompt():
+def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -769,9 +769,9 @@ def test_car_tools_sends_hook_then_album_without_slide_copy_or_repeat_prompt():
                     script_path=root / "script.txt",
                     preview_text="",
                     social_copy=SocialCopy(
-                        title="",
-                        description="",
-                        hashtags=[],
+                        title="Título Tools",
+                        description="Descripción para conductores",
+                        hashtags=["#coches", "#conduccion"],
                         hook=CAR_TOOLS_HOOK,
                     ),
                     chosen_account="r2:cartools",
@@ -814,15 +814,26 @@ def test_car_tools_sends_hook_then_album_without_slide_copy_or_repeat_prompt():
         asyncio.run(_execute_job(update, context, request))
 
         messages = [text for event, text in context.bot.events if event == "message"]
-        assert len(messages) == 3
+        assert len(messages) == 5
         assert "tools" in messages[1].lower()
         assert "5" in messages[1]
         assert messages[2] == CAR_TOOLS_HOOK
+        assert messages[3] == "Título Tools"
+        assert messages[4] == (
+            "Descripción para conductores #coches #conduccion"
+        )
         assert all(
             f"Texto incrustado {index}" not in messages
             for index in range(1, 5)
         )
-        assert context.bot.events[-2] == ("message", CAR_TOOLS_HOOK)
+        assert context.bot.events[-4:-1] == [
+            ("message", CAR_TOOLS_HOOK),
+            ("message", "Título Tools"),
+            (
+                "message",
+                "Descripción para conductores #coches #conduccion",
+            ),
+        ]
         assert context.bot.events[-1] == (
             "album",
             "car_tools_1.jpg,car_tools_2.jpg,car_tools_3.jpg,"

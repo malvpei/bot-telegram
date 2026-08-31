@@ -527,3 +527,30 @@ def test_cartools_background_queue_is_separate_persistent_and_cyclic(state_dir):
     ) == ("blue.jpg", True)
     assert (state_dir / "cartools_background_queue.json").is_file()
     assert not (state_dir / "type3_background_queue.json").exists()
+
+
+def test_cartools_social_copy_queue_peeks_commits_and_persists(state_dir):
+    copy_ids = ["cartools-copy-01", "cartools-copy-02"]
+    store = StateStore(state_dir)
+
+    first, restarted = store.peek_next_cartools_social_copy_id(copy_ids)
+
+    assert (first, restarted) == (copy_ids[0], False)
+    assert StateStore(state_dir).peek_next_cartools_social_copy_id(copy_ids) == (
+        copy_ids[0],
+        False,
+    )
+    assert store.remember_cartools_social_copy_choice(
+        first or "",
+        copy_ids,
+    ) is True
+    assert StateStore(state_dir).peek_next_cartools_social_copy_id(copy_ids) == (
+        copy_ids[1],
+        False,
+    )
+    assert store.remember_cartools_social_copy_choice(copy_ids[1], copy_ids) is True
+    assert StateStore(state_dir).peek_next_cartools_social_copy_id(copy_ids) == (
+        copy_ids[0],
+        True,
+    )
+    assert (state_dir / "cartools_social_copy_queue.json").is_file()

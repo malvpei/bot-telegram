@@ -55,6 +55,9 @@ class StateStore:
         self._cartools_background_queue_path = (
             self.state_dir / "cartools_background_queue.json"
         )
+        self._cartools_social_copy_queue_path = (
+            self.state_dir / "cartools_social_copy_queue.json"
+        )
         self._cartools_image_queue_path = self.state_dir / "cartools_image_queue.json"
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
@@ -749,6 +752,28 @@ class StateStore:
             self._cartools_background_queue_path,
             selected_id,
             background_ids,
+        )
+
+    def peek_next_cartools_social_copy_id(
+        self,
+        copy_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        """Inspect the next Tools title/description pair without consuming it."""
+        return self._peek_simple_cycle_id(
+            self._cartools_social_copy_queue_path,
+            copy_ids,
+        )
+
+    def remember_cartools_social_copy_choice(
+        self,
+        selected_id: str,
+        copy_ids: list[str],
+    ) -> bool:
+        """Consume a Tools copy only after its carousel rendered."""
+        return self._remember_simple_cycle_choice(
+            self._cartools_social_copy_queue_path,
+            selected_id,
+            copy_ids,
         )
 
     def read_media_pool(self) -> dict[str, Any]:
