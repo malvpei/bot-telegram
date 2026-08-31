@@ -31,6 +31,7 @@ from app.render import (
     CAR_TOOLS_BODY_TOP_RATIOS,
     CAR_TOOLS_TEXT_EDGE_MARGIN,
     CAR_TOOLS_TEXT_BOLD,
+    CAR_TOOLS_TEXT_INNER_STROKE_WIDTH,
     TYPE_3_BODY_FONT_SIZE,
     VideoRenderer,
 )
@@ -273,6 +274,7 @@ def test_car_tools_reference_wraps_and_uses_regular_text_weight():
     assert CAR_TOOLS_BODY_LINES == EXPECTED_CAR_TOOLS_BODY_LINES
     assert [len(lines) for lines in CAR_TOOLS_BODY_LINES.values()] == [2, 2, 2, 3]
     assert CAR_TOOLS_TEXT_BOLD is False
+    assert CAR_TOOLS_TEXT_INNER_STROKE_WIDTH == 1
 
     for role, expected in expected_lines.items():
         _title, body, cta = renderer._split_type_3_tool_text(
@@ -302,6 +304,47 @@ def test_car_tools_reference_wraps_and_uses_regular_text_weight():
         SlideRole.CAR_TOOL_WAZE: 11,
         SlideRole.CAR_TOOL_GOOGLE_MAPS: 9,
     }
+
+
+def test_car_tools_adds_a_subtle_inner_stroke_only_to_tools(monkeypatch):
+    renderer = VideoRenderer(
+        replace(
+            get_settings(),
+            width=1080,
+            height=1920,
+        )
+    )
+    image = Image.new("RGB", (1080, 1920), (24, 31, 42))
+    captured_inner_strokes: list[int] = []
+
+    def capture_lines(draw, lines, font, **kwargs):
+        captured_inner_strokes.append(kwargs.get("inner_stroke_width", 0))
+
+    monkeypatch.setattr(renderer, "_draw_lines", capture_lines)
+    monkeypatch.setattr(renderer, "_draw_type_3_icon", lambda *args, **kwargs: None)
+
+    renderer._draw_type_3_tool_slide(
+        image.copy(),
+        SlidePlan(
+            index=1,
+            role=SlideRole.CAR_TOOL_RADARBOT,
+            text=EXPECTED_CAR_TOOLS_TEXTS[SlideRole.CAR_TOOL_RADARBOT],
+            media=_candidate(Path("unused-tools.jpg"), "tools"),
+            fixed_asset=True,
+        ),
+    )
+    renderer._draw_type_3_tool_slide(
+        image.copy(),
+        SlidePlan(
+            index=1,
+            role=SlideRole.TOOL_STORE,
+            text="1. Shopify\nCrea tu tienda online",
+            media=_candidate(Path("unused-type3.jpg"), "type3"),
+            fixed_asset=True,
+        ),
+    )
+
+    assert captured_inner_strokes == [1, 1, 0, 0]
 
 
 def test_car_tools_r2_slide_is_clean_and_covers_the_canvas(tmp_path):

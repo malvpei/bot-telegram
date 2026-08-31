@@ -164,6 +164,7 @@ TYPE_3_BODY_FONT_SIZE = 58
 TYPE_3_TOOL_VERTICAL_NUDGE_RATIO = 0.015
 CAR_TOOLS_TITLE_FONT_SIZE = 74
 CAR_TOOLS_TEXT_BOLD = False
+CAR_TOOLS_TEXT_INNER_STROKE_WIDTH = 1
 CAR_TOOLS_TITLE_CENTER_RATIO = 0.263
 CAR_TOOLS_TEXT_EDGE_MARGIN = 80
 CAR_TOOLS_BODY_TOP_RATIOS: dict[SlideRole, float] = {
@@ -2851,6 +2852,11 @@ class VideoRenderer:
         )
         max_text_width = width - edge_margin * 2
         stroke_width = max(2, _scale_x(TYPE_3_TEXT_STROKE_WIDTH, width))
+        inner_stroke_width = (
+            max(1, _scale_x(CAR_TOOLS_TEXT_INNER_STROKE_WIDTH, width))
+            if is_car_tools
+            else 0
+        )
         body_line_gap = _scale_y(
             CAR_TOOLS_BODY_LINE_GAPS.get(slide.role, 11) if is_car_tools else 8,
             height,
@@ -2927,6 +2933,7 @@ class VideoRenderer:
             stroke_width=stroke_width,
             stroke_fill=HOOK_TEXT_STROKE_FILL,
             line_gap=0,
+            inner_stroke_width=inner_stroke_width,
         )
         if body_lines:
             self._draw_lines(
@@ -2947,6 +2954,7 @@ class VideoRenderer:
                 stroke_width=stroke_width,
                 stroke_fill=HOOK_TEXT_STROKE_FILL,
                 line_gap=body_line_gap,
+                inner_stroke_width=inner_stroke_width,
             )
 
         tool_key = self._type_3_tool_key(slide.role, slide.text)
