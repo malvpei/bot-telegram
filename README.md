@@ -304,8 +304,12 @@ por defecto; ajusta `BATCH_PREPARATION_LEAD_MINUTES` si el proveedor IA tarda
 mas o menos en tu despliegue. Si el bot arranca despues de la hora de inicio
 pero aun esta dentro de esa ventana, recupera automaticamente el lote pendiente.
 
-Los carruseles se entregan como un unico album de Telegram con todas sus
-imagenes, tanto al ejecutar `/create` manualmente como en los lotes programados.
+Los carruseles se entregan como un unico album de documentos de Telegram con
+todas sus imagenes, tanto al ejecutar `/create` manualmente como en los lotes
+programados. Las imagenes compuestas o redimensionadas se exportan como PNG sin
+perdida; los recursos que ya se entregan intactos conservan su formato original.
+Todos se envian como archivos para que Telegram preserve los bytes sin
+recomprimirlos.
 
 ### Web para subir imagenes a R2
 

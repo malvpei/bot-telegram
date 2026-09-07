@@ -9,7 +9,12 @@ from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto, Update
+from telegram import (
+    InlineKeyboardButton,
+    InlineKeyboardMarkup,
+    InputMediaDocument,
+    Update,
+)
 from telegram.error import NetworkError, RetryAfter, TelegramError
 from telegram.ext import (
     Application,
@@ -2346,7 +2351,7 @@ async def _execute_extra_image(
 
     await status_message.edit_text(f"Te mando otra imagen de @{media.source_account}.")
     try:
-        await _send_photo(context, chat.id, media.local_path)
+        await _send_image_document(context, chat.id, media.local_path)
         context.user_data["repeat_request"] = {
             "chosen_account": media.source_account,
             "requested_accounts": request.account_inputs,
@@ -2375,15 +2380,24 @@ async def _send_message(context, chat_id: int, text: str, **kwargs):
     )
 
 
-async def _send_photo(context, chat_id: int, path):
-    async def send_opened_photo(*, chat_id: int, photo_path):
-        with photo_path.open("rb") as handle:
-            return await context.bot.send_photo(chat_id=chat_id, photo=handle)
+async def _send_image_document(context, chat_id: int, path):
+    async def send_opened_document(*, chat_id: int, document_path):
+        with document_path.open("rb") as handle:
+            return await context.bot.send_document(
+                chat_id=chat_id,
+                document=handle,
+                filename=document_path.name,
+                disable_content_type_detection=True,
+                read_timeout=TELEGRAM_READ_TIMEOUT,
+                write_timeout=TELEGRAM_MEDIA_WRITE_TIMEOUT,
+                connect_timeout=TELEGRAM_CONNECT_TIMEOUT,
+                pool_timeout=TELEGRAM_POOL_TIMEOUT,
+            )
 
     return await _telegram_call_with_retries(
-        send_opened_photo,
+        send_opened_document,
         chat_id=chat_id,
-        photo_path=path,
+        document_path=Path(path),
     )
 
 
@@ -2403,20 +2417,25 @@ async def _send_video(context, chat_id: int, path):
     )
 
 
-async def _send_photo_album(context, chat_id: int, paths):
+async def _send_image_document_album(context, chat_id: int, paths):
     paths = [Path(path) for path in paths]
     if len(paths) < 2:
         if paths:
-            return [await _send_photo(context, chat_id, paths[0])]
+            return [await _send_image_document(context, chat_id, paths[0])]
         return []
 
     async def send_opened_album(*, chat_id: int, photo_paths):
-        # Rebuild every InputMediaPhoto on each retry. PTB consumes file inputs
-        # while preparing the multipart request, so reusing them after a broken
-        # HTTP connection is unsafe.
+        # Rebuild every InputMediaDocument on each retry. PTB consumes file
+        # inputs while preparing the multipart request, so reusing them after a
+        # broken HTTP connection is unsafe. Documents preserve the source bytes;
+        # Telegram photos are recompressed by the platform.
         with ExitStack() as stack:
             media = [
-                InputMediaPhoto(stack.enter_context(path.open("rb")))
+                InputMediaDocument(
+                    stack.enter_context(path.open("rb")),
+                    filename=path.name,
+                    disable_content_type_detection=True,
+                )
                 for path in photo_paths
             ]
             return await context.bot.send_media_group(
@@ -2494,10 +2513,10 @@ async def _send_slides_text_then_image(
         elif video_type == VideoType.TYPE_3 and slide.role == SlideRole.HOOK and slide.text:
             await _send_message(context, chat_id, slide.text)
 
-    # Every carousel is delivered as one Telegram media group. The helper
-    # falls back to send_photo when only one valid slide exists.
+    # Every carousel is delivered as one Telegram document group so Telegram
+    # cannot recompress the images. A single valid slide uses send_document too.
     if paths:
-        await _send_photo_album(context, chat_id, paths)
+        await _send_image_document_album(context, chat_id, paths)
 
 
 def _separate_slide_text_messages(

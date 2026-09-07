@@ -727,7 +727,7 @@ class VideoCreationService:
         r2_selection = self._download_next_type_4_image_from_r2(job_dir)
         slides_dir = job_dir / "slides"
         slides_dir.mkdir(parents=True, exist_ok=True)
-        output_path = slides_dir / "slide_01.jpg"
+        output_path = slides_dir / "slide_01.png"
         script_text = format_advice_script(tips)
 
         image = self.renderer.render_advice_card(
@@ -738,9 +738,8 @@ class VideoCreationService:
         )
         image.convert("RGB").save(
             output_path,
-            format="JPEG",
-            quality=95,
-            subsampling=0,
+            format="PNG",
+            optimize=True,
         )
         media = MediaCandidate(
             source_account="tipo4_consejos",
@@ -943,7 +942,7 @@ class VideoCreationService:
         media: MediaCandidate,
         job_dir: Path,
     ) -> MediaCandidate:
-        output_path = job_dir / "slides" / "slide_02.jpg"
+        output_path = job_dir / "slides" / "slide_02.png"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         try:
             with Image.open(media.local_path) as image:
@@ -957,7 +956,11 @@ class VideoCreationService:
             raise ValueError(
                 f"La imagen R2 del Tipo 4 {media.local_path} no se pudo normalizar."
             ) from error
-        normalized.save(output_path, format="JPEG", quality=95, subsampling=0)
+        normalized.save(
+            output_path,
+            format="PNG",
+            optimize=True,
+        )
         return replace(
             media,
             local_path=output_path,
@@ -2213,7 +2216,7 @@ class VideoCreationService:
                 # The user supplied these clean closing images explicitly and
                 # expects that exact asset, not a resized or recompressed copy.
                 continue
-            out_path = slides_dir / f"slide_{slide.index:02d}.jpg"
+            out_path = slides_dir / f"slide_{slide.index:02d}.png"
             try:
                 render_slide = (
                     slide
@@ -2223,7 +2226,11 @@ class VideoCreationService:
                 normalized = self.renderer.render_slide_still(
                     render_slide, plan.video_type
                 ).convert("RGB")
-                normalized.save(out_path, format="JPEG", quality=95, subsampling=0)
+                normalized.save(
+                    out_path,
+                    format="PNG",
+                    optimize=True,
+                )
             except OSError as error:
                 LOGGER.warning(
                     "No pude normalizar %s: %s", source_path, error
@@ -2268,12 +2275,16 @@ class VideoCreationService:
         target_height = self.settings.height
         extra_dir = job_dir / "extra"
         extra_dir.mkdir(parents=True, exist_ok=True)
-        out_path = extra_dir / "extra_01.jpg"
+        out_path = extra_dir / "extra_01.png"
         with Image.open(media.local_path) as image:
             normalized = _cover_resize(
                 image.convert("RGB"), target_width, target_height
             )
-        normalized.save(out_path, format="JPEG", quality=95, subsampling=0)
+        normalized.save(
+            out_path,
+            format="PNG",
+            optimize=True,
+        )
         media.local_path = out_path
         media.width = target_width
         media.height = target_height

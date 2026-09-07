@@ -6,6 +6,7 @@ from unittest.mock import patch
 from uuid import uuid4
 
 from PIL import Image
+from telegram import InputMediaDocument
 from telegram.error import NetworkError
 from telegram.ext import ConversationHandler
 
@@ -70,6 +71,9 @@ from app.models import (
 class FakeTelegramBot:
     def __init__(self) -> None:
         self.events: list[tuple[str, str]] = []
+        self.document_payloads: list[bytes] = []
+        self.media_group_payloads: list[tuple[bytes, ...]] = []
+        self.media_group_types: list[tuple[type, ...]] = []
         self.reply_markup = None
 
     async def send_message(self, *, chat_id: int, text: str, reply_markup=None) -> None:
@@ -79,10 +83,25 @@ class FakeTelegramBot:
     async def send_photo(self, *, chat_id: int, photo) -> None:
         self.events.append(("photo", Path(photo.name).name))
 
+    async def send_document(
+        self,
+        *,
+        chat_id: int,
+        document,
+        filename=None,
+        **kwargs,
+    ) -> None:
+        self.document_payloads.append(document.read())
+        self.events.append(("document", filename or Path(document.name).name))
+
     async def send_video(self, *, chat_id: int, video, supports_streaming=True) -> None:
         self.events.append(("video", Path(video.name).name))
 
     async def send_media_group(self, *, chat_id: int, media, **kwargs):
+        self.media_group_payloads.append(
+            tuple(item.media.input_file_content for item in media)
+        )
+        self.media_group_types.append(tuple(type(item) for item in media))
         filenames = ",".join(item.media.filename for item in media)
         self.events.append(("album", filenames))
         return tuple(media)
@@ -324,6 +343,12 @@ def test_type_3_sends_hook_text_message_then_clean_images():
             ("message", "Como hacer dropshipping en 2026"),
             ("album", "slide.jpg,slide.jpg"),
         ]
+        assert context.bot.media_group_types == [
+            (InputMediaDocument, InputMediaDocument)
+        ]
+        assert context.bot.media_group_payloads == [
+            (image_path.read_bytes(), image_path.read_bytes())
+        ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -375,6 +400,9 @@ def test_type_4_sends_all_story_images_as_one_album():
 
         assert context.bot.events == [
             ("album", "slide_01.jpg,slide_02.jpg,slide_03.jpg")
+        ]
+        assert context.bot.media_group_types == [
+            (InputMediaDocument, InputMediaDocument, InputMediaDocument)
         ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -1108,6 +1136,9 @@ def test_type_4_album_reopens_files_and_retries_network_read_errors():
 
         assert context.bot.calls == 4
         assert context.bot.events == [("album", "slide_01.jpg,slide_02.jpg")]
+        assert context.bot.media_group_types == [
+            (InputMediaDocument, InputMediaDocument)
+        ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1138,8 +1169,9 @@ def test_type_1_sends_embedded_text_image_without_slide_messages():
         asyncio.run(_send_slides_text_then_image(context, 123, [slide]))
 
         assert context.bot.events == [
-            ("photo", "slide.jpg"),
+            ("document", "slide.jpg"),
         ]
+        assert context.bot.document_payloads == [image_path.read_bytes()]
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1178,7 +1210,7 @@ def test_type_1_can_send_slide_text_separately_from_image():
 
         assert context.bot.events == [
             ("message", "Hook text"),
-            ("photo", "slide.jpg"),
+            ("document", "slide.jpg"),
         ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -1220,7 +1252,7 @@ def test_type_1_separate_slide_text_splits_month_from_body():
         assert context.bot.events == [
             ("message", "Octubre - 0€"),
             ("message", "Empecé con muchas ganas, pero no conseguí ventas."),
-            ("photo", "slide.jpg"),
+            ("document", "slide.jpg"),
         ]
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -1265,7 +1297,7 @@ def test_type_2_separate_slide_text_splits_tip_title_from_body():
         assert context.bot.events == [
             ("message", "1. Revisa el margen real"),
             ("message", "Calcula costes, comisiones y margen antes de lanzar."),
-            ("photo", "slide.jpg"),
+            ("document", "slide.jpg"),
         ]
     finally:
         shutil.rmtree(root, ignore_errors=True)

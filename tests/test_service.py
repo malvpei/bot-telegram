@@ -424,10 +424,12 @@ def test_type_3_outputs_skip_full_video_render():
             VideoType.TYPE_3,
             VideoType.TYPE_3,
         ]
-        assert plan.slides[0].media.local_path.name == "slide_01.jpg"
-        assert plan.slides[1].media.local_path.name == "slide_02.jpg"
+        assert plan.slides[0].media.local_path.name == "slide_01.png"
+        assert plan.slides[1].media.local_path.name == "slide_02.png"
         assert plan.slides[0].media.local_path.exists()
         assert plan.slides[1].media.local_path.exists()
+        with Image.open(plan.slides[0].media.local_path) as rendered:
+            assert rendered.format == "PNG"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -498,8 +500,8 @@ def test_slide_normalization_does_not_mutate_shared_media_candidate():
 
         assert renderer.render_slide_still_sources == [source_path, source_path]
         assert shared_media.local_path == source_path
-        assert first_plan.slides[0].media.local_path.name == "slide_01.jpg"
-        assert second_plan.slides[0].media.local_path.name == "slide_01.jpg"
+        assert first_plan.slides[0].media.local_path.name == "slide_01.png"
+        assert second_plan.slides[0].media.local_path.name == "slide_01.png"
         assert first_plan.slides[0].media.local_path.parent.name == "slides"
         assert second_plan.slides[0].media.local_path.parent.name == "slides"
         assert first_plan.slides[0].media.local_path != second_plan.slides[0].media.local_path
@@ -549,7 +551,7 @@ def test_render_outputs_can_keep_slide_text_out_of_images():
         assert renderer.written_plan is plan
         assert renderer.render_slide_still_texts == [""]
         assert plan.slides[0].text == "Hook text"
-        assert plan.slides[0].media.local_path.name == "slide_01.jpg"
+        assert plan.slides[0].media.local_path.name == "slide_01.png"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -597,7 +599,7 @@ def test_type_1_outputs_skip_full_video_render():
         assert service.renderer.render_called is False
         assert service.renderer.write_script_called is True
         assert service.renderer.render_slide_still_calls == [VideoType.TYPE_1]
-        assert plan.slides[0].media.local_path.name == "slide_01.jpg"
+        assert plan.slides[0].media.local_path.name == "slide_01.png"
         assert plan.slides[0].media.local_path.exists()
     finally:
         shutil.rmtree(root, ignore_errors=True)
@@ -661,8 +663,10 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
         ]
         assert spanish.slides[1].text == ""
         assert spanish.slides[1].media.source_id == "r2-type4:4/a.jpg"
-        assert spanish.slides[1].media.local_path.name == "slide_02.jpg"
-        assert Image.open(spanish.slides[1].media.local_path).size == (72, 128)
+        assert spanish.slides[1].media.local_path.name == "slide_02.png"
+        with Image.open(spanish.slides[1].media.local_path) as clean_image:
+            assert clean_image.format == "PNG"
+            assert clean_image.size == (72, 128)
         assert english.slides[1].media.source_id == "r2-type4:4/b.jpg"
         assert r2_storage.listed_image_prefixes == ["4/", "4/"]
         assert r2_storage.downloaded_keys == ["4/a.jpg", "4/b.jpg"]
@@ -823,7 +827,7 @@ def test_type_4_generates_six_ai_slides_and_normalizes_original_reference():
         assert story_generator.reference_image_path == reference
         assert renderer.render_slide_still_calls == [VideoType.TYPE_4] * 7
         assert result.slides[-1].role == SlideRole.STORY_ORIGINAL_REFERENCE
-        assert result.slides[-1].media.local_path.name == "slide_07.jpg"
+        assert result.slides[-1].media.local_path.name == "slide_07.png"
         assert root / "outputs" / "users" / "1" in result.slides[-1].media.local_path.parents
         assert Image.open(result.slides[-1].media.local_path).size == (72, 128)
         assert result.slides[-1].media.local_path.read_bytes() != reference.read_bytes()
@@ -923,7 +927,7 @@ def test_type_4_downloads_reference_from_r2_when_no_photo_is_passed():
         assert story_generator.reference_image_path.name == "source.jpg"
         assert story_generator.reference_image_path.exists()
         assert result.chosen_account == "r2:videos/imagenes/reference.jpg"
-        assert result.slides[-1].media.local_path.name == "slide_07.jpg"
+        assert result.slides[-1].media.local_path.name == "slide_07.png"
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1262,7 +1266,7 @@ def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
     assert result.slides[-1].media.source_id == (
         "r2-cartools:videos/cartools/closing.jpg"
     )
-    assert result.slides[-1].media.local_path.name == "slide_05.jpg"
+    assert result.slides[-1].media.local_path.name == "slide_05.png"
     assert storage.listed_image_prefixes == ["videos/cartools/"]
     assert service.state.peek_next_cartools_background_id(
         list(allowed_background_names)
@@ -2038,8 +2042,10 @@ def test_create_extra_image_returns_one_normalized_photo():
 
         result = service._create_extra_image_locked(request)
 
-        assert result.local_path.name == "extra_01.jpg"
+        assert result.local_path.name == "extra_01.png"
         assert result.local_path.exists()
+        with Image.open(result.local_path) as rendered:
+            assert rendered.format == "PNG"
         assert result.width == 72
         assert result.height == 128
         assert service.collector.seen == ["alpha"]
