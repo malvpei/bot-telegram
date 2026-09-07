@@ -1870,7 +1870,8 @@ async def wizard_advice_language(
     except ValueError:
         gender = VideoGender.MALE
     await query.edit_message_text(
-        f"Perfecto. Creo el siguiente diseño Tipo 4 en {language.value.upper()}."
+        f"Perfecto. Creo el siguiente diseño Tipo 4 en {language.value.upper()} "
+        "y añado la siguiente foto de R2."
     )
     request = VideoRequest(
         chat_id=update.effective_chat.id,
@@ -2170,7 +2171,10 @@ async def _execute_job(
 ) -> None:
     chat = update.effective_chat
     if request.video_type == VideoType.ADVICE:
-        status_text = "Estoy creando el siguiente diseño rotativo del Tipo 4."
+        status_text = (
+            "Estoy creando el siguiente diseño rotativo del Tipo 4 y preparando "
+            "la siguiente foto de R2."
+        )
     elif request.video_type == VideoType.TYPE_4:
         status_text = (
             "Estoy generando el carrusel IA. Esto puede tardar porque son 6 escenas."
@@ -2216,7 +2220,7 @@ async def _execute_job(
         header = (
             "Tipo 4 listo\n"
             f"Idioma: {result.language.value.upper()}\n"
-            "Entrega: 4 consejos en una imagen"
+            "Entrega: diseño de consejos + imagen limpia de R2"
         )
     elif result.video_type == VideoType.TYPE_4:
         source_label = (

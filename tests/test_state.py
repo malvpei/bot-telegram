@@ -202,6 +202,28 @@ def test_type_4_advice_rotation_persists_and_wraps(state_dir):
     assert store.get_type_4_advice_phase(cycle_length=12) == 0
 
 
+def test_type_4_image_queue_peeks_commits_persists_and_wraps(state_dir):
+    image_ids = ["etag:a:100", "etag:b:110"]
+    store = StateStore(state_dir)
+
+    assert store.peek_next_type_4_image_id(image_ids) == (image_ids[0], False)
+    assert StateStore(state_dir).peek_next_type_4_image_id(image_ids) == (
+        image_ids[0],
+        False,
+    )
+    assert store.remember_type_4_image_choice(image_ids[0], image_ids) is True
+    assert StateStore(state_dir).peek_next_type_4_image_id(image_ids) == (
+        image_ids[1],
+        False,
+    )
+    assert store.remember_type_4_image_choice(image_ids[1], image_ids) is True
+    assert StateStore(state_dir).peek_next_type_4_image_id(image_ids) == (
+        image_ids[0],
+        True,
+    )
+    assert (state_dir / "type4_image_queue.json").is_file()
+
+
 def test_template_queue_does_not_replay_when_pool_changes_mid_cycle(state_dir):
     store = StateStore(state_dir)
 

@@ -138,6 +138,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `OUTPUT_RETENTION_DAYS` | 7 | días que se guardan outputs |
 | `ACCOUNT_CACHE_TTL_HOURS` | 0 | 0 = cache permanente; las cuentas ya descargadas se leen de `data/downloads/<cuenta>` |
 | `ACCOUNT_PICK_ATTEMPTS` | 0 | objetivo inicial heredado; el selector puede seguir probando más cuentas para evitar falsos "sin imágenes" |
+| `R2_TYPE_4_IMAGE_PREFIX` | `4` | carpeta R2 de la imagen limpia que acompaña al Tipo 4 - Consejos |
 | `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 de la que el Tipo 5 toma tres imágenes al azar |
 | `R2_CARTOOLS_IMAGE_PREFIX` | `cartools` | carpeta dentro de `R2_BUCKET` recorrida por la cola cíclica de imágenes limpias de `/createp` Tools |
 
@@ -178,11 +179,13 @@ el bot.
 /cancel       — cancela el wizard en curso
 ```
 
-El **Tipo 4** genera una sola imagen vertical con cuatro consejos y no necesita
-cuentas de Instagram. Rota entre fondo negro, fondo blanco y un diseño
-ilustrado con tarjetas e iconos de dropshipping. También rota cuatro guiones en
-español e inglés; el cuarto consejo siempre recomienda Dropradar. Cada entrega
-incluye fuera de la imagen la frase de apertura correspondiente al idioma.
+El **Tipo 4** genera una imagen vertical de consejos y no necesita cuentas de
+Instagram. Rota entre sus cinco diseños y cuatro guiones en español e inglés;
+el último consejo siempre recomienda Dropradar. Cada entrega incluye fuera de
+la imagen la frase de apertura correspondiente al idioma y, como segunda
+imagen, una foto limpia del prefijo R2 configurado por
+`R2_TYPE_4_IMAGE_PREFIX` (`4` por defecto). Las fotos R2 recorren una cola
+cíclica propia y solo avanzan cuando la entrega se genera correctamente.
 La Historia IA no aparece como opción dentro de `/create`.
 
 El flujo **/createp** permite elegir Mujer, Hombre o Tools. Para Mujer y Hombre,
@@ -352,6 +355,7 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `data/state/recent_scripts.json` — última firma generada por (tipo, idioma)
 - `data/state/script_history.json` — historial acotado de firmas
 - `data/state/jobs_log.json` — histórico de jobs
+- `data/state/type4_image_queue.json` — rotación de las imágenes limpias R2 del Tipo 4 - Consejos
 - `data/state/cartools_background_queue.json` — rotación de los 13 fondos seleccionados de Tools
 - `data/state/cartools_image_queue.json` — cola cíclica de la imagen R2 de `/createp` Tools
 - `data/state/cartools_social_copy_queue.json` — rotación de los 15 títulos y descripciones de Tools

@@ -11,7 +11,7 @@ from uuid import uuid4
 from PIL import Image
 import pytest
 
-from app.advice_cards import AdviceBackground
+from app.advice_cards import ADVICE_ROTATION_CYCLE_LENGTH, AdviceBackground
 from app.car_tools import CAR_TOOLS_HOOK
 from app.car_tools_social import (
     CAR_TOOLS_SOCIAL_COPY_IDS,
@@ -243,6 +243,27 @@ class Type5R2Storage(FakeR2Storage):
         self.downloaded_keys.append(key)
         destination.parent.mkdir(parents=True, exist_ok=True)
         Image.new("RGB", (90, 160), (20, 40, 60)).save(destination)
+        return destination
+
+
+class Type4AdviceR2Storage(FakeR2Storage):
+    def __init__(self, objects: list[R2Object]) -> None:
+        super().__init__()
+        self.objects = list(objects)
+        self.listed_image_prefixes: list[str] = []
+        self.downloaded_keys: list[str] = []
+
+    def list_images(self, prefix: str):
+        self.listed_image_prefixes.append(prefix)
+        # Return the complete fixture catalog so service-level exact-prefix
+        # filtering is exercised as well as the storage call itself.
+        return list(self.objects)
+
+    def download(self, key: str, destination: Path) -> Path:
+        self.downloaded_keys.append(key)
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        color = (20 + len(self.downloaded_keys) * 20, 40, 60)
+        Image.new("RGB", (90, 160), color).save(destination)
         return destination
 
 
@@ -592,13 +613,21 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
             data_dir=root,
             outputs_dir=root / "outputs",
             state_dir=root / "state",
+            r2_type_4_image_prefix="4",
             width=72,
             height=128,
+        )
+        r2_storage = Type4AdviceR2Storage(
+            [
+                R2Object(key="4/a.jpg", size=100, etag="a"),
+                R2Object(key="4/b.jpg", size=110, etag="b"),
+            ]
         )
         service = VideoCreationService.__new__(VideoCreationService)
         service.settings = settings
         service.state = StateStore(settings.state_dir)
         service.renderer = FakeRenderer()
+        service.r2_storage = r2_storage
 
         spanish = service._create_video_locked(
             VideoRequest(
@@ -626,6 +655,17 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
         assert service.renderer.advice_card_rotation_indices == [0, 1]
         assert spanish.video_type == VideoType.ADVICE
         assert spanish.slides[0].media.local_path.exists()
+        assert [slide.role for slide in spanish.slides] == [
+            SlideRole.ADVICE_CARD,
+            SlideRole.ADVICE_R2_CLEAN,
+        ]
+        assert spanish.slides[1].text == ""
+        assert spanish.slides[1].media.source_id == "r2-type4:4/a.jpg"
+        assert spanish.slides[1].media.local_path.name == "slide_02.jpg"
+        assert Image.open(spanish.slides[1].media.local_path).size == (72, 128)
+        assert english.slides[1].media.source_id == "r2-type4:4/b.jpg"
+        assert r2_storage.listed_image_prefixes == ["4/", "4/"]
+        assert r2_storage.downloaded_keys == ["4/a.jpg", "4/b.jpg"]
         assert spanish.social_copy.title == "la regla #1 no es perseguir visitas"
         assert english.social_copy.title == "before launching, separate signal from noise"
         assert spanish.social_copy.hook == (
@@ -647,8 +687,100 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
         ]
         assert "Dropradar" in english.preview_text
         assert service.state.get_type_4_advice_phase(cycle_length=12) == 2
+        assert service.state.peek_next_type_4_image_id(
+            ["etag:a:100", "etag:b:110"]
+        ) == ("etag:a:100", True)
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+def test_type_4_r2_image_queue_uses_exact_prefix_dedup_and_bucket_fallback(
+    tmp_path,
+):
+    storage = Type4AdviceR2Storage(
+        [
+            R2Object(key="40/outside.jpg", size=90, etag="outside"),
+            R2Object(key="4-old/outside.jpg", size=90, etag="old"),
+            R2Object(key="4/a.jpg", size=100, etag="shared"),
+            R2Object(key="4/z-copy.jpg", size=100, etag="shared"),
+            R2Object(key="4/b.jpg", size=110, etag="b"),
+        ]
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        r2_bucket="videos",
+        r2_type_4_image_prefix="videos/4",
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.r2_storage = storage
+
+    first = service._download_next_type_4_image_from_r2(tmp_path / "first")
+
+    assert storage.listed_image_prefixes == ["videos/4/", "4/"]
+    assert first.prefix == "4"
+    assert first.media.source_id == "r2-type4:4/a.jpg"
+    assert first.queue_ids == ("etag:shared:100", "etag:b:110")
+    assert service.state.remember_type_4_image_choice(
+        first.queue_id,
+        list(first.queue_ids),
+    ) is True
+
+    second = service._download_next_type_4_image_from_r2(tmp_path / "second")
+
+    assert second.media.source_id == "r2-type4:4/b.jpg"
+    assert storage.downloaded_keys == ["4/a.jpg", "4/b.jpg"]
+
+
+def test_type_4_r2_queue_and_advice_phase_do_not_advance_when_rendering_fails(
+    tmp_path,
+):
+    class FailingAdviceRenderer(FakeRenderer):
+        def render_advice_card(self, *args, **kwargs):
+            raise RuntimeError("render failed")
+
+    storage = Type4AdviceR2Storage(
+        [R2Object(key="4/a.jpg", size=100, etag="a")]
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        r2_type_4_image_prefix="4",
+        width=72,
+        height=128,
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.renderer = FailingAdviceRenderer()
+    service.r2_storage = storage
+
+    with pytest.raises(RuntimeError, match="render failed"):
+        service._create_advice_card_locked(
+            VideoRequest(
+                chat_id=1,
+                user_id=10,
+                video_type=VideoType.ADVICE,
+                language=Language.ES,
+                account_inputs=[],
+            )
+        )
+
+    assert service.state.get_type_4_advice_phase(
+        cycle_length=ADVICE_ROTATION_CYCLE_LENGTH
+    ) == 0
+    assert service.state.peek_next_type_4_image_id(["etag:a:100"]) == (
+        "etag:a:100",
+        False,
+    )
 
 
 def test_type_4_generates_six_ai_slides_and_normalizes_original_reference():

@@ -34,6 +34,7 @@ from app.car_tools_social import (
 from app.config import (
     DEFAULT_ACCOUNT_PICK_ATTEMPTS,
     DEFAULT_R2_CARTOOLS_IMAGE_PREFIX,
+    DEFAULT_R2_TYPE_4_IMAGE_PREFIX,
     get_settings,
 )
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
@@ -74,6 +75,15 @@ R2_TEMPLATE_PARTIAL_MAX_AGE_SECONDS = 6 * 60 * 60
 
 @dataclass(frozen=True)
 class _CarToolsR2Selection:
+    media: MediaCandidate
+    prefix: str
+    queue_id: str
+    queue_ids: tuple[str, ...]
+    queue_restarted: bool
+
+
+@dataclass(frozen=True)
+class _Type4AdviceR2Selection:
     media: MediaCandidate
     prefix: str
     queue_id: str
@@ -714,6 +724,7 @@ class VideoCreationService:
         background, tips, pack_index = advice_selection(phase, language)
         job_id = self._build_job_id()
         job_dir = self._job_output_dir(job_id, request.user_id)
+        r2_selection = self._download_next_type_4_image_from_r2(job_dir)
         slides_dir = job_dir / "slides"
         slides_dir.mkdir(parents=True, exist_ok=True)
         output_path = slides_dir / "slide_01.jpg"
@@ -741,18 +752,29 @@ class VideoCreationService:
             height=self.settings.height,
             created_at=datetime.now(timezone.utc).isoformat(),
         )
-        slide = SlidePlan(
+        advice_slide = SlidePlan(
             index=1,
             role=SlideRole.ADVICE_CARD,
             text=script_text,
             media=media,
             fixed_asset=True,
         )
+        r2_media = self._normalize_type_4_image(
+            r2_selection.media,
+            job_dir,
+        )
+        r2_slide = SlidePlan(
+            index=2,
+            role=SlideRole.ADVICE_R2_CLEAN,
+            text="",
+            media=r2_media,
+            fixed_asset=False,
+        )
         plan = VideoPlan(
             chosen_account=f"tipo4:{background.value}:guion-{pack_index + 1}",
             video_type=VideoType.ADVICE,
             language=language,
-            slides=[slide],
+            slides=[advice_slide, r2_slide],
             used_media_ids=[],
             fallback_accounts=[],
         )
@@ -772,7 +794,7 @@ class VideoCreationService:
             self.state.build_job_record(
                 job_id=job_id,
                 chosen_account=plan.chosen_account,
-                requested_accounts=[],
+                requested_accounts=[r2_media.source_id],
                 fallback_accounts=[],
                 video_type=VideoType.ADVICE,
                 language=language,
@@ -783,6 +805,16 @@ class VideoCreationService:
                 chat_id=request.chat_id,
             )
         )
+        if not self.state.remember_type_4_image_choice(
+            r2_selection.queue_id,
+            list(r2_selection.queue_ids),
+        ):
+            LOGGER.warning(
+                "Type 4 R2 image queue choice %s was already consumed",
+                r2_selection.queue_id,
+            )
+        if r2_selection.queue_restarted:
+            LOGGER.info("Type 4 R2 image queue restarted after completing a cycle")
         self.state.advance_type_4_advice_phase(
             cycle_length=ADVICE_ROTATION_CYCLE_LENGTH
         )
@@ -796,10 +828,141 @@ class VideoCreationService:
             video_type=VideoType.ADVICE,
             language=language,
             fallback_accounts=[],
-            slides=[slide],
+            slides=list(plan.slides),
             pool_remaining=0,
             pool_low_stock=False,
             separate_slide_text=False,
+        )
+
+    def _download_next_type_4_image_from_r2(
+        self,
+        job_dir: Path,
+    ) -> _Type4AdviceR2Selection:
+        prefix = (
+            self.settings.r2_type_4_image_prefix.strip().strip("/")
+            or DEFAULT_R2_TYPE_4_IMAGE_PREFIX
+        )
+        if (
+            getattr(self, "r2_storage", None) is None
+            or not self.r2_storage.is_configured
+        ):
+            raise ValueError(
+                "El Tipo 4 necesita Cloudflare R2 configurado. Sube al menos "
+                f"una imagen al prefijo {prefix!r}."
+            )
+
+        attempted_prefixes = [prefix]
+        listing_prefix = f"{prefix}/" if prefix else ""
+        listed_images = self._list_type_4_images(listing_prefix)
+        bucket_prefix = self.settings.r2_bucket.strip().strip("/")
+        qualified_bucket_prefix = f"{bucket_prefix}/" if bucket_prefix else ""
+        if (
+            not listed_images
+            and qualified_bucket_prefix
+            and prefix.startswith(qualified_bucket_prefix)
+        ):
+            fallback_prefix = prefix[len(qualified_bucket_prefix) :].strip("/")
+            if fallback_prefix:
+                attempted_prefixes.append(fallback_prefix)
+                fallback_listing_prefix = f"{fallback_prefix}/"
+                fallback_images = self._list_type_4_images(
+                    fallback_listing_prefix
+                )
+                if fallback_images:
+                    LOGGER.info(
+                        "R2 Type 4 prefix %s included bucket %s; using %s",
+                        prefix,
+                        bucket_prefix,
+                        fallback_prefix,
+                    )
+                    prefix = fallback_prefix
+                    listing_prefix = fallback_listing_prefix
+                    listed_images = fallback_images
+
+        images_by_identity: dict[str, R2Object] = {}
+        for image in listed_images:
+            identity = self._r2_template_content_identity(image)
+            images_by_identity.setdefault(identity, image)
+        if not images_by_identity:
+            attempted = " o ".join(repr(item) for item in attempted_prefixes)
+            raise ValueError(
+                "El Tipo 4 necesita al menos una imagen en R2 bajo el "
+                f"prefijo {attempted}."
+            )
+
+        queue_ids = list(images_by_identity)
+        selected_identity, queue_restarted = self.state.peek_next_type_4_image_id(
+            queue_ids
+        )
+        selected = images_by_identity.get(str(selected_identity or ""))
+        if selected is None:
+            raise RuntimeError("La cola R2 del Tipo 4 no devolvió una imagen válida.")
+
+        suffix = Path(selected.key).suffix.lower()
+        if suffix not in R2_IMAGE_EXTENSIONS:
+            suffix = ".jpg"
+        local_path = job_dir / "type_4_inputs" / f"source_02{suffix}"
+        downloaded = self.r2_storage.download(selected.key, local_path)
+        try:
+            with Image.open(downloaded) as image:
+                width, height = ImageOps.exif_transpose(image).size
+        except OSError as error:
+            raise ValueError(
+                f"La imagen {selected.key!r} del Tipo 4 no se pudo abrir."
+            ) from error
+
+        return _Type4AdviceR2Selection(
+            media=MediaCandidate(
+                source_account="r2_type_4",
+                source_id=f"r2-type4:{selected.key}",
+                local_path=downloaded,
+                permalink=f"r2:{selected.key}",
+                caption="clean Type 4 R2 image",
+                width=width,
+                height=height,
+                created_at="r2",
+            ),
+            prefix=prefix,
+            queue_id=str(selected_identity),
+            queue_ids=tuple(queue_ids),
+            queue_restarted=queue_restarted,
+        )
+
+    def _list_type_4_images(self, listing_prefix: str) -> list[R2Object]:
+        return sorted(
+            (
+                image
+                for image in self.r2_storage.list_images(listing_prefix)
+                if image.key.startswith(listing_prefix)
+            ),
+            key=lambda item: item.key,
+        )
+
+    def _normalize_type_4_image(
+        self,
+        media: MediaCandidate,
+        job_dir: Path,
+    ) -> MediaCandidate:
+        output_path = job_dir / "slides" / "slide_02.jpg"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            with Image.open(media.local_path) as image:
+                source = ImageOps.exif_transpose(image).convert("RGB")
+                normalized = _cover_resize(
+                    source,
+                    self.settings.width,
+                    self.settings.height,
+                )
+        except OSError as error:
+            raise ValueError(
+                f"La imagen R2 del Tipo 4 {media.local_path} no se pudo normalizar."
+            ) from error
+        normalized.save(output_path, format="JPEG", quality=95, subsampling=0)
+        return replace(
+            media,
+            local_path=output_path,
+            width=self.settings.width,
+            height=self.settings.height,
         )
 
     def _create_car_tools_carousel_locked(

@@ -49,6 +49,7 @@ class StateStore:
         self._account_cooldowns_path = self.state_dir / "account_cooldowns.json"
         self._type_3_background_queue_path = self.state_dir / "type3_background_queue.json"
         self._type_4_advice_rotation_path = self.state_dir / "type4_advice_rotation.json"
+        self._type_4_image_queue_path = self.state_dir / "type4_image_queue.json"
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
         self._type_5_social_queue_path = self.state_dir / "type5_social_queue.json"
@@ -698,6 +699,28 @@ class StateStore:
         return self._get_next_simple_cycle_id(
             self._type_5_social_queue_path,
             copy_ids,
+        )
+
+    def peek_next_type_4_image_id(
+        self,
+        image_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        """Inspect the next clean Type 4 image without consuming it."""
+        return self._peek_simple_cycle_id(
+            self._type_4_image_queue_path,
+            image_ids,
+        )
+
+    def remember_type_4_image_choice(
+        self,
+        selected_id: str,
+        image_ids: list[str],
+    ) -> bool:
+        """Consume a clean Type 4 image only after a successful render."""
+        return self._remember_simple_cycle_choice(
+            self._type_4_image_queue_path,
+            selected_id,
+            image_ids,
         )
 
     def get_next_cartools_image_id(

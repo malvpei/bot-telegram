@@ -230,6 +230,40 @@ def test_r2_cartools_image_prefix_defaults_to_bucket_folder(monkeypatch):
         get_settings.cache_clear()
 
 
+def test_r2_type_4_image_prefix_defaults_to_folder_four(monkeypatch):
+    monkeypatch.delenv("R2_TYPE_4_IMAGE_PREFIX", raising=False)
+    monkeypatch.setattr("app.config.load_dotenv", lambda *_args, **_kwargs: False)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.r2_type_4_image_prefix == "4"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_r2_type_4_image_prefix_is_loaded_and_normalized(monkeypatch):
+    monkeypatch.setenv("R2_TYPE_4_IMAGE_PREFIX", " /videos/4/campaign/ ")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.r2_type_4_image_prefix == "videos/4/campaign"
+    finally:
+        get_settings.cache_clear()
+
+
+def test_r2_type_4_image_prefix_blank_value_falls_back_to_folder_four(monkeypatch):
+    monkeypatch.setenv("R2_TYPE_4_IMAGE_PREFIX", " / ")
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+
+        assert settings.r2_type_4_image_prefix == "4"
+    finally:
+        get_settings.cache_clear()
+
+
 def test_r2_cartools_image_prefix_is_loaded_and_normalized(monkeypatch):
     monkeypatch.setenv("R2_CARTOOLS_IMAGE_PREFIX", " /videos/cartools/campaign/ ")
     get_settings.cache_clear()

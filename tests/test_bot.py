@@ -380,6 +380,103 @@ def test_type_4_sends_all_story_images_as_one_album():
         shutil.rmtree(root, ignore_errors=True)
 
 
+def test_advice_type_4_sends_design_and_clean_r2_image_as_one_album():
+    root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
+    root.mkdir(parents=True)
+    try:
+        roles = (SlideRole.ADVICE_CARD, SlideRole.ADVICE_R2_CLEAN)
+        slides = []
+        for index, role in enumerate(roles, start=1):
+            image_path = root / f"type4_{index}.jpg"
+            Image.new("RGB", (10, 16), (index * 20, 30, 40)).save(image_path)
+            slides.append(
+                SlidePlan(
+                    index=index,
+                    role=role,
+                    text="Consejos incrustados" if index == 1 else "",
+                    media=MediaCandidate(
+                        source_account=(
+                            "tipo4_consejos" if index == 1 else "r2_type_4"
+                        ),
+                        source_id=f"type4:{index}",
+                        local_path=image_path,
+                        permalink="",
+                        caption="",
+                        width=10,
+                        height=16,
+                        created_at="",
+                    ),
+                    fixed_asset=index == 1,
+                )
+            )
+
+        class FakeAdviceService:
+            def create_video(self, request):
+                assert request.video_type == VideoType.ADVICE
+                return GenerationResult(
+                    video_path=None,
+                    script_path=root / "script.txt",
+                    preview_text="",
+                    social_copy=SocialCopy(
+                        title="Título Tipo 4",
+                        description="Descripción Tipo 4",
+                        hashtags=["#dropshipping"],
+                        hook="Hook Tipo 4",
+                    ),
+                    chosen_account="tipo4:black:guion-1",
+                    video_type=VideoType.ADVICE,
+                    language=Language.ES,
+                    fallback_accounts=[],
+                    slides=slides,
+                    separate_slide_text=False,
+                )
+
+        class FakeAdviceBot(FakeTelegramBot):
+            async def send_message(
+                self,
+                *,
+                chat_id: int,
+                text: str,
+                reply_markup=None,
+            ):
+                await super().send_message(
+                    chat_id=chat_id,
+                    text=text,
+                    reply_markup=reply_markup,
+                )
+                return FakeStatusMessage()
+
+        context = FakeContext()
+        context.bot = FakeAdviceBot()
+        context.application = FakeApplication(FakeAdviceService())
+        update = FakeUpdate()
+        update.effective_chat = FakeChat()
+        request = VideoRequest(
+            chat_id=123,
+            user_id=456,
+            video_type=VideoType.ADVICE,
+            language=Language.ES,
+            account_inputs=[],
+        )
+
+        asyncio.run(_execute_job(update, context, request))
+
+        messages = [text for event, text in context.bot.events if event == "message"]
+        assert "imagen limpia de R2" in messages[1]
+        assert messages[2:] == [
+            "Hook Tipo 4",
+            "Título Tipo 4",
+            "Descripción Tipo 4 #dropshipping",
+        ]
+        assert "Consejos incrustados" not in messages
+        assert context.bot.events[-1] == (
+            "album",
+            "type4_1.jpg,type4_2.jpg",
+        )
+    finally:
+        shutil.rmtree(root, ignore_errors=True)
+
+
 def test_regular_carousel_sends_all_images_as_one_album():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)

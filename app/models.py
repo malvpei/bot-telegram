@@ -55,6 +55,7 @@ class SlideRole(str, Enum):
     TYPE_5_CLIPPING = "type_5_clipping"
     TYPE_5_AI_DROPSHIPPING = "type_5_ai_dropshipping"
     ADVICE_CARD = "advice_card"
+    ADVICE_R2_CLEAN = "advice_r2_clean"
     PARKEZ_PROMO = "parkez_promo"
     CAR_TOOL_RADARBOT = "car_tool_radarbot"
     CAR_TOOL_PARKEZ = "car_tool_parkez"
