@@ -1,4 +1,5 @@
 from dataclasses import replace
+from datetime import datetime, timezone
 from io import BytesIO
 
 import pytest
@@ -27,10 +28,15 @@ class FakePaginator:
 
     def paginate(self, **kwargs):
         self.client.paginate_calls.append(kwargs)
+        uploaded_at = datetime(2026, 9, 10, 8, 22, tzinfo=timezone.utc)
         return [
             {
                 "Contents": [
-                    {"Key": "imagenes/a.jpg", "Size": 10},
+                    {
+                        "Key": "imagenes/a.jpg",
+                        "Size": 10,
+                        "LastModified": uploaded_at,
+                    },
                     {"Key": "imagenes/b.png", "Size": 20},
                     {"Key": "imagenes/c.jpeg", "Size": 21},
                     {"Key": "imagenes/snap:image/jpeg", "Size": 25},
@@ -96,6 +102,14 @@ def test_r2_lists_and_uploads_images():
         "imagenes/snap:image/jpeg",
         "imagenes/cloudflare-upload:image/png",
     ]
+    assert images[0].last_modified == datetime(
+        2026,
+        9,
+        10,
+        8,
+        22,
+        tzinfo=timezone.utc,
+    )
     assert fake.paginate_calls == [{"Bucket": "bucket", "Prefix": "imagenes"}]
     assert uploaded.key == "imagenes/new.png"
     assert fake.put_calls[0]["Bucket"] == "bucket"

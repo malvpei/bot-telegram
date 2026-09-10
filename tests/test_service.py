@@ -4,6 +4,7 @@ import os
 import shutil
 import time
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from threading import Lock
 from uuid import uuid4
@@ -1075,6 +1076,106 @@ def test_cartools_r2_image_queue_uses_exact_prefix_fifo_cycle_and_etag_dedup(
         "r2-cartools:videos/cartools/a.jpg",
     ]
     assert restarted == [False, False, False, True]
+
+
+def test_cartools_r2_prioritizes_new_upload_batch_then_restarts_all_images(
+    tmp_path,
+):
+    old_upload = datetime(2026, 8, 30, 9, 32, tzinfo=timezone.utc)
+    new_upload = datetime(2026, 9, 10, 8, 22, tzinfo=timezone.utc)
+    storage = CartoolsR2Storage(
+        [
+            R2Object(
+                key="cartools/old-a.jpg",
+                size=100,
+                etag="old-a",
+                last_modified=old_upload,
+            ),
+            R2Object(
+                key="cartools/old-b.jpg",
+                size=110,
+                etag="old-b",
+                last_modified=old_upload + timedelta(seconds=1),
+            ),
+        ]
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        r2_cartools_image_prefix="cartools",
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.r2_storage = storage
+
+    initial = service._download_next_cartools_image_from_r2(tmp_path / "initial")
+    assert initial.media.source_id == "r2-cartools:cartools/old-a.jpg"
+    assert service.state.remember_cartools_image_choice(
+        initial.queue_id,
+        list(initial.queue_ids),
+    )
+
+    storage.objects.extend(
+        [
+            R2Object(
+                key="cartools/new-a.jpg",
+                size=120,
+                etag="new-a",
+                last_modified=new_upload,
+            ),
+            R2Object(
+                key="cartools/new-b.jpg",
+                size=130,
+                etag="new-b",
+                last_modified=new_upload + timedelta(seconds=1),
+            ),
+        ]
+    )
+    # Simulate a deployed queue that has already listed the new objects using
+    # the previous append-at-the-end behavior. Upload timestamps still let the
+    # new implementation recover the batch and move it to the front once.
+    service.state._write_json(
+        service.state._cartools_image_queue_path,
+        {
+            "order": [
+                "etag:old-a:100",
+                "etag:old-b:110",
+                "etag:new-a:120",
+                "etag:new-b:130",
+            ],
+            "remaining": [
+                "etag:old-b:110",
+                "etag:new-a:120",
+                "etag:new-b:130",
+            ],
+            "last_selected": "etag:old-a:100",
+            "started": True,
+        },
+    )
+    selected: list[str] = []
+    restarted: list[bool] = []
+    for index in range(4):
+        selection = service._download_next_cartools_image_from_r2(
+            tmp_path / f"after-upload-{index}"
+        )
+        selected.append(selection.media.source_id)
+        restarted.append(selection.queue_restarted)
+        assert service.state.remember_cartools_image_choice(
+            selection.queue_id,
+            list(selection.queue_ids),
+        )
+
+    assert selected == [
+        "r2-cartools:cartools/new-a.jpg",
+        "r2-cartools:cartools/new-b.jpg",
+        "r2-cartools:cartools/old-a.jpg",
+        "r2-cartools:cartools/old-b.jpg",
+    ]
+    assert restarted == [False, False, True, False]
 
 
 def test_cartools_r2_falls_back_when_prefix_repeats_bucket_name(tmp_path):

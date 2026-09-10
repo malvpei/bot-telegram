@@ -71,6 +71,7 @@ VIDEO_TEMPLATE_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 R2_TEMPLATE_CACHE_MAX_ITEMS = 8
 R2_TEMPLATE_CACHE_MAX_BYTES = 512 * 1024 * 1024
 R2_TEMPLATE_PARTIAL_MAX_AGE_SECONDS = 6 * 60 * 60
+CARTOOLS_UPLOAD_BATCH_GAP_SECONDS = 30 * 60
 
 
 @dataclass(frozen=True)
@@ -1176,8 +1177,10 @@ class VideoCreationService:
             )
 
         queue_ids = list(images_by_identity)
+        priority_ids = self._latest_cartools_upload_batch_ids(images_by_identity)
         selected_identity, queue_restarted = self.state.peek_next_cartools_image_id(
-            queue_ids
+            queue_ids,
+            priority_ids=priority_ids,
         )
         selected = images_by_identity.get(str(selected_identity or ""))
         if selected is None:
@@ -1222,6 +1225,32 @@ class VideoCreationService:
             ),
             key=lambda item: item.key,
         )
+
+    @staticmethod
+    def _latest_cartools_upload_batch_ids(
+        images_by_identity: dict[str, R2Object],
+    ) -> list[str]:
+        """Return the most recent R2 upload cluster in chronological order."""
+        dated = [
+            (identity, image, image.last_modified.timestamp())
+            for identity, image in images_by_identity.items()
+            if image.last_modified is not None
+        ]
+        if not dated:
+            return []
+        dated.sort(
+            key=lambda item: (
+                item[2],
+                item[1].key,
+            )
+        )
+        batch_start = 0
+        for index in range(1, len(dated)):
+            previous = dated[index - 1][2]
+            current = dated[index][2]
+            if current - previous > CARTOOLS_UPLOAD_BATCH_GAP_SECONDS:
+                batch_start = index
+        return [identity for identity, _image, _timestamp in dated[batch_start:]]
 
     def _create_type_5_carousel_locked(self, request: VideoRequest) -> GenerationResult:
         language = Language(request.language)

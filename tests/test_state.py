@@ -523,6 +523,42 @@ def test_cartools_image_queue_peek_only_advances_after_commit(state_dir):
     )
 
 
+def test_cartools_image_queue_prioritizes_new_batch_then_restarts_full_cycle(
+    state_dir,
+):
+    old_ids = ["etag:old-a:10", "etag:old-b:20", "etag:old-c:30"]
+    new_ids = ["etag:new-a:40", "etag:new-b:50"]
+    store = StateStore(state_dir)
+
+    first, restarted = store.peek_next_cartools_image_id(old_ids)
+    assert (first, restarted) == (old_ids[0], False)
+    assert store.remember_cartools_image_choice(first or "", old_ids) is True
+
+    all_ids = [*old_ids, *new_ids]
+    first_new, restarted = StateStore(state_dir).peek_next_cartools_image_id(
+        all_ids
+    )
+    assert (first_new, restarted) == (new_ids[0], False)
+    assert StateStore(state_dir).remember_cartools_image_choice(
+        first_new or "",
+        all_ids,
+    ) is True
+
+    second_new, restarted = StateStore(state_dir).peek_next_cartools_image_id(
+        all_ids
+    )
+    assert (second_new, restarted) == (new_ids[1], False)
+    assert StateStore(state_dir).remember_cartools_image_choice(
+        second_new or "",
+        all_ids,
+    ) is True
+
+    first_after_restart, restarted = (
+        StateStore(state_dir).peek_next_cartools_image_id(all_ids)
+    )
+    assert (first_after_restart, restarted) == (old_ids[0], True)
+
+
 def test_cartools_background_queue_is_separate_persistent_and_cyclic(state_dir):
     background_ids = ["blue.jpg", "grey.jpg"]
     store = StateStore(state_dir)

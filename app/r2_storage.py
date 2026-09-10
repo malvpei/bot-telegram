@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import mimetypes
 from pathlib import Path
 
@@ -26,6 +27,7 @@ class R2Object:
     key: str
     size: int
     etag: str = ""
+    last_modified: datetime | None = None
 
 
 class R2StorageError(RuntimeError):
@@ -142,6 +144,7 @@ class R2StorageClient:
                         key=key,
                         size=int(item.get("Size") or 0),
                         etag=str(item.get("ETag") or "").strip('"'),
+                        last_modified=item.get("LastModified"),
                     )
                 )
         return objects
@@ -164,6 +167,7 @@ class R2StorageClient:
                             key=key,
                             size=int(item.get("Size") or 0),
                             etag=str(item.get("ETag") or "").strip('"'),
+                            last_modified=item.get("LastModified"),
                         )
                     )
                     continue
@@ -173,6 +177,7 @@ class R2StorageClient:
                             key=key,
                             size=int(item.get("Size") or 0),
                             etag=str(item.get("ETag") or "").strip('"'),
+                            last_modified=item.get("LastModified"),
                         )
                     )
                     continue
@@ -182,6 +187,7 @@ class R2StorageClient:
                             key=key,
                             size=int(item.get("Size") or 0),
                             etag=str(item.get("ETag") or "").strip('"'),
+                            last_modified=item.get("LastModified"),
                         )
                     )
         return objects

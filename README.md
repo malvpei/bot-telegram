@@ -213,6 +213,9 @@ hashtags. Hay 15 parejas de título y descripción relacionadas con las cuatro
 apps; recorren una cola propia antes de volver a empezar.
 Esta quinta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,
 sin eliminarlos del bucket y solo avanza cuando el carrusel termina de renderizar.
+Cuando R2 incorpora imágenes que no estaban en el estado guardado, Tools mueve
+todo ese bloque nuevo al principio. Después de consumirlo, la cola reinicia una
+vuelta completa con el catálogo entero.
 Las posiciones de las tres colas persisten en
 `DATA_DIR/state/cartools_background_queue.json` y
 `DATA_DIR/state/cartools_image_queue.json` y
