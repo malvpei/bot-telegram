@@ -929,13 +929,19 @@ class VideoCreationService:
         )
 
     def _list_type_4_images(self, listing_prefix: str) -> list[R2Object]:
+        """Put the newest R2 uploads first, with a stable key order for ties."""
         return sorted(
             (
                 image
                 for image in self.r2_storage.list_images(listing_prefix)
                 if image.key.startswith(listing_prefix)
             ),
-            key=lambda item: item.key,
+            key=lambda item: (
+                -item.last_modified.timestamp()
+                if item.last_modified is not None
+                else float("inf"),
+                item.key,
+            ),
         )
 
     def _normalize_type_4_image(

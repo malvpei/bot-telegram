@@ -186,6 +186,10 @@ la imagen la frase de apertura correspondiente al idioma y, como segunda
 imagen, una foto limpia del prefijo R2 configurado por
 `R2_TYPE_4_IMAGE_PREFIX` (`4` por defecto). Las fotos R2 recorren una cola
 cíclica propia y solo avanzan cuando la entrega se genera correctamente.
+Las subidas más recientes salen primero, incluso si ya había una cola guardada:
+se reordenan las fotos pendientes por fecha de subida, de más reciente a más
+antigua. Después siguen las anteriores pendientes, sin repetir las ya usadas
+hasta completar el ciclo.
 La Historia IA no aparece como opción dentro de `/create`.
 
 El flujo **/createp** permite elegir Mujer, Hombre o Tools. Para Mujer y Hombre,

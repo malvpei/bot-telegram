@@ -742,6 +742,92 @@ def test_type_4_r2_image_queue_uses_exact_prefix_dedup_and_bucket_fallback(
     assert storage.downloaded_keys == ["4/a.jpg", "4/b.jpg"]
 
 
+@pytest.mark.parametrize("queue_mode", ["empty", "existing", "legacy"])
+def test_type_4_new_uploads_go_first_and_preserve_pending_photos(
+    tmp_path,
+    queue_mode,
+):
+    old_upload = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
+    new_upload = datetime(2026, 9, 16, 15, tzinfo=timezone.utc)
+    storage = Type4AdviceR2Storage(
+        [
+            R2Object("4/a-old.jpg", 100, "old-a", old_upload),
+            R2Object(
+                "4/b-old.jpg", 110, "old-b", old_upload + timedelta(seconds=1)
+            ),
+        ]
+    )
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        state_dir=tmp_path / "state",
+        r2_type_4_image_prefix="4",
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.r2_storage = storage
+    if queue_mode != "empty":
+        initial = service._download_next_type_4_image_from_r2(tmp_path / "initial")
+        assert initial.media.source_id == "r2-type4:4/b-old.jpg"
+        assert service.state.remember_type_4_image_choice(
+            initial.queue_id,
+            list(initial.queue_ids),
+        )
+
+    storage.objects.extend(
+        [
+            R2Object("4/z-new-a.jpg", 120, "new-a", new_upload),
+            R2Object(
+                "4/z-new-b.jpg", 130, "new-b", new_upload + timedelta(seconds=1)
+            ),
+            # A duplicate from the same upload must not consume a second turn.
+            R2Object(
+                "4/z-new-copy.jpg", 130, "new-b", new_upload + timedelta(seconds=1)
+            ),
+        ]
+    )
+    if queue_mode == "legacy":
+        # The previous version may already have appended today's batch.
+        service.state._write_json(
+            service.state._type_4_image_queue_path,
+            {
+                "order": [
+                    "etag:old-a:100", "etag:old-b:110",
+                    "etag:new-a:120", "etag:new-b:130",
+                ],
+                "remaining": ["etag:old-a:100", "etag:new-a:120", "etag:new-b:130"],
+                "last_selected": "etag:old-b:110",
+                "started": True,
+            },
+        )
+
+    expected_keys = ["4/z-new-b.jpg", "4/z-new-a.jpg"]
+    if queue_mode == "empty":
+        expected_keys.append("4/b-old.jpg")
+    expected_keys.append("4/a-old.jpg")
+    for index, expected_key in enumerate(expected_keys):
+        service.state = StateStore(settings.state_dir)
+        selection = service._download_next_type_4_image_from_r2(
+            tmp_path / f"job-{index}"
+        )
+        assert selection.media.source_id == f"r2-type4:{expected_key}"
+        assert selection.queue_restarted is False
+        # A failed or abandoned generation must leave the same photo next.
+        retry = service._download_next_type_4_image_from_r2(
+            tmp_path / f"retry-{index}"
+        )
+        assert retry.queue_id == selection.queue_id
+        assert service.state.remember_type_4_image_choice(
+            selection.queue_id,
+            list(selection.queue_ids),
+        )
+
+    wrapped = service._download_next_type_4_image_from_r2(tmp_path / "wrapped")
+    assert wrapped.media.source_id == "r2-type4:4/z-new-b.jpg"
+    assert wrapped.queue_restarted is True
+
+
 def test_type_4_r2_queue_and_advice_phase_do_not_advance_when_rendering_fails(
     tmp_path,
 ):

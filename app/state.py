@@ -575,11 +575,16 @@ class StateStore:
         self,
         path: Path,
         item_ids: list[str],
+        *,
+        prefer_input_order: bool = False,
     ) -> tuple[dict[str, Any], list[str], list[str], bool, bool]:
         queue = self._read_json(path, {})
         if not isinstance(queue, dict):
             queue = {}
-        order = self._normalize_template_video_order(queue, item_ids)
+        order = self._normalize_template_video_order(
+            {} if prefer_input_order else queue,
+            item_ids,
+        )
         remaining_raw = queue.get("remaining")
         if isinstance(remaining_raw, list):
             remaining = self._normalize_template_video_order(
@@ -596,6 +601,11 @@ class StateStore:
         else:
             remaining = list(order)
             started = False
+        if prefer_input_order:
+            # Refresh priority without putting already-consumed items back in
+            # this cycle. This also upgrades queues saved with the old order.
+            pending = set(remaining)
+            remaining = [item for item in order if item in pending]
         restarted = bool(started and not remaining)
         if not remaining:
             remaining = list(order)
@@ -605,12 +615,18 @@ class StateStore:
         self,
         path: Path,
         item_ids: list[str],
+        *,
+        prefer_input_order: bool = False,
     ) -> tuple[str | None, bool]:
         if not item_ids:
             return None, False
         with self._exclusive():
             queue, order, remaining, started, restarted = (
-                self._simple_cycle_queue_state(path, item_ids)
+                self._simple_cycle_queue_state(
+                    path,
+                    item_ids,
+                    prefer_input_order=prefer_input_order,
+                )
             )
             selected = remaining[0] if remaining else None
             self._write_json(
@@ -629,12 +645,18 @@ class StateStore:
         path: Path,
         selected_id: str,
         item_ids: list[str],
+        *,
+        prefer_input_order: bool = False,
     ) -> bool:
         if not selected_id or not item_ids:
             return False
         with self._exclusive():
             _queue, order, remaining, _started, _restarted = (
-                self._simple_cycle_queue_state(path, item_ids)
+                self._simple_cycle_queue_state(
+                    path,
+                    item_ids,
+                    prefer_input_order=prefer_input_order,
+                )
             )
             if selected_id not in remaining:
                 return False
@@ -705,10 +727,11 @@ class StateStore:
         self,
         image_ids: list[str],
     ) -> tuple[str | None, bool]:
-        """Inspect the next clean Type 4 image without consuming it."""
+        """Inspect the next Type 4 image in the current R2 priority order."""
         return self._peek_simple_cycle_id(
             self._type_4_image_queue_path,
             image_ids,
+            prefer_input_order=True,
         )
 
     def remember_type_4_image_choice(
@@ -721,6 +744,7 @@ class StateStore:
             self._type_4_image_queue_path,
             selected_id,
             image_ids,
+            prefer_input_order=True,
         )
 
     def get_next_cartools_image_id(
