@@ -5,6 +5,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
+import pytest
 from PIL import Image
 from telegram import InputMediaDocument
 from telegram.error import NetworkError
@@ -279,17 +280,44 @@ async def _fast_sleep(delay: float) -> None:
     return None
 
 
-def test_type_3_sends_hook_text_message_then_clean_images():
+@pytest.mark.parametrize("separate_slide_text", [False, True])
+@pytest.mark.parametrize(
+    ("video_type", "content_role", "content_text", "separate_content_messages"),
+    [
+        (
+            VideoType.TYPE_1,
+            SlideRole.OCTOBER,
+            "Octubre - 0€\nEmpecé con ganas, pero no conseguí ventas.",
+            ["Octubre - 0€", "Empecé con ganas, pero no conseguí ventas."],
+        ),
+        (
+            VideoType.TYPE_2,
+            SlideRole.TIP1,
+            "1. Revisa el margen real\nCalcula costes antes de lanzar.",
+            ["1. Revisa el margen real", "Calcula costes antes de lanzar."],
+        ),
+        (
+            VideoType.TYPE_3,
+            SlideRole.TOOL_PAYMENTS,
+            "4. Payments\nManage payments securely\nUse Stripe",
+            ["4. Payments\nManage payments securely\nUse Stripe"],
+        ),
+    ],
+)
+def test_types_1_2_and_3_send_hook_once_as_intact_message_before_album(
+    video_type, content_role, content_text, separate_content_messages, separate_slide_text
+):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
         image_path = root / "slide.jpg"
         Image.new("RGB", (10, 10), (0, 0, 0)).save(image_path)
         context = FakeContext()
+        hook_text = "Como hacer dropshipping\nsin perder dinero en 2026"
         hook_slide = SlidePlan(
             index=1,
             role=SlideRole.HOOK,
-            text="Como hacer dropshipping en 2026",
+            text=hook_text,
             media=MediaCandidate(
                 source_account="alpha",
                 source_id="hook",
@@ -301,10 +329,10 @@ def test_type_3_sends_hook_text_message_then_clean_images():
                 created_at="",
             ),
         )
-        tool_slide = SlidePlan(
+        content_slide = SlidePlan(
             index=4,
-            role=SlideRole.TOOL_PAYMENTS,
-            text="4. Payments\nManage payments securely\nUse Stripe",
+            role=content_role,
+            text=content_text,
             media=MediaCandidate(
                 source_account="tipo3_fondo",
                 source_id="bg",
@@ -334,15 +362,19 @@ def test_type_3_sends_hook_text_message_then_clean_images():
             _send_slides_text_then_image(
                 context,
                 123,
-                [hook_slide, tool_slide],
-                video_type=VideoType.TYPE_3,
+                [hook_slide, content_slide],
+                video_type=video_type,
+                separate_slide_text=separate_slide_text,
             )
         )
 
-        assert context.bot.events == [
-            ("message", "Como hacer dropshipping en 2026"),
-            ("album", "slide.jpg,slide.jpg"),
-        ]
+        expected_events = [("message", hook_text)]
+        if separate_slide_text:
+            expected_events.extend(
+                ("message", text) for text in separate_content_messages
+            )
+        expected_events.append(("album", "slide.jpg,slide.jpg"))
+        assert context.bot.events == expected_events
         assert context.bot.media_group_types == [
             (InputMediaDocument, InputMediaDocument)
         ]
@@ -510,13 +542,14 @@ def test_regular_carousel_sends_all_images_as_one_album():
     root.mkdir(parents=True)
     try:
         slides = []
-        for index in range(1, 4):
+        roles = (SlideRole.HOOK, SlideRole.OCTOBER, SlideRole.NOVEMBER)
+        for index, role in enumerate(roles, start=1):
             image_path = root / f"regular_{index:02d}.jpg"
             Image.new("RGB", (10, 16), (index, 20, 30)).save(image_path)
             slides.append(
                 SlidePlan(
                     index=index,
-                    role=SlideRole.HOOK,
+                    role=role,
                     text=f"Texto {index}",
                     media=MediaCandidate(
                         source_account="regular",
@@ -542,6 +575,7 @@ def test_regular_carousel_sends_all_images_as_one_album():
         )
 
         assert context.bot.events == [
+            ("message", "Texto 1"),
             ("album", "regular_01.jpg,regular_02.jpg,regular_03.jpg")
         ]
     finally:
@@ -1151,9 +1185,9 @@ def test_type_1_sends_embedded_text_image_without_slide_messages():
         Image.new("RGB", (10, 10), (0, 0, 0)).save(image_path)
         context = FakeContext()
         slide = SlidePlan(
-            index=1,
-            role=SlideRole.HOOK,
-            text="Hook text",
+            index=2,
+            role=SlideRole.OCTOBER,
+            text="Octubre - 0€\nEmpecé con ganas, pero no conseguí ventas.",
             media=MediaCandidate(
                 source_account="tipo1",
                 source_id="img",
@@ -1166,7 +1200,11 @@ def test_type_1_sends_embedded_text_image_without_slide_messages():
             ),
         )
 
-        asyncio.run(_send_slides_text_then_image(context, 123, [slide]))
+        asyncio.run(
+            _send_slides_text_then_image(
+                context, 123, [slide], video_type=VideoType.TYPE_1
+            )
+        )
 
         assert context.bot.events == [
             ("document", "slide.jpg"),

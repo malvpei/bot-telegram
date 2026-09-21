@@ -32,6 +32,14 @@ Ambos tipos:
   de orden nunca desincroniza "texto de febrero" con "imagen de enero".
 - Mantienen un historial acotado (`HISTORY_MAX_PER_BUCKET`) de firmas para
   que el dedup no degenere con el tiempo.
+- La imagen del hook se entrega limpia; su texto se envía como un mensaje
+  independiente antes del álbum. El hook se conserva también en el guion.
+- En las demás fotos, colocan el texto en huecos sin caras, con preferencia por el
+  pecho. La búsqueda distingue las caras del cuerpo y conserva 160 px arriba
+  y 230 px abajo en un lienzo de 1080×1920 (proporcionales en otras resoluciones)
+  para permitir la edición posterior. La búsqueda solo cambia la posición:
+  nunca reduce el texto para encajarlo en un hueco. La posición se conserva
+  durante el zoom y tiene en cuenta el recorrido de las caras.
 
 ## Heurísticas — limitaciones importantes
 
@@ -41,8 +49,13 @@ Ambos tipos:
 - La detección de **lujo extremo** (para excluir tipo 1) mira keywords del
   caption **y** un score visual aproximado (reflejos dorados o cromados).
   Sigue siendo débil: un Ferrari con caption vacío puede pasar.
-- La detección de **cara** usa Haar cascade (OpenCV). Hay falsos positivos y
-  negativos; no garantiza que sea el usuario.
+- La selección de fotos usa Haar cascade (OpenCV). Para **colocar el texto**,
+  el render combina YuNet, cascadas frontales/de perfil y estimaciones de ojos
+  y cabeza. El modelo YuNet se incluye en `assets/models/yunet`, funciona sin
+  conexión y permite continuar con las cascadas si no está disponible. Sigue
+  habiendo falsos positivos y negativos; no identifica al usuario. Si ninguna
+  posición permite evitar todas las caras, prioriza el menor solapamiento
+  conservando los márgenes de edición.
 - El score de **día / buena iluminación** se basa en brillo medio. Un
   estudio bien iluminado pasa aunque la foto no sea de día.
 
@@ -252,8 +265,9 @@ persona y, como máximo, un paisaje sin persona.
 
 El renderer detecta caras frontales y de perfil sobre una copia reducida de la
 imagen, reserva una zona alrededor de cabeza/ojos y solo despues elige la zona
-mas centrada y con menos ruido visual. Los hooks usan un contorno reforzado y
-los captions mantienen tarjeta blanca. El layout se calcula una vez por slide y
+mas centrada y con menos ruido visual. Los hooks de los tipos 1 y 2 se entregan
+como mensajes separados de sus imágenes limpias; los captions mantienen tarjeta
+blanca. El layout se calcula una vez por slide y
 se reutiliza durante todos sus frames.
 
 Las metricas y fingerprints de las fotos quedan cacheadas en

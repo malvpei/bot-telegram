@@ -2500,18 +2500,22 @@ async def _send_slides_text_then_image(
     paths = []
 
     # Keep any deliberately separate copy before the album. Slide copy is
-    # otherwise embedded in the rendered images, except for the Type 3 hook,
-    # which stays clean and is delivered as Telegram text.
+    # otherwise embedded in the rendered images, except for hooks in Types
+    # 1–3, which stay clean and are delivered as Telegram text.
     for slide in slides:
         path = slide.media.local_path
         if not path.exists():
             continue
         paths.append(path)
-        if separate_slide_text and slide.text:
+        if (
+            video_type in {VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3}
+            and slide.role == SlideRole.HOOK
+            and slide.text
+        ):
+            await _send_message(context, chat_id, slide.text)
+        elif separate_slide_text and slide.text:
             for message in _separate_slide_text_messages(slide, video_type):
                 await _send_message(context, chat_id, message)
-        elif video_type == VideoType.TYPE_3 and slide.role == SlideRole.HOOK and slide.text:
-            await _send_message(context, chat_id, slide.text)
 
     # Every carousel is delivered as one Telegram document group so Telegram
     # cannot recompress the images. A single valid slide uses send_document too.

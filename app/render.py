@@ -19,6 +19,7 @@ from app.advice_cards import (
 )
 from app.car_tools import CAR_TOOLS_BODY_LINES
 from app.config import Settings
+from app.face_detection import build_face_detector
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
 from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
 
@@ -331,6 +332,7 @@ class VideoRenderer:
             settings.root_dir / "assets" / "advice_emojis"
         )
         self._face_detector = build_cascade("haarcascade_frontalface_default.xml")
+        self._neural_face_detector = build_face_detector()
         self._profile_face_detector = build_cascade(
             "haarcascade_profileface.xml",
             required=False,
@@ -428,6 +430,8 @@ class VideoRenderer:
                 self._draw_text(canvas, slide, video_type)
             return canvas.convert("RGB")
         source_image = self._load_source_image(slide.media.local_path)
+        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
+            self._prepare_slide_text_overlay(slide, source_image, video_type)
         frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
         return Image.fromarray(frame)
 
@@ -3561,6 +3565,19 @@ class VideoRenderer:
             return
 
         overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        prefer_chest = (
+            video_type in {VideoType.TYPE_1, VideoType.TYPE_2}
+            and not slide.fixed_asset
+        )
+        if prefer_chest and avoid_regions is None:
+            avoid_regions = self._text_avoid_regions(image)
+        if prefer_chest and self._slide_expects_person(slide) and not any(
+            weight >= TEXT_HEAD_AVOID_WEIGHT for _box, weight in avoid_regions or []
+        ):
+            avoid_regions = [
+                *(avoid_regions or []),
+                *self._fallback_slide_avoid_regions(slide, image.width, image.height),
+            ]
 
         if slide.role == SlideRole.HOOK:
             if video_type == VideoType.TYPE_3:
@@ -3572,6 +3589,7 @@ class VideoRenderer:
                 slide=slide,
                 layout_image=image,
                 avoid_regions=avoid_regions,
+                prefer_chest=prefer_chest,
             )
         elif self._uses_hook_paragraph_style(slide, video_type):
             self._draw_hook_paragraph_text(
@@ -3580,6 +3598,7 @@ class VideoRenderer:
                 slide=slide,
                 layout_image=image,
                 avoid_regions=avoid_regions,
+                prefer_chest=prefer_chest,
             )
         else:
             self._draw_caption_card_text(
@@ -3588,6 +3607,7 @@ class VideoRenderer:
                 slide=slide,
                 layout_image=image,
                 avoid_regions=avoid_regions,
+                prefer_chest=prefer_chest,
             )
         self._remember_text_overlay(cache_key, overlay)
         image.alpha_composite(overlay)
@@ -3704,6 +3724,7 @@ class VideoRenderer:
         slide: SlidePlan | None = None,
         layout_image: Image.Image | None = None,
         avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
+        prefer_chest: bool = False,
     ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
@@ -3771,7 +3792,7 @@ class VideoRenderer:
                 font = font_loader(reduced_size, True)
         text_height = self._block_height(lines, font, draw, stroke_width=stroke_width)
         block_width = min(
-            width - _scale_x(80, width),
+            width,
             self._block_width(lines, font, draw, stroke_width=stroke_width)
             + _scale_x(40, width),
         )
@@ -3782,6 +3803,7 @@ class VideoRenderer:
             preferred_centers=(0.50, 0.46, 0.54, 0.42, 0.58, 0.38, 0.62),
             expect_person=self._slide_expects_person(slide),
             avoid_regions=avoid_regions,
+            prefer_chest=prefer_chest,
             fallback_regions=self._fallback_slide_avoid_regions(
                 slide,
                 width,
@@ -3802,6 +3824,7 @@ class VideoRenderer:
                 if video_type == VideoType.TYPE_2
                 else 0
             ),
+            align_ink=True,
         )
 
     def _draw_hook_paragraph_text(
@@ -3812,6 +3835,7 @@ class VideoRenderer:
         slide: SlidePlan | None = None,
         layout_image: Image.Image | None = None,
         avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
+        prefer_chest: bool = False,
     ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
@@ -3854,6 +3878,7 @@ class VideoRenderer:
             ),
             expect_person=self._slide_expects_person(slide),
             avoid_regions=avoid_regions,
+            prefer_chest=prefer_chest,
             fallback_regions=self._fallback_slide_avoid_regions(
                 slide,
                 width,
@@ -3881,6 +3906,7 @@ class VideoRenderer:
             stroke_width=stroke_width,
             line_gap=line_gap,
             stroke_fill=HOOK_TEXT_STROKE_FILL,
+            align_ink=True,
         )
 
     def _normalise_hook_paragraph_text(self, text: str) -> str:
@@ -4013,6 +4039,7 @@ class VideoRenderer:
         slide: SlidePlan | None = None,
         layout_image: Image.Image | None = None,
         avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
+        prefer_chest: bool = False,
     ) -> None:
         draw = ImageDraw.Draw(image)
         width, height = image.size
@@ -4103,6 +4130,7 @@ class VideoRenderer:
             preferred_centers=self._caption_preferred_centers(slide),
             expect_person=self._slide_expects_person(slide),
             avoid_regions=avoid_regions,
+            prefer_chest=prefer_chest,
             fallback_regions=self._fallback_slide_avoid_regions(
                 slide,
                 width,
@@ -4417,6 +4445,7 @@ class VideoRenderer:
         avoid_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
         fallback_regions: list[tuple[tuple[int, int, int, int], float]] | None = None,
         max_start_y: int | None = None,
+        prefer_chest: bool = False,
     ) -> int:
         width, height = image.size
         min_y, max_y = self._safe_text_vertical_bounds(height, block_height)
@@ -4427,8 +4456,10 @@ class VideoRenderer:
             if avoid_regions is None
             else list(avoid_regions)
         )
-        if not regions and expect_person:
-            regions = list(
+        if expect_person and not any(
+            weight >= TEXT_HEAD_AVOID_WEIGHT for _region, weight in regions
+        ):
+            regions.extend(
                 fallback_regions
                 if fallback_regions is not None
                 else self._fallback_portrait_avoid_regions(width, height)
@@ -4444,52 +4475,83 @@ class VideoRenderer:
         for center in centers:
             y = int(round(center * height - block_height / 2))
             add_candidate(y)
-        for y in self._clear_gap_text_candidates(
-            block_width=block_width,
-            block_height=block_height,
-            canvas_width=width,
-            canvas_height=height,
-            min_y=min_y,
-            max_y=max_y,
-            avoid_regions=regions,
+        # Body boxes must not erase a narrow, face-free gap over the chest.
+        # Include exact gap boundaries even when the regular grid misses them,
+        # and retry without the extra clearance before accepting any overlap.
+        for min_weight, clearance in (
+            (TEXT_HEAD_AVOID_WEIGHT, None),
+            (TEXT_HEAD_AVOID_WEIGHT, 0),
+            (TEXT_EYE_AVOID_WEIGHT, None),
+            (TEXT_EYE_AVOID_WEIGHT, 0),
+            (TEXT_FACE_AVOID_WEIGHT, None),
+            (TEXT_FACE_AVOID_WEIGHT, 0),
+            (0.0, None),
         ):
-            add_candidate(y)
+            for y in self._clear_gap_text_candidates(
+                block_width=block_width,
+                block_height=block_height,
+                canvas_width=width,
+                canvas_height=height,
+                min_y=min_y,
+                max_y=max_y,
+                avoid_regions=regions,
+                min_weight=min_weight,
+                clearance=clearance,
+            ):
+                add_candidate(y)
         if min_y not in candidates:
             candidates.append(min_y)
         if max_y not in candidates:
             candidates.append(max_y)
 
         primary_center = preferred_centers[0] if preferred_centers else 0.55
+        if prefer_chest:
+            heads = [
+                region for region, weight in regions
+                if weight >= TEXT_HEAD_AVOID_WEIGHT
+                and region[0] < (width + block_width) / 2
+                and region[2] > (width - block_width) / 2
+            ]
+            if heads:
+                # Follow the main subject instead of assuming every face is in
+                # the upper third. Other faces remain hard obstacles below.
+                detected_faces = [
+                    region for region, weight in regions
+                    if weight >= TEXT_FACE_AVOID_WEIGHT and region in heads
+                ]
+                main_head = max(detected_faces or heads, key=self._box_area)
+                chest_y = main_head[3] + _scale_y(TEXT_AVOID_CLEARANCE_MARGIN, height)
+                chest_y += int((main_head[3] - main_head[1]) * 0.12)
+                add_candidate(chest_y)
+                primary_center = (chest_y + block_height / 2) / height
         luminance = np.asarray(image.convert("L"), dtype=np.float32)
-        face_safe_candidates = [
-            y
-            for y in candidates
-            if self._text_candidate_clears_priority_regions(
-                y,
-                block_width=block_width,
-                block_height=block_height,
-                canvas_width=width,
-                canvas_height=height,
-                avoid_regions=regions,
-            )
-        ]
-        scored_candidates = face_safe_candidates or candidates
         best_y = min(
-            scored_candidates,
-            key=lambda y: self._text_position_score(
-                y,
-                block_width=block_width,
-                block_height=block_height,
-                canvas_width=width,
-                canvas_height=height,
-                avoid_regions=regions,
-                preferred_center=primary_center,
-                luminance=luminance,
+            candidates,
+            key=lambda y: (
+                *self._text_position_safety(
+                    y,
+                    block_width=block_width,
+                    block_height=block_height,
+                    canvas_width=width,
+                    canvas_height=height,
+                    avoid_regions=regions,
+                ),
+                self._text_position_score(
+                    y,
+                    block_width=block_width,
+                    block_height=block_height,
+                    canvas_width=width,
+                    canvas_height=height,
+                    avoid_regions=regions,
+                    preferred_center=primary_center,
+                    luminance=luminance,
+                    prefer_chest=prefer_chest,
+                ),
             ),
         )
         return best_y
 
-    def _text_candidate_clears_priority_regions(
+    def _text_position_safety(
         self,
         y: int,
         *,
@@ -4498,27 +4560,35 @@ class VideoRenderer:
         canvas_width: int,
         canvas_height: int,
         avoid_regions: list[tuple[tuple[int, int, int, int], float]],
-    ) -> bool:
+    ) -> tuple[float, float, float, float, float, float]:
         x = max(0, (canvas_width - block_width) // 2)
-        box = (
-            x,
-            y,
-            min(canvas_width, x + block_width),
-            min(canvas_height, y + block_height),
-        )
+        box = (x, y, min(canvas_width, x + block_width), y + block_height)
+        face_overlap = eye_overlap = head_overlap = 0.0
+        face_clearance = eye_clearance = head_clearance = 0.0
         for region, weight in avoid_regions:
             if weight < TEXT_HEAD_AVOID_WEIGHT:
                 continue
-            if self._intersection_area(box, region) > 0:
-                return False
-            if self._avoid_region_clearance_score(
-                box,
-                region,
-                region_weight=weight,
-                canvas_height=canvas_height,
-            ) > 0:
-                return False
-        return True
+            overlap = self._intersection_area(box, region) / max(
+                1, min(self._box_area(box), self._box_area(region))
+            )
+            clearance = self._avoid_region_clearance_score(
+                box, region, region_weight=weight, canvas_height=canvas_height,
+            )
+            if weight >= TEXT_FACE_AVOID_WEIGHT:
+                face_overlap += overlap
+                face_clearance += clearance
+            elif weight >= TEXT_EYE_AVOID_WEIGHT:
+                eye_overlap += overlap
+                eye_clearance += clearance
+            else:
+                head_overlap += overlap
+                head_clearance += clearance
+        # Clutter, body overlap and preferred height can never buy permission
+        # to cover a detected face. Inferred heads are less certain than faces.
+        return (
+            face_overlap, eye_overlap, head_overlap,
+            face_clearance, eye_clearance, head_clearance,
+        )
 
     @staticmethod
     def _safe_text_vertical_bounds(
@@ -4541,26 +4611,33 @@ class VideoRenderer:
         min_y: int,
         max_y: int,
         avoid_regions: list[tuple[tuple[int, int, int, int], float]],
+        min_weight: float = 0.0,
+        clearance: int | None = None,
     ) -> list[int]:
         x = max(0, (canvas_width - block_width) // 2)
         text_left = x
         text_right = min(canvas_width, x + block_width)
-        margin = _scale_y(TEXT_AVOID_CLEARANCE_MARGIN, canvas_height)
+        margin = (
+            _scale_y(TEXT_AVOID_CLEARANCE_MARGIN, canvas_height)
+            if clearance is None else clearance
+        )
         forbidden: list[tuple[int, int]] = []
-        for region, _weight in avoid_regions:
+        for region, weight in avoid_regions:
+            if weight < min_weight:
+                continue
             if region[2] <= text_left or region[0] >= text_right:
                 continue
-            start = max(min_y, region[1] - block_height - margin)
-            end = min(max_y, region[3] + margin)
-            if end > start:
+            start = max(min_y, region[1] - block_height - margin + 1)
+            end = min(max_y, region[3] + margin - 1)
+            if end >= start:
                 forbidden.append((start, end))
         if not forbidden:
-            return []
+            return self._gap_candidate_positions(min_y, max_y)
 
         forbidden.sort()
         merged: list[list[int]] = []
         for start, end in forbidden:
-            if not merged or start > merged[-1][1]:
+            if not merged or start > merged[-1][1] + 1:
                 merged.append([start, end])
             else:
                 merged[-1][1] = max(merged[-1][1], end)
@@ -4569,14 +4646,14 @@ class VideoRenderer:
         gap_start = min_y
         for start, end in merged:
             if start > gap_start:
-                candidates.extend(self._gap_candidate_positions(gap_start, start))
-            gap_start = max(gap_start, end)
-        if gap_start < max_y:
+                candidates.extend(self._gap_candidate_positions(gap_start, start - 1))
+            gap_start = max(gap_start, end + 1)
+        if gap_start <= max_y:
             candidates.extend(self._gap_candidate_positions(gap_start, max_y))
         return candidates
 
     def _gap_candidate_positions(self, start: int, end: int) -> list[int]:
-        if end <= start:
+        if end < start:
             return []
         center = (start + end) // 2
         return [center, start, end]
@@ -4592,6 +4669,7 @@ class VideoRenderer:
         avoid_regions: list[tuple[tuple[int, int, int, int], float]],
         preferred_center: float,
         luminance: np.ndarray,
+        prefer_chest: bool = False,
     ) -> float:
         x = max(0, (canvas_width - block_width) // 2)
         box = (x, y, min(canvas_width, x + block_width), min(canvas_height, y + block_height))
@@ -4603,6 +4681,8 @@ class VideoRenderer:
             score += (0.42 - center) * 2.8
         score += self._background_clutter_score(luminance, box) * 1.05
         for region, weight in avoid_regions:
+            if prefer_chest and weight < TEXT_HEAD_AVOID_WEIGHT:
+                weight *= 0.08
             overlap = self._intersection_area(box, region)
             region_area = max(1, self._box_area(region))
             if overlap > 0:
@@ -4702,30 +4782,39 @@ class VideoRenderer:
             return []
 
         regions: list[tuple[tuple[int, int, int, int], float]] = []
-        face_boxes = self._deduplicate_detection_boxes(
+        neural_faces = self._neural_face_detector.detect_faces(rgb)
+        eye_boxes = self._detect_render_eyes(gray)
+        cascade_faces = self._deduplicate_detection_boxes(
             self._detect_render_faces(gray),
             self._detect_render_profile_faces(gray),
         )
+        face_boxes = self._deduplicate_detection_boxes(neural_faces, cascade_faces)
         restored_faces = self._restore_detection_boxes(
             face_boxes,
             detection_scale,
         )
         for x, y, w, h in restored_faces:
             face = self._expanded_box(
-                (int(x), int(y), int(x + w), int(y + h)),
+                (int(x), int(y - h * 0.35), int(x + w), int(y + h * 1.22)),
                 width,
                 height,
                 x_pad=int(w * 0.58),
-                y_pad=int(h * 0.88),
+                y_pad=0,
             )
             regions.append((face, TEXT_FACE_AVOID_WEIGHT))
 
-        eye_boxes = self._detect_render_eyes(gray)
         restored_eyes = self._restore_detection_boxes(
             eye_boxes,
             detection_scale,
         )
         for x, y, w, h in restored_eyes:
+            if any(
+                fx <= x + w / 2 <= fx + fw and fy <= y + h / 2 <= fy + fh
+                for fx, fy, fw, fh in restored_faces
+            ):
+                # A located face already protects its eyes. Extrapolating a
+                # second head here can incorrectly extend down over the chest.
+                continue
             eye_face = self._expanded_box(
                 (
                     int(x - w * 1.4),
@@ -4753,19 +4842,25 @@ class VideoRenderer:
                 x_pad=int(w * 0.12),
                 y_pad=int(h * 0.04),
             )
+            regions.append((body, TEXT_BODY_AVOID_WEIGHT))
+            if any(
+                x <= fx + fw / 2 <= x + w
+                and y - h * 0.1 <= fy + fh / 2 <= y + h * 0.4
+                for fx, fy, fw, fh in restored_faces
+            ):
+                continue
             head = self._expanded_box(
                 (
                     int(x + w * 0.15),
                     int(y),
                     int(x + w * 0.85),
-                    int(y + h * 0.33),
+                    int(y + h * 0.25),
                 ),
                 width,
                 height,
                 x_pad=int(w * 0.22),
-                y_pad=int(h * 0.16),
+                y_pad=int(h * 0.05),
             )
-            regions.append((body, TEXT_BODY_AVOID_WEIGHT))
             regions.append((head, TEXT_HEAD_AVOID_WEIGHT))
         if not regions and self._face_avoid_detectors_unavailable():
             return self._fallback_portrait_avoid_regions(width, height)
@@ -5131,6 +5226,7 @@ class VideoRenderer:
         line_gap: int = 16,
         stroke_fill: tuple[int, int, int] = (0, 0, 0),
         inner_stroke_width: int = 0,
+        align_ink: bool = False,
     ) -> None:
         y = start_y
         for line in lines:
@@ -5138,8 +5234,9 @@ class VideoRenderer:
             line_width = bbox[2] - bbox[0]
             line_height = bbox[3] - bbox[1]
             x = (width - line_width) // 2
+            position = (x - bbox[0], y - bbox[1]) if align_ink else (x, y)
             draw.text(
-                (x, y),
+                position,
                 line,
                 font=font,
                 fill=fill,
@@ -5148,7 +5245,7 @@ class VideoRenderer:
             )
             if inner_stroke_width > 0:
                 draw.text(
-                    (x, y),
+                    position,
                     line,
                     font=font,
                     fill=fill,

@@ -9,7 +9,7 @@ from pathlib import Path
 from threading import Lock
 from uuid import uuid4
 
-from PIL import Image
+from PIL import Image, ImageChops
 import pytest
 
 from app.advice_cards import ADVICE_ROTATION_CYCLE_LENGTH, AdviceBackground
@@ -31,6 +31,7 @@ from app.models import (
     VideoType,
 )
 from app.r2_storage import R2Object
+from app.render import VideoRenderer
 from app.service import TYPE_5_DROPRADAR_FIXED_IMAGE_NAME, VideoCreationService
 from app.state import StateStore
 from app.texts import ScriptGenerator
@@ -555,6 +556,56 @@ def test_render_outputs_can_keep_slide_text_out_of_images():
         assert plan.slides[0].media.local_path.name == "slide_01.png"
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.mark.parametrize("video_type", [VideoType.TYPE_1, VideoType.TYPE_2])
+@pytest.mark.parametrize("embed_slide_text", [True, False])
+def test_photo_hook_is_clean_but_text_is_preserved_for_delivery(
+    tmp_path, video_type, embed_slide_text
+):
+    settings = replace(get_settings(), width=360, height=640)
+    source_path = tmp_path / "source.png"
+    source = Image.new("RGB", (360, 640), (25, 30, 35))
+    source.save(source_path)
+    media = MediaCandidate(
+        source_account="alpha",
+        source_id="source",
+        local_path=source_path,
+        permalink="",
+        caption="",
+        width=360,
+        height=640,
+        created_at="",
+    )
+    caption_text = "Octubre\nAprende a vender con tu tienda"
+    hook_text = "Cómo empecé mi negocio\nsin tenerlo todo perfecto"
+    plan = VideoPlan(
+        chosen_account="alpha",
+        video_type=video_type,
+        language=Language.ES,
+        # Deliberately put the hook second: its role determines what stays clean.
+        slides=[
+            SlidePlan(1, SlideRole.TIP1, caption_text, media),
+            SlidePlan(2, SlideRole.HOOK, hook_text, media),
+        ],
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.renderer = VideoRenderer(settings)
+
+    _video, script_path = service._render_outputs(
+        plan, tmp_path / "job", embed_slide_text=embed_slide_text,
+    )
+
+    with Image.open(plan.slides[1].media.local_path) as hook_image:
+        assert ImageChops.difference(hook_image.convert("RGB"), source).getbbox() is None
+    with Image.open(plan.slides[0].media.local_path) as caption_image:
+        has_text = ImageChops.difference(caption_image.convert("RGB"), source).getbbox() is not None
+        assert has_text is embed_slide_text
+    assert plan.slides[1].text == hook_text
+    assert plan.slides[0].text == caption_text
+    assert hook_text in script_path.read_text(encoding="utf-8")
+    assert media.local_path == source_path
 
 
 def test_type_1_outputs_skip_full_video_render():

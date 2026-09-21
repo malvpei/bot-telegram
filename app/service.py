@@ -2253,9 +2253,15 @@ class VideoCreationService:
                 continue
             out_path = slides_dir / f"slide_{slide.index:02d}.png"
             try:
+                separate_hook = (
+                    plan.video_type in {VideoType.TYPE_1, VideoType.TYPE_2}
+                    and slide.role == SlideRole.HOOK
+                )
+                # Keep the original text for the script and Telegram message;
+                # only the rendered hook image receives a clean copy.
                 render_slide = (
                     slide
-                    if embed_slide_text
+                    if embed_slide_text and not separate_hook
                     else replace(slide, text="")
                 )
                 normalized = self.renderer.render_slide_still(
