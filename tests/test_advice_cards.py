@@ -44,8 +44,8 @@ def test_advice_backgrounds_and_scripts_complete_full_rotation():
         AdviceBackground.EDITORIAL,
         AdviceBackground.BROWN,
     )
-    assert ADVICE_SOCIAL_CYCLE_LENGTH == 24
-    assert ADVICE_ROTATION_CYCLE_LENGTH == 120
+    assert ADVICE_SOCIAL_CYCLE_LENGTH == 360
+    assert ADVICE_ROTATION_CYCLE_LENGTH == 360
 
     selections = [
         advice_selection(phase, Language.ES)
@@ -75,7 +75,7 @@ def test_advice_backgrounds_and_scripts_complete_full_rotation():
         0,
         1,
     ]
-    assert advice_selection(120, Language.ES) == advice_selection(0, Language.ES)
+    assert advice_selection(360, Language.ES) == advice_selection(0, Language.ES)
 
 
 def test_editorial_advice_background_adds_a_fifth_dropshipping_tip():
@@ -124,40 +124,51 @@ def test_advice_social_copy_has_description_and_related_hashtags():
     ]
 
 
-def test_each_advice_pack_has_six_matching_social_copy_pairs():
+def test_advice_catalog_has_39_unique_matching_social_copy_pairs_per_language():
     for language in (Language.ES, Language.EN):
         assert len(ADVICE_SOCIAL_TITLES[language]) == len(ADVICE_PACKS[language])
         assert len(ADVICE_SOCIAL_DESCRIPTIONS[language]) == len(
             ADVICE_PACKS[language]
         )
+        all_titles = []
+        all_descriptions = []
         for titles, descriptions in zip(
             ADVICE_SOCIAL_TITLES[language],
             ADVICE_SOCIAL_DESCRIPTIONS[language],
             strict=True,
         ):
-            assert len(titles) == 6
-            assert len(descriptions) == 6
-            assert len(set(titles)) == 6
-            assert len(set(descriptions)) == 6
+            assert len(titles) == len(descriptions)
+            all_titles.extend(titles)
+            all_descriptions.extend(descriptions)
+        assert len(all_titles) == len(set(all_titles)) == 39
+        assert len(all_descriptions) == len(set(all_descriptions)) == 39
 
 
-def test_advice_social_copy_rotates_six_titles_and_descriptions_per_pack():
-    phases = (0, 4, 8, 12, 16, 20)
-
+def test_advice_social_copy_exhausts_each_pack_before_repeating_across_phase_wrap():
     for language in (Language.ES, Language.EN):
-        for pack_index in range(len(ADVICE_PACKS[language])):
-            copies = [
-                advice_social_copy(language, pack_index, rotation_index=phase)
-                for phase in phases
-            ]
-            assert len({copy[0] for copy in copies}) == 6
-            assert len({copy[1] for copy in copies}) == 6
+        copies_by_pack = [[] for _ in ADVICE_PACKS[language]]
+        for phase in range(ADVICE_ROTATION_CYCLE_LENGTH * 2):
+            # The persisted service phase resets at the end of the shared cycle.
+            saved_phase = phase % ADVICE_ROTATION_CYCLE_LENGTH
+            _background, _tips, pack_index = advice_selection(saved_phase, language)
+            title, description, _tags = advice_social_copy(
+                language, pack_index, rotation_index=saved_phase
+            )
+            copies_by_pack[pack_index].append((title, description))
 
-    english_first_pack = [
-        advice_social_copy(Language.EN, 0, rotation_index=phase)
-        for phase in phases
-    ]
-    assert all("hook" in copy[1].lower() for copy in english_first_pack)
+        for pack_index in range(len(ADVICE_PACKS[language])):
+            expected_pairs = list(
+                zip(
+                    ADVICE_SOCIAL_TITLES[language][pack_index],
+                    ADVICE_SOCIAL_DESCRIPTIONS[language][pack_index],
+                    strict=True,
+                )
+            )
+            copies = copies_by_pack[pack_index]
+            count = len(expected_pairs)
+            assert len(copies) % count == 0
+            for start in range(0, len(copies), count):
+                assert copies[start : start + count] == expected_pairs
 
 
 def test_social_copy_keeps_advice_hook_separate_from_title():

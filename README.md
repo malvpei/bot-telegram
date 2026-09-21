@@ -194,7 +194,10 @@ el bot.
 
 El **Tipo 4** genera una imagen vertical de consejos y no necesita cuentas de
 Instagram. Rota entre sus cinco diseños y cuatro guiones en español e inglés;
-el último consejo siempre recomienda Dropradar. Cada entrega incluye fuera de
+el último consejo siempre recomienda Dropradar. Incluye 39 pares de título y
+descripción por idioma, vinculados a los consejos de cada guion. Cada guion
+recorre sus propios textos antes de repetirlos, también al reiniciar el ciclo
+general. Cada entrega incluye fuera de
 la imagen la frase de apertura correspondiente al idioma y, como segunda
 imagen, una foto limpia del prefijo R2 configurado por
 `R2_TYPE_4_IMAGE_PREFIX` (`4` por defecto). Las fotos R2 recorren una cola
