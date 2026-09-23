@@ -186,11 +186,12 @@ class ImageSelector:
                 return self._create_type_2_plan(available_catalog, language)
             if video_type == VideoType.TYPE_3:
                 return self._create_type_3_plan(available_catalog, language)
-            if video_type == VideoType.PARKEZ:
+            if video_type in {VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
                 return self._create_parkez_plan(
                     available_catalog,
                     language,
-                    gender,
+                    VideoGender.MALE if video_type == VideoType.PARKEZ_MODE3 else gender,
+                    video_type=video_type,
                 )
             raise ValueError(
                 f"El tipo {video_type.value} no usa selector de Instagram."
@@ -642,6 +643,8 @@ class ImageSelector:
         catalog: dict[str, list[MediaCandidate]],
         language: Language,
         gender: VideoGender,
+        *,
+        video_type: VideoType = VideoType.PARKEZ,
     ) -> VideoPlan:
         fixed_image = self._build_parkez_fixed_media(gender)
         photo_roles = PARKEZ_ROLES[:-1]
@@ -684,7 +687,7 @@ class ImageSelector:
             )
             plan = VideoPlan(
                 chosen_account=account,
-                video_type=VideoType.PARKEZ,
+                video_type=video_type,
                 language=language,
                 slides=slides,
                 used_media_ids=self._reservation_keys(picked.values()),
@@ -1912,7 +1915,7 @@ class ImageSelector:
                 self._score_type_1(media, SlideRole.OCTOBER),
                 self._score_type_1(media, SlideRole.MARCH),
             )
-        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ}:
+        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
             return max(
                 self._score_type_2(media, SlideRole.HOOK),
                 self._score_type_2(media, SlideRole.TIP1),
@@ -1936,7 +1939,7 @@ class ImageSelector:
                 self._score_type_1(media, SlideRole.OCTOBER),
                 self._score_type_1(media, SlideRole.MARCH),
             )
-        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ}:
+        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
             if not self._is_type_2_user_visible_media(media):
                 return 0.0
             return max(

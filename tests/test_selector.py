@@ -220,23 +220,26 @@ def test_parkez_plan_uses_three_unique_people_and_gender_specific_fixed_close(
         )
 
     selector = ImageSelector(settings, state)
-    for gender, expected_name in (
-        (VideoGender.MALE, PARKEZ_MALE_FIXED_IMAGE_NAME),
-        (VideoGender.FEMALE, PARKEZ_FEMALE_FIXED_IMAGE_NAME),
+    for video_type, gender, expected_gender, expected_name in (
+        (VideoType.PARKEZ, VideoGender.MALE, VideoGender.MALE, PARKEZ_MALE_FIXED_IMAGE_NAME),
+        (VideoType.PARKEZ, VideoGender.FEMALE, VideoGender.FEMALE, PARKEZ_FEMALE_FIXED_IMAGE_NAME),
+        (VideoType.PARKEZ_MODE3, VideoGender.MALE, VideoGender.MALE, PARKEZ_MALE_FIXED_IMAGE_NAME),
+        (VideoType.PARKEZ_MODE3, VideoGender.FEMALE, VideoGender.MALE, PARKEZ_MALE_FIXED_IMAGE_NAME),
     ):
         plan = selector.create_plan(
             {"parkez_person": candidates},
-            VideoType.PARKEZ,
+            video_type,
             Language.ES,
             gender=gender,
         )
 
+        assert plan.video_type == video_type
         assert [slide.role for slide in plan.slides] == list(PARKEZ_ROLES)
         assert len({slide.media.source_id for slide in plan.slides[:3]}) == 3
         assert all(not slide.fixed_asset for slide in plan.slides[:3])
         assert plan.slides[-1].fixed_asset is True
         assert plan.slides[-1].media.local_path.name == expected_name
-        assert plan.slides[-1].media.source_id == f"fixed:parkez:{gender.value}"
+        assert plan.slides[-1].media.source_id == f"fixed:parkez:{expected_gender.value}"
         assert all("fixed:parkez" not in key for key in plan.used_media_ids)
 
 

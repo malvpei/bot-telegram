@@ -40,6 +40,7 @@ from app.bot import (
     create_command,
     createp_command,
     parkez_gender,
+    parkez_mode3,
     parkez_tools,
     story_carousel_command,
     wizard_delivery,
@@ -52,6 +53,7 @@ from app.bot import (
 from app.config import get_settings
 from app.batches import BatchItem, BatchItemKind
 from app.car_tools import CAR_TOOLS_HOOK
+from app.parkez_mode3 import PARKEZ_MODE3_TEXTS
 from app.state import StateStore
 from app.models import (
     CAR_TOOLS_ROLES,
@@ -1004,7 +1006,8 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_parkez_sends_clean_album_and_offers_another_photo():
+@pytest.mark.parametrize("video_type", [VideoType.PARKEZ, VideoType.PARKEZ_MODE3])
+def test_parkez_sends_clean_album_and_offers_another_photo(video_type):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"bot-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -1035,15 +1038,23 @@ def test_parkez_sends_clean_album_and_offers_another_photo():
                 )
             )
 
+        social_copy = SocialCopy(title="", description="", hashtags=[])
+        if video_type == VideoType.PARKEZ_MODE3:
+            for slide in slides:
+                slide.text = PARKEZ_MODE3_TEXTS[slide.role]
+            social_copy = SocialCopy(
+                title="Tu primer carnet", description="Velocidad, radares y ParkEz.", hashtags=[]
+            )
+
         class FakeParkEzService:
             def create_video(self, request):
                 return GenerationResult(
                     video_path=None,
                     script_path=root / "script.txt",
                     preview_text="",
-                    social_copy=SocialCopy(title="", description="", hashtags=[]),
+                    social_copy=social_copy,
                     chosen_account="alpha",
-                    video_type=VideoType.PARKEZ,
+                    video_type=video_type,
                     language=Language.ES,
                     fallback_accounts=[],
                     slides=slides,
@@ -1073,7 +1084,7 @@ def test_parkez_sends_clean_album_and_offers_another_photo():
         request = VideoRequest(
             chat_id=123,
             user_id=456,
-            video_type=VideoType.PARKEZ,
+            video_type=video_type,
             language=Language.ES,
             account_inputs=["alpha"],
             gender=VideoGender.MALE,
@@ -1083,9 +1094,16 @@ def test_parkez_sends_clean_album_and_offers_another_photo():
         asyncio.run(_execute_job(update, context, request))
 
         messages = [text for event, text in context.bot.events if event == "message"]
-        assert len(messages) == 7
-        assert messages[1].startswith("Carrusel ParkEz listo")
-        assert messages[2:6] == [f"Texto ParkEz {index}" for index in range(1, 5)]
+        if video_type == VideoType.PARKEZ_MODE3:
+            assert len(messages) == 9
+            assert messages[1].startswith("Carrusel ParkEz mode3 listo")
+            assert messages[2:4] == [social_copy.title, social_copy.description]
+            assert messages[4:8] == [slide.text for slide in slides]
+            assert messages.count(PARKEZ_MODE3_TEXTS[SlideRole.HOOK]) == 1
+        else:
+            assert len(messages) == 7
+            assert messages[1].startswith("Carrusel ParkEz listo")
+            assert messages[2:6] == [f"Texto ParkEz {index}" for index in range(1, 5)]
         assert context.bot.events[-2] == (
             "album",
             "parkez_1.jpg,parkez_2.jpg,parkez_3.jpg,parkez_4.jpg",
@@ -1096,7 +1114,7 @@ def test_parkez_sends_clean_album_and_offers_another_photo():
         assert context.user_data["repeat_request"] == {
             "chosen_account": "alpha",
             "requested_accounts": ["alpha"],
-            "video_type": VideoType.PARKEZ.value,
+            "video_type": video_type.value,
             "language": Language.ES.value,
             "video_gender": VideoGender.MALE.value,
             "lowercase_text": False,
@@ -1708,7 +1726,7 @@ def test_wizard_gender_offers_advice_without_ai_story():
     )
 
 
-def test_createp_offers_woman_man_and_tools():
+def test_createp_offers_woman_man_tools_and_mode3():
     async def allow(update):
         return True
 
@@ -1730,11 +1748,11 @@ def test_createp_offers_woman_man_and_tools():
     buttons = update.effective_message.reply_markup.inline_keyboard
     assert [[button.text for button in row] for row in buttons] == [
         ["Mujer", "Hombre"],
-        ["Tools"],
+        ["Tools", "mode3"],
     ]
     assert [[button.callback_data for button in row] for row in buttons] == [
         ["parkez:gender:female", "parkez:gender:male"],
-        ["parkez:tools"],
+        ["parkez:tools", "parkez:mode3"],
     ]
     assert "repeat_request" not in context.user_data
 
@@ -1797,6 +1815,41 @@ def test_createp_gender_uses_matching_accounts_and_forces_separate_spanish_copy(
         assert captured[-1].video_type == VideoType.PARKEZ
         assert captured[-1].language == Language.ES
         assert captured[-1].separate_slide_text is True
+
+
+def test_createp_mode3_uses_dropradar_male_accounts_and_separate_spanish_text():
+    captured = []
+
+    async def capture_execute_job(update, context, request):
+        captured.append(request)
+
+    context = FakeContext()
+    context.user_data["accounts_by_gender"] = {"male": ["alpha"], "female": ["beta"]}
+    query = FakeRegenerateQuery("parkez:mode3")
+    with patch("app.bot._execute_job", capture_execute_job):
+        state = asyncio.run(parkez_mode3(FakeRegenerateUpdate(query), context))
+
+    assert state == ConversationHandler.END
+    assert query.answered is True
+    assert context.user_data == {}
+    assert len(captured) == 1
+    assert captured[0] == VideoRequest(
+        chat_id=123, user_id=456, video_type=VideoType.PARKEZ_MODE3,
+        language=Language.ES, account_inputs=["alpha"], gender=VideoGender.MALE,
+        separate_slide_text=True,
+    )
+
+
+def test_createp_mode3_with_no_male_accounts_does_not_start_generation():
+    context = FakeContext()
+    context.user_data["accounts_by_gender"] = {"male": [], "female": ["beta"]}
+    query = FakeRegenerateQuery("parkez:mode3")
+    with patch("app.bot._execute_job") as execute:
+        state = asyncio.run(parkez_mode3(FakeRegenerateUpdate(query), context))
+    assert state == ConversationHandler.END
+    assert "No hay cuentas" in query.edited_text
+    assert context.user_data == {}
+    execute.assert_not_called()
 
 
 def test_wizard_type_asks_how_to_deliver_slide_text():

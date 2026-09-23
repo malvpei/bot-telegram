@@ -60,6 +60,9 @@ class StateStore:
             self.state_dir / "cartools_social_copy_queue.json"
         )
         self._cartools_image_queue_path = self.state_dir / "cartools_image_queue.json"
+        self._parkez_mode3_social_queue_path = (
+            self.state_dir / "parkez_mode3_social_queue.json"
+        )
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
@@ -965,6 +968,20 @@ class StateStore:
             self._cartools_social_copy_queue_path,
             selected_id,
             copy_ids,
+        )
+
+    def peek_next_parkez_mode3_social_copy_id(
+        self, copy_ids: list[str]
+    ) -> tuple[str | None, bool]:
+        """Inspect mode3's next title/description pair without consuming it."""
+        return self._peek_simple_cycle_id(self._parkez_mode3_social_queue_path, copy_ids)
+
+    def remember_parkez_mode3_social_copy_choice(
+        self, selected_id: str, copy_ids: list[str]
+    ) -> bool:
+        """Advance mode3's independent queue only after successful rendering."""
+        return self._remember_simple_cycle_choice(
+            self._parkez_mode3_social_queue_path, selected_id, copy_ids
         )
 
     def read_media_pool(self) -> dict[str, Any]:

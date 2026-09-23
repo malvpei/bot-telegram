@@ -136,6 +136,7 @@ def run_bot() -> None:
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(parkez_gender, pattern=r"^parkez:gender:(?:female|male)$"),
                 CallbackQueryHandler(parkez_tools, pattern=r"^parkez:tools$"),
+                CallbackQueryHandler(parkez_mode3, pattern=r"^parkez:mode3$"),
                 CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:5|advice)$"),
                 CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:male$"),
             ],
@@ -971,12 +972,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "5 = comparación de negocios con tres fotos R2 aleatorias y cierre fijo\n"
         "\nParkEz:\n"
         "1. /createp\n"
-        "2. elige Mujer, Hombre o Tools\n"
+        "2. elige Mujer, Hombre, Tools o mode3\n"
         "3. el bot entrega tres fotos del banco correspondiente y un cierre "
         "fijo de ParkEz, siempre con los cuatro textos separados\n"
         "4. Tools entrega cuatro diseños con texto incrustado y una quinta "
         "imagen de la cola R2 cartools, dentro del bucket configurado\n"
-        "5. en Mujer u Hombre puedes pedir otra foto distinta de la misma cuenta\n\n"
+        "5. mode3 usa fotos del pool de Dropradar, el cierre de Hombre y textos "
+        "sobre carnet, velocidad, radares y aparcamiento; rota 15 títulos y descripciones\n"
+        "6. en Mujer, Hombre o mode3 puedes pedir otra foto distinta de la misma cuenta\n\n"
         "Las cuentas de hombres se leen de accounts.txt. Las de mujeres se "
         "leen de accounts_women.txt para el flujo /createp (una por línea).\n\n"
         "/create usa primero el pool local si hay fotos aptas. "
@@ -1573,6 +1576,7 @@ async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                     "Tools",
                     callback_data="parkez:tools",
                 ),
+                InlineKeyboardButton("mode3", callback_data="parkez:mode3"),
             ],
         ]
     )
@@ -1604,6 +1608,12 @@ async def parkez_tools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     return ConversationHandler.END
 
 
+async def parkez_mode3(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    return await _create_parkez_photo_carousel(
+        update, context, VideoGender.MALE, VideoType.PARKEZ_MODE3
+    )
+
+
 async def parkez_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
@@ -1615,6 +1625,22 @@ async def parkez_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         )
         return ConversationHandler.END
 
+    return await _create_parkez_photo_carousel(
+        update, context, gender, VideoType.PARKEZ, answer_query=False
+    )
+
+
+async def _create_parkez_photo_carousel(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    gender: VideoGender,
+    video_type: VideoType,
+    *,
+    answer_query: bool = True,
+) -> int:
+    query = update.callback_query
+    if answer_query:
+        await query.answer()
     accounts_by_gender = context.user_data.get("accounts_by_gender")
     accounts = (
         list(accounts_by_gender.get(gender.value) or [])
@@ -1636,7 +1662,7 @@ async def parkez_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     request = VideoRequest(
         chat_id=update.effective_chat.id,
         user_id=update.effective_user.id,
-        video_type=VideoType.PARKEZ,
+        video_type=video_type,
         language=Language.ES,
         account_inputs=accounts,
         gender=gender,
@@ -2193,7 +2219,7 @@ async def _execute_job(
                 "fija de Dropradar."
             )
         )
-    elif request.video_type == VideoType.PARKEZ:
+    elif request.video_type in {VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
         status_text = (
             "Estoy seleccionando tres fotos limpias y preparando el cierre "
             "fijo de ParkEz."
@@ -2250,6 +2276,12 @@ async def _execute_job(
                 "Idioma: ES\n"
                 "Entrega: 4 imágenes limpias + textos separados"
             )
+        )
+    elif result.video_type == VideoType.PARKEZ_MODE3:
+        header = (
+            "Carrusel ParkEz mode3 listo\n"
+            "Entrega: 4 imágenes limpias + hook y 3 consejos separados\n"
+            "Título y descripción de la cola de mode3"
         )
     elif result.video_type == VideoType.PARKEZ:
         header = (

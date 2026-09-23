@@ -13,6 +13,7 @@ class VideoType(str, Enum):
     TYPE_5 = "5"
     ADVICE = "advice"
     PARKEZ = "parkez"
+    PARKEZ_MODE3 = "mode3"
     TOOLS = "tools"
 
 

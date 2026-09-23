@@ -10,8 +10,8 @@ Este proyecto monta un bot de Telegram que:
 - genera el texto en español o en inglés
 - evita repetir el mismo guion seguido y mantiene un historial de firmas
 - renderiza un video vertical `.mp4` listo para subir
-- crea carruseles promocionales de ParkEz con `/createp`, tanto para Mujer u
-  Hombre con texto separado como en formato Tools con texto incrustado
+- crea carruseles promocionales de ParkEz con `/createp`: Mujer, Hombre y mode3
+  con texto separado, o Tools con texto incrustado
 
 ## Lo que hace el pipeline
 
@@ -187,7 +187,7 @@ el bot.
 /download_pool — rellena el pool precargado de fotos aptas
 /pool         — muestra el stock del pool por tipo y cuenta
 /create       — lanza el wizard (tipo → idioma → render)
-/createp      — crea un carrusel ParkEz para Mujer, Hombre o Tools
+/createp      — crea un carrusel ParkEz para Mujer, Hombre, Tools o mode3
 /wizard       — alias de /create
 /cancel       — cancela el wizard en curso
 ```
@@ -208,7 +208,7 @@ antigua. Después siguen las anteriores pendientes, sin repetir las ya usadas
 hasta completar el ciclo.
 La Historia IA no aparece como opción dentro de `/create`.
 
-El flujo **/createp** permite elegir Mujer, Hombre o Tools. Para Mujer y Hombre,
+El flujo **/createp** permite elegir Mujer, Hombre, Tools o mode3. Para Mujer y Hombre,
 elige tres fotos nuevas de una sola cuenta del banco correspondiente y añade
 como cuarta imagen el cierre limpio de ParkEz del perfil elegido. Entrega el
 hook, dos consejos y la promoción de ParkEz como cuatro mensajes independientes;
@@ -217,6 +217,25 @@ misma variante en dos ejecuciones consecutivas del mismo perfil. El hook origina
 permanece fijo para Mujer y Hombre; solo varían los consejos y la promoción.
 Después del álbum, el bot permite pedir otra foto distinta de la misma cuenta,
 pasar a otra cuenta o terminar.
+
+La opción **mode3** comparte el pool y el historial de fotos usadas de los
+tipos 1 y 2 de Dropradar (`accounts.txt`). Elige tres fotos nuevas con persona
+visible de una sola cuenta y termina con `assets/fixed/parkez_male.png`, igual
+que Hombre. Las cuatro imágenes se entregan limpias. El hook fijo
+«Los 3 trucos que nadie te cuenta cuando te sacas el carnet» y los tres textos
+literales de referencia (velocímetro/GPS, radares y ParkEz) se envían en cuatro
+mensajes independientes. También se envían un título y una descripción como
+dos mensajes separados: hay 15 parejas sobre esos temas en una cola propia,
+sin repetir hasta completar el ciclo. La cola persiste tras reinicios y solo
+avanza después de generar correctamente el carrusel; un fallo de generación
+libera las fotos reservadas y no consume el copy. Conserva los botones para
+pedir otra foto o pasar de cuenta. No altera los otros modos.
+
+Nota editorial: el primer texto se conserva literalmente por petición del
+usuario, pero su afirmación sobre que el velocímetro marca menos es incorrecta;
+la velocidad indicada no debe ser inferior a la real según el
+[Reglamento ONU n.º 39, apartado 5.4](https://www.boe.es/buscar/doc.php?id=DOUE-L-2025-81410).
+Los títulos y descripciones nuevos no repiten esa afirmación.
 
 La opción **Tools** de `/createp` crea cuatro slides dedicados a RadarBot,
 ParkEz, Waze y Google Maps. Cada uno lleva su icono y su texto incrustado sobre
@@ -387,6 +406,7 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `data/state/cartools_background_queue.json` — rotación de los 13 fondos seleccionados de Tools
 - `data/state/cartools_image_queue.json` — cola cíclica de la imagen R2 de `/createp` Tools
 - `data/state/cartools_social_copy_queue.json` — rotación de los 15 títulos y descripciones de Tools
+- `data/state/parkez_mode3_social_queue.json` — rotación independiente de los 15 títulos y descripciones de mode3
 - `data/state/telegram_users.json` — usuarios autorizados y último acceso
 - `data/state/.state.lock` — lock de `filelock` cross-proceso
 

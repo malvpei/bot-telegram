@@ -56,6 +56,7 @@ from app.models import (
     SlideRole,
 )
 from app.parkez import build_parkez_script, parkez_fixed_image_name
+from app.parkez_mode3 import PARKEZ_MODE3_SOCIAL_COPY_IDS, build_parkez_mode3_script
 from app.r2_storage import R2_IMAGE_EXTENSIONS, R2Object, R2StorageClient
 from app.render import VideoRenderer
 from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
@@ -581,6 +582,14 @@ class VideoCreationService:
         }
 
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
+        if request.video_type == VideoType.PARKEZ_MODE3:
+            request = replace(
+                request,
+                gender=VideoGender.MALE,
+                language=Language.ES,
+                separate_slide_text=True,
+                lowercase_text=False,
+            )
         if request.video_type == VideoType.ADVICE:
             return self._create_advice_card_locked(request)
         if request.video_type == VideoType.TOOLS:
@@ -608,7 +617,9 @@ class VideoCreationService:
         self._assert_single_source_account(plan)
 
         try:
-            if request.video_type == VideoType.PARKEZ:
+            if request.video_type == VideoType.PARKEZ_MODE3:
+                script_package = build_parkez_mode3_script(self.state)
+            elif request.video_type == VideoType.PARKEZ:
                 script_package = build_parkez_script(self.state, request.gender)
             else:
                 script_package = self.script_generator.generate(
@@ -625,7 +636,7 @@ class VideoCreationService:
             job_dir = self._job_output_dir(job_id, request.user_id)
             separate_slide_text = (
                 request.separate_slide_text
-                or request.video_type == VideoType.PARKEZ
+                or request.video_type in {VideoType.PARKEZ, VideoType.PARKEZ_MODE3}
             )
             video_path, script_path = self._render_outputs(
                 plan,
@@ -677,6 +688,11 @@ class VideoCreationService:
                 self.state.remember_type_3_background_choice(
                     plan.type_3_background_id,
                     plan.type_3_background_candidates,
+                )
+            if request.video_type == VideoType.PARKEZ_MODE3:
+                self.state.remember_parkez_mode3_social_copy_choice(
+                    script_package.social_choice_key,
+                    PARKEZ_MODE3_SOCIAL_COPY_IDS,
                 )
         except Exception:
             # If anything blew up after reservation, release the IDs so they
@@ -1823,7 +1839,7 @@ class VideoCreationService:
     ) -> tuple[VideoPlan, list[str], str]:
         if hasattr(self, "pool"):
             try:
-                if request.video_type == VideoType.PARKEZ:
+                if request.video_type in {VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
                     plan, tried = self.pool.select_plan(
                         usernames,
                         request.video_type,
@@ -1899,7 +1915,7 @@ class VideoCreationService:
                 collected_by_account[username] = candidates
 
             try:
-                if request.video_type == VideoType.PARKEZ:
+                if request.video_type in {VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
                     plan = self.selector.create_plan(
                         {username: candidates},
                         request.video_type,
@@ -2243,9 +2259,11 @@ class VideoCreationService:
         for slide in plan.slides:
             source_path = slide.media.local_path
             if not source_path.exists():
+                if plan.video_type == VideoType.PARKEZ_MODE3:
+                    raise FileNotFoundError(f"Falta una imagen de mode3: {source_path}")
                 continue
             if (
-                plan.video_type == VideoType.PARKEZ
+                plan.video_type in {VideoType.PARKEZ, VideoType.PARKEZ_MODE3}
                 and slide.role == SlideRole.PARKEZ_PROMO
             ):
                 # The user supplied these clean closing images explicitly and
@@ -2273,6 +2291,9 @@ class VideoCreationService:
                     optimize=True,
                 )
             except OSError as error:
+                if plan.video_type == VideoType.PARKEZ_MODE3:
+                    # Never consume photos/copy for an incomplete mode3 carousel.
+                    raise
                 LOGGER.warning(
                     "No pude normalizar %s: %s", source_path, error
                 )

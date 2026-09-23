@@ -691,7 +691,14 @@ def test_pool_select_plan_tries_all_local_accounts_without_attempt_limit():
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_pool_selects_three_type_2_compatible_photos_for_parkez_and_forwards_gender():
+@pytest.mark.parametrize("video_type,source_type,gender", [
+    (VideoType.PARKEZ, VideoType.TYPE_2, VideoGender.FEMALE),
+    (VideoType.PARKEZ_MODE3, VideoType.TYPE_1, VideoGender.MALE),
+    (VideoType.PARKEZ_MODE3, VideoType.TYPE_2, VideoGender.MALE),
+])
+def test_pool_selects_three_compatible_photos_for_parkez_and_forwards_gender(
+    video_type, source_type, gender,
+):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"pool-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -711,7 +718,7 @@ def test_pool_selects_three_type_2_compatible_photos_for_parkez_and_forwards_gen
                     "alpha",
                     f"alpha:POST{index}:0",
                     image_path,
-                    eligible_types=[VideoType.TYPE_2.value],
+                    eligible_types=[source_type.value],
                 )
             )
         state.write_media_pool(
@@ -727,17 +734,17 @@ def test_pool_selects_three_type_2_compatible_photos_for_parkez_and_forwards_gen
 
         plan, tried = service.select_plan(
             ["alpha"],
-            VideoType.PARKEZ,
+            video_type,
             Language.ES,
-            gender=VideoGender.FEMALE,
+            gender=gender,
         )
 
         assert tried == ["alpha"]
         assert len(plan.used_media_ids) == 3
-        assert selector.genders == [VideoGender.FEMALE]
+        assert selector.genders == [gender]
         counts = service.stock_counts(["alpha"])
-        assert counts["by_type"][VideoType.PARKEZ.value] == 3
-        assert not service.is_low_stock(VideoType.PARKEZ, ["alpha"])
+        assert counts["by_type"][video_type.value] == 3
+        assert not service.is_low_stock(video_type, ["alpha"])
         audit = service.account_audit(["alpha"])
         assert audit["accounts"][0]["status"] == "ready"
         assert audit["accounts"][0]["viable_by_type"] == {
@@ -745,16 +752,21 @@ def test_pool_selects_three_type_2_compatible_photos_for_parkez_and_forwards_gen
             VideoType.TYPE_2.value: False,
             VideoType.TYPE_3.value: False,
             VideoType.PARKEZ.value: True,
+            VideoType.PARKEZ_MODE3.value: True,
         }
 
         state.mark_media_used(plan.used_media_ids, "parkez-job")
         with pytest.raises(ValueError, match="No hay una cuenta del pool"):
             service.select_plan(
                 ["alpha"],
-                VideoType.PARKEZ,
+                video_type,
                 Language.ES,
                 gender=VideoGender.MALE,
             )
+        # A photo consumed here is unavailable in Dropradar too (same state).
+        counts_after = service.stock_counts(["alpha"])
+        assert counts_after["by_type"][VideoType.TYPE_1.value] == 0
+        assert counts_after["by_type"][VideoType.TYPE_2.value] == 0
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1243,6 +1255,7 @@ def test_pool_eligibility_flows_from_higher_types_to_lower_types():
             VideoType.TYPE_1.value,
             VideoType.TYPE_2.value,
             VideoType.PARKEZ.value,
+            VideoType.PARKEZ_MODE3.value,
         ]
         assert service._eligible_types(type_3_photo) == [
             VideoType.TYPE_1.value,

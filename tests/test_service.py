@@ -31,6 +31,7 @@ from app.models import (
     VideoType,
 )
 from app.r2_storage import R2Object
+from app.parkez_mode3 import build_parkez_mode3_script
 from app.render import VideoRenderer
 from app.service import TYPE_5_DROPRADAR_FIXED_IMAGE_NAME, VideoCreationService
 from app.state import StateStore
@@ -1697,7 +1698,13 @@ def test_type_5_uses_three_random_clean_photos_and_rotates_social_copy(monkeypat
         shutil.rmtree(root, ignore_errors=True)
 
 
-def test_parkez_binds_four_texts_but_renders_every_image_clean():
+@pytest.mark.parametrize("video_type,render_error", [
+    (VideoType.PARKEZ, None),
+    (VideoType.PARKEZ_MODE3, None),
+    (VideoType.PARKEZ_MODE3, RuntimeError),
+    (VideoType.PARKEZ_MODE3, OSError),
+])
+def test_parkez_binds_four_texts_but_renders_every_image_clean(video_type, render_error):
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
     try:
@@ -1726,11 +1733,15 @@ def test_parkez_binds_four_texts_but_renders_every_image_clean():
                     created_at="",
                 )
             )
-        fixed_path = root / "parkez_female.png"
+        expected_gender = (
+            VideoGender.MALE if video_type == VideoType.PARKEZ_MODE3 else VideoGender.FEMALE
+        )
+        fixed_id = f"fixed:parkez:{expected_gender.value}"
+        fixed_path = root / f"parkez_{expected_gender.value}.png"
         Image.new("RGB", (90, 120), (180, 80, 140)).save(fixed_path)
         fixed_media = MediaCandidate(
             source_account="fixed",
-            source_id="fixed:parkez:female",
+            source_id=fixed_id,
             local_path=fixed_path,
             permalink="",
             caption=fixed_path.name,
@@ -1786,24 +1797,46 @@ def test_parkez_binds_four_texts_but_renders_every_image_clean():
         service.selector = selector
         service.renderer = renderer
 
-        result = service._create_video_locked(
-            VideoRequest(
-                chat_id=1,
-                user_id=1,
-                video_type=VideoType.PARKEZ,
-                language=Language.ES,
-                account_inputs=["alpha"],
-                gender=VideoGender.FEMALE,
-                separate_slide_text=False,
-            )
+        request = VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=video_type,
+            language=Language.EN if video_type == VideoType.PARKEZ_MODE3 else Language.ES,
+            account_inputs=["alpha"],
+            gender=VideoGender.FEMALE,
+            separate_slide_text=False,
         )
+        package = build_parkez_mode3_script(service.state)
+        if render_error:
+            render = renderer.render_slide_still
 
-        assert selector.genders == [VideoGender.FEMALE]
+            def fail_render(*args, **kwargs):
+                raise render_error("render failed")
+
+            renderer.render_slide_still = fail_render
+            with pytest.raises(render_error, match="render failed"):
+                service._create_video_locked(request)
+            assert not service.state.any_media_used([item.source_id for item in source_media])
+            assert build_parkez_mode3_script(service.state) == package
+            renderer.render_slide_still = render
+
+        result = service._create_video_locked(request)
+
+        assert selector.genders == [expected_gender] * (2 if render_error else 1)
+        assert result.video_type == video_type
+        assert result.language == Language.ES
         assert len(result.slides) == 4
-        assert result.slides[-1].media.source_id == "fixed:parkez:female"
+        assert result.slides[-1].media.source_id == fixed_id
         assert all(slide.text for slide in result.slides)
         assert "ParkEz" in result.slides[-1].text
-        assert result.social_copy.messages == []
+        if video_type == VideoType.PARKEZ_MODE3:
+            assert [slide.text for slide in result.slides] == package.ordered_slides
+            assert result.social_copy == package.social_copy
+            next_package = build_parkez_mode3_script(service.state)
+            assert next_package.social_copy.title != result.social_copy.title
+            assert next_package.social_copy.description != result.social_copy.description
+        else:
+            assert result.social_copy.messages == []
         assert result.separate_slide_text is True
         assert renderer.render_slide_still_texts == ["", "", ""]
         assert result.slides[-1].media.local_path == fixed_path
@@ -1812,7 +1845,7 @@ def test_parkez_binds_four_texts_but_renders_every_image_clean():
         assert service.state.any_media_used(
             [item.source_id for item in source_media]
         )
-        assert not service.state.is_media_used("fixed:parkez:female")
+        assert not service.state.is_media_used(fixed_id)
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

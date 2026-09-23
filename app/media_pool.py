@@ -27,18 +27,21 @@ ALL_VIDEO_TYPES = (
     VideoType.TYPE_2,
     VideoType.TYPE_3,
     VideoType.PARKEZ,
+    VideoType.PARKEZ_MODE3,
 )
 COMPATIBLE_SOURCE_TYPES_BY_REQUESTED = {
     VideoType.TYPE_1: (VideoType.TYPE_1, VideoType.TYPE_2, VideoType.TYPE_3),
     VideoType.TYPE_2: (VideoType.TYPE_2, VideoType.TYPE_3),
     VideoType.TYPE_3: (VideoType.TYPE_3,),
     VideoType.PARKEZ: (VideoType.TYPE_2,),
+    VideoType.PARKEZ_MODE3: (VideoType.TYPE_1, VideoType.TYPE_2),
 }
 MIN_POOL_ITEMS_BY_TYPE = {
     VideoType.TYPE_1: 6,
     VideoType.TYPE_2: 4,
     VideoType.TYPE_3: 1,
     VideoType.PARKEZ: 3,
+    VideoType.PARKEZ_MODE3: 3,
 }
 POOL_READINESS_CHECK_INTERVAL = 16
 
@@ -251,7 +254,7 @@ class MediaPoolService:
         for account in ordered_accounts:
             tried.append(account)
             try:
-                if video_type == VideoType.PARKEZ:
+                if video_type in {VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
                     plan = self.selector.create_plan(
                         {account: candidates_by_account[account]},
                         video_type,
@@ -906,7 +909,7 @@ class MediaPoolService:
         candidate: MediaCandidate,
         video_type: VideoType,
     ) -> bool:
-        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ}:
+        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
             return self.selector._is_type_2_user_visible_media(candidate)
         return any(
             self._candidate_matches_type_rules(candidate, source_type)
@@ -989,7 +992,7 @@ class MediaPoolService:
         *,
         include_landscape_exceptions: bool,
     ) -> bool:
-        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ}:
+        if video_type in {VideoType.TYPE_2, VideoType.PARKEZ, VideoType.PARKEZ_MODE3}:
             return self.selector._is_type_2_user_visible_media(candidate)
         if not include_landscape_exceptions:
             return not self.selector._is_landscape_media(candidate)
