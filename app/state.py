@@ -63,6 +63,12 @@ class StateStore:
         self._parkez_mode3_social_queue_path = (
             self.state_dir / "parkez_mode3_social_queue.json"
         )
+        self._gograduate_type_1_queue_path = (
+            self.state_dir / "gograduate_type_1_queue.json"
+        )
+        self._gograduate_type_1_design_queue_path = (
+            self.state_dir / "gograduate_type_1_design_queue.json"
+        )
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
@@ -982,6 +988,33 @@ class StateStore:
         """Advance mode3's independent queue only after successful rendering."""
         return self._remember_simple_cycle_choice(
             self._parkez_mode3_social_queue_path, selected_id, copy_ids
+        )
+
+    def peek_next_gograduate_type_1_pack_id(
+        self, pack_ids: list[str]
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(self._gograduate_type_1_queue_path, pack_ids)
+
+    def remember_gograduate_type_1_pack_choice(
+        self, selected_id: str, pack_ids: list[str]
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._gograduate_type_1_queue_path, selected_id, pack_ids
+        )
+
+    def peek_next_gograduate_type_1_design_id(
+        self, design_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(
+            self._gograduate_type_1_design_queue_path, design_ids, prefer_input_order=True,
+        )
+
+    def remember_gograduate_type_1_design_choice(
+        self, selected_id: str, design_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._gograduate_type_1_design_queue_path, selected_id, design_ids,
+            prefer_input_order=True,
         )
 
     def read_media_pool(self) -> dict[str, Any]:

@@ -74,3 +74,28 @@ def test_illustrated_fourth_advice_uses_the_dropradar_app_icon():
             & (region[..., 0] - region[..., 2] > 40)
         )
         assert lime.mean() < 0.01
+
+
+@pytest.mark.parametrize("language", list(Language))
+def test_editorial_fifth_advice_uses_dropradar_icon_and_keeps_first_four(language, monkeypatch):
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+    background, tips, _ = advice_selection(3, language)
+    generic_icons = []
+    draw_icon = renderer._draw_editorial_advice_icon
+
+    def record_icon(image, center, size, index):
+        generic_icons.append(index)
+        draw_icon(image, center, size, index)
+
+    monkeypatch.setattr(renderer, "_draw_editorial_advice_icon", record_icon)
+    image = renderer.render_advice_card(tips, language, background)
+    icon = np.asarray(image).astype(int)[1432:1582, 212:362]
+    vivid_green = (
+        (icon[..., 1] > 180)
+        & (icon[..., 1] - icon[..., 0] > 40)
+        & (icon[..., 0] - icon[..., 2] > 40)
+    )
+    assert background == AdviceBackground.EDITORIAL
+    assert "Dropradar" in tips[4].body
+    assert generic_icons == [1, 2, 3, 4]
+    assert vivid_green.mean() > 0.25

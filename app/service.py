@@ -18,6 +18,7 @@ from PIL import Image, ImageOps
 from app.advice_cards import (
     ADVICE_EXTERNAL_PHRASES,
     ADVICE_ROTATION_CYCLE_LENGTH,
+    AdviceBackground,
     advice_social_copy,
     advice_selection,
     format_advice_script,
@@ -36,6 +37,12 @@ from app.config import (
     DEFAULT_R2_CARTOOLS_IMAGE_PREFIX,
     DEFAULT_R2_TYPE_4_IMAGE_PREFIX,
     get_settings,
+)
+from app.gograduate import (
+    GOGRADUATE_DESIGN_IDS,
+    GOGRADUATE_PACK_IDS,
+    gograduate_social_copy,
+    gograduate_tips,
 )
 from app.instagram import InstagramCollector, InstagramCollectorError, extract_usernames
 from app.media_pool import MediaPoolService
@@ -582,6 +589,8 @@ class VideoCreationService:
         }
 
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
+        if request.video_type == VideoType.GOGRADUATE_TYPE_1:
+            return self._create_gograduate_type_1_locked(request)
         if request.video_type == VideoType.PARKEZ_MODE3:
             request = replace(
                 request,
@@ -728,6 +737,74 @@ class VideoCreationService:
             pool_remaining=pool_remaining,
             pool_low_stock=pool_low_stock,
             separate_slide_text=separate_slide_text,
+        )
+
+    def _create_gograduate_type_1_locked(self, request: VideoRequest) -> GenerationResult:
+        pack_id, _ = self.state.peek_next_gograduate_type_1_pack_id(GOGRADUATE_PACK_IDS)
+        if pack_id is None:
+            raise ValueError("No hay consejos de GoGraduate disponibles.")
+        design_id, _ = self.state.peek_next_gograduate_type_1_design_id(GOGRADUATE_DESIGN_IDS)
+        if design_id is None:
+            raise ValueError("No hay diseños de GoGraduate disponibles.")
+        background = AdviceBackground(design_id)
+        tips = gograduate_tips(pack_id, background)
+        social_copy = gograduate_social_copy(pack_id, background)
+        job_id = self._build_job_id()
+        job_dir = self._job_output_dir(job_id, request.user_id)
+        slides_dir = job_dir / "slides"
+        slides_dir.mkdir(parents=True, exist_ok=True)
+        output_path = slides_dir / "slide_01.png"
+        script_text = format_advice_script(tips)
+        self.renderer.render_gograduate_card(tips, Language.ES, background).convert("RGB").save(
+            output_path, format="PNG", optimize=True,
+        )
+        media = MediaCandidate(
+            source_account="gograduate",
+            source_id=f"gograduate:tipo1:{design_id}:{pack_id}",
+            local_path=output_path,
+            permalink="",
+            caption="",
+            width=self.settings.width,
+            height=self.settings.height,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        plan = VideoPlan(
+            chosen_account=f"gograduate:tipo1:{design_id}:{pack_id}",
+            video_type=VideoType.GOGRADUATE_TYPE_1,
+            language=Language.ES,
+            slides=[SlidePlan(
+                index=1, role=SlideRole.ADVICE_CARD, text=script_text,
+                media=media, fixed_asset=True,
+            )],
+        )
+        script_path = self.renderer.write_script(plan, job_dir)
+        self.state.log_job(self.state.build_job_record(
+            job_id=job_id,
+            chosen_account=plan.chosen_account,
+            requested_accounts=[],
+            fallback_accounts=[],
+            video_type=plan.video_type,
+            language=Language.ES,
+            video_path=None,
+            script_path=str(script_path),
+            gender=request.gender.value,
+            user_id=request.user_id,
+            chat_id=request.chat_id,
+        ))
+        self.state.remember_gograduate_type_1_pack_choice(pack_id, GOGRADUATE_PACK_IDS)
+        self.state.remember_gograduate_type_1_design_choice(design_id, GOGRADUATE_DESIGN_IDS)
+        self._cleanup_old_outputs()
+        return GenerationResult(
+            video_path=None,
+            script_path=script_path,
+            preview_text=script_text,
+            social_copy=social_copy,
+            chosen_account=plan.chosen_account,
+            video_type=plan.video_type,
+            language=Language.ES,
+            fallback_accounts=[],
+            slides=plan.slides,
+            separate_slide_text=False,
         )
 
     def _create_advice_card_locked(self, request: VideoRequest) -> GenerationResult:

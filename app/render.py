@@ -18,6 +18,7 @@ from app.advice_cards import (
     AdviceTip,
 )
 from app.car_tools import CAR_TOOLS_BODY_LINES
+from app.gograduate import GOGRADUATE_ICON_RELATIVE_PATH
 from app.config import Settings
 from app.face_detection import build_face_detector
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
@@ -29,6 +30,8 @@ LOGGER = logging.getLogger(__name__)
 ADVICE_DROPRADAR_GREEN = (0, 137, 79)
 ADVICE_DROPRADAR_GREEN_ON_DARK = (163, 245, 48)
 _ADVICE_DROPRADAR_WORD = re.compile(r"\bDropradar\b", re.IGNORECASE)
+ADVICE_GOGRADUATE_GOLD = (150, 108, 8)
+_ADVICE_GOGRADUATE_WORD = re.compile(r"\bGoGraduate\b", re.IGNORECASE)
 
 
 SYSTEM_FONT_CANDIDATES = (
@@ -485,6 +488,30 @@ class VideoRenderer:
             emoji_offset=rotation_index,
         )
         return image.convert("RGB")
+
+    def render_gograduate_card(
+        self, tips: tuple[AdviceTip, ...], language: Language,
+        background: AdviceBackground = AdviceBackground.ILLUSTRATED,
+    ) -> Image.Image:
+        if background not in {AdviceBackground.ILLUSTRATED, AdviceBackground.EDITORIAL}:
+            raise ValueError("Diseño de GoGraduate no disponible.")
+        count = 4 if background == AdviceBackground.ILLUSTRATED else 5
+        if len(tips) != count:
+            raise ValueError(f"GoGraduate {background.value} necesita {count} consejos.")
+        icon_path = self.settings.root_dir / GOGRADUATE_ICON_RELATIVE_PATH
+        if not icon_path.is_file():
+            raise FileNotFoundError(f"Falta el icono de GoGraduate: {icon_path}")
+        render_card = (
+            self._render_illustrated_advice_card
+            if background == AdviceBackground.ILLUSTRATED
+            else self._render_editorial_advice_card
+        )
+        return render_card(
+            tips, language,
+            brand_word=_ADVICE_GOGRADUATE_WORD,
+            brand_fill=ADVICE_GOGRADUATE_GOLD,
+            brand_icon_path=icon_path,
+        )
 
     def _draw_flat_advice_list(
         self,
@@ -1517,13 +1544,17 @@ class VideoRenderer:
         self,
         tips: tuple[AdviceTip, ...],
         language: Language,
+        *,
+        brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
+        brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+        brand_icon_path: Path | None = None,
     ) -> Image.Image:
         del language  # The selected tips are already localized.
         width, height = self.settings.width, self.settings.height
         image = Image.new("RGBA", (width, height), (247, 247, 245, 255))
         draw = ImageDraw.Draw(image)
         side_margin = _scale_x(70, width)
-        # The illustrated version is intentionally just the four useful cards;
+        # The illustrated version is intentionally just the useful cards;
         # the former headline/subtitle consumed space without adding anything
         # to the individual tips.
         cards_top = _scale_y(ADVICE_ILLUSTRATED_CARDS_TOP, height)
@@ -1535,6 +1566,14 @@ class VideoRenderer:
         card_left = side_margin
         card_right = width - side_margin
         radius = _scale_x(ADVICE_ILLUSTRATED_CARD_RADIUS, width)
+        shared_fonts = None
+        if len(tips) > 4:
+            shared_fonts = self._fit_illustrated_advice_fonts(
+                tips,
+                card_right - card_left - _scale_x(355, width),
+                card_height,
+                draw,
+            )
 
         for index, tip in enumerate(tips, start=1):
             top = cards_top + (index - 1) * (card_height + card_gap)
@@ -1592,8 +1631,10 @@ class VideoRenderer:
             )
             icon_size = _scale_x(124, width)
             brand_icon_drawn = (
-                bool(_ADVICE_DROPRADAR_WORD.search(f"{tip.title} {tip.body}"))
-                and self._draw_advice_brand_icon(image, icon_center, icon_size)
+                bool(brand_word.search(f"{tip.title} {tip.body}"))
+                and self._draw_advice_brand_icon(
+                    image, icon_center, icon_size, icon_path=brand_icon_path,
+                )
             )
             if not brand_icon_drawn:
                 self._draw_advice_icon(image, icon_center, icon_size, index)
@@ -1601,14 +1642,15 @@ class VideoRenderer:
             text_left = card_left + _scale_x(315, width)
             text_right = card_right - _scale_x(40, width)
             text_width = max(1, text_right - text_left)
-            title_font = self._load_advice_font(
-                size=self._scaled_text_size(40, minimum=20),
-                weight=600,
-            )
-            body_font = self._load_advice_font(
-                size=self._scaled_text_size(29, minimum=17),
-                weight=400,
-            )
+            if shared_fonts is not None:
+                title_font, body_font = shared_fonts
+            else:
+                title_font = self._load_advice_font(
+                    size=self._scaled_text_size(40, minimum=20), weight=600,
+                )
+                body_font = self._load_advice_font(
+                    size=self._scaled_text_size(29, minimum=17), weight=400,
+                )
             title_lines = self._wrap_text(
                 self._advice_display_title(tip.title),
                 title_font,
@@ -1659,6 +1701,8 @@ class VideoRenderer:
                 start_y=text_top,
                 fill=(20, 20, 23),
                 line_gap=_scale_y(1, height),
+                brand_fill=brand_fill,
+                brand_word=brand_word,
             )
             divider_y = text_top + title_block_height + _scale_y(9, height)
             draw.rounded_rectangle(
@@ -1669,7 +1713,10 @@ class VideoRenderer:
                     divider_y + divider_height,
                 ),
                 radius=divider_height // 2,
-                fill=self._advice_icon_palette(index)[2],
+                fill=(
+                    brand_fill if brand_icon_drawn and brand_icon_path
+                    else self._advice_icon_palette(index)[2]
+                ),
             )
             self._draw_left_aligned_lines(
                 draw,
@@ -1679,8 +1726,47 @@ class VideoRenderer:
                 start_y=text_top + title_block_height + text_gap + divider_height,
                 fill=(83, 83, 92),
                 line_gap=_scale_y(4, height),
+                brand_fill=brand_fill,
+                brand_word=brand_word,
             )
         return image.convert("RGB")
+
+    def _fit_illustrated_advice_fonts(
+        self,
+        tips: tuple[AdviceTip, ...],
+        text_width: int,
+        card_height: int,
+        draw: ImageDraw.ImageDraw,
+    ) -> tuple[ImageFont.ImageFont, ImageFont.ImageFont]:
+        """Fit five cards with one shared Inter hierarchy, without cropping copy."""
+        width, height = self.settings.width, self.settings.height
+        text_room = card_height - 2 * _scale_y(24, height)
+        text_gap = _scale_y(20, height) + max(2, _scale_y(3, height))
+        for size in range(_scale_x(40, width), _scale_x(24, width) - 1, -1):
+            title_font = self._load_advice_font(size=size, weight=600)
+            body_font = self._load_advice_font(size=max(1, round(size * 0.725)), weight=400)
+            fits = True
+            for tip in tips:
+                title_lines = self._wrap_text(
+                    self._advice_display_title(tip.title), title_font,
+                    text_width, draw, stroke_width=0,
+                )
+                body_lines = self._wrap_text(
+                    tip.body, body_font, text_width, draw, stroke_width=0,
+                )
+                text_height = self._block_height(
+                    title_lines, title_font, draw, stroke_width=0,
+                    line_gap=_scale_y(1, height),
+                ) + self._block_height(
+                    body_lines, body_font, draw, stroke_width=0,
+                    line_gap=_scale_y(4, height),
+                ) + text_gap
+                if text_height > text_room:
+                    fits = False
+                    break
+            if fits:
+                return title_font, body_font
+        raise ValueError("Los cinco consejos no caben completos en las tarjetas.")
 
     def _render_brown_advice_card(
         self,
@@ -1807,6 +1893,10 @@ class VideoRenderer:
         self,
         tips: tuple[AdviceTip, ...],
         language: Language,
+        *,
+        brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
+        brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+        brand_icon_path: Path | None = None,
     ) -> Image.Image:
         """Render the clean five-row advice layout from the supplied reference."""
         del language  # The selected tips are already localized.
@@ -1857,12 +1947,16 @@ class VideoRenderer:
                 font=number_font,
                 fill=(20, 20, 23),
             )
-            self._draw_editorial_advice_icon(
-                image,
-                (icon_center_x, row_center_y),
-                _scale_x(150, width),
-                index,
+            icon_center = (icon_center_x, row_center_y)
+            icon_size = _scale_x(150, width)
+            brand_icon_drawn = (
+                bool(brand_word.search(f"{tip.title} {tip.body}"))
+                and self._draw_advice_brand_icon(
+                    image, icon_center, icon_size, icon_path=brand_icon_path,
+                )
             )
+            if not brand_icon_drawn:
+                self._draw_editorial_advice_icon(image, icon_center, icon_size, index)
 
             title_font: ImageFont.ImageFont | None = None
             body_font: ImageFont.ImageFont | None = None
@@ -1939,6 +2033,8 @@ class VideoRenderer:
                 start_y=text_top,
                 fill=(20, 20, 23),
                 line_gap=_scale_y(1, height),
+                brand_fill=brand_fill,
+                brand_word=brand_word,
             )
             self._draw_left_aligned_lines(
                 draw,
@@ -1948,6 +2044,8 @@ class VideoRenderer:
                 start_y=text_top + title_height + title_gap,
                 fill=(78, 78, 86),
                 line_gap=_scale_y(4, height),
+                brand_fill=brand_fill,
+                brand_word=brand_word,
             )
         return image.convert("RGB")
 
@@ -2077,9 +2175,10 @@ class VideoRenderer:
         stroke_width: int = 0,
         stroke_fill: tuple[int, ...] | None = None,
         brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+        brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
     ) -> None:
         """Color only the brand word, retaining the original line's geometry."""
-        matches = list(_ADVICE_DROPRADAR_WORD.finditer(text))
+        matches = list(brand_word.finditer(text))
         if not matches:
             draw.text(
                 position, text, font=font, fill=fill,
@@ -2107,8 +2206,9 @@ class VideoRenderer:
 
     def _draw_advice_brand_icon(
         self, image: Image.Image, center: tuple[int, int], size: int,
+        *, icon_path: Path | None = None,
     ) -> bool:
-        icon_path = self._icon_path_for_tool_key("dropradar")
+        icon_path = icon_path or self._icon_path_for_tool_key("dropradar")
         if icon_path is None:
             return False
         with Image.open(icon_path) as source:
@@ -2127,13 +2227,14 @@ class VideoRenderer:
         fill: tuple[int, int, int],
         line_gap: int,
         brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+        brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
     ) -> None:
         y = start_y
         for line in lines:
             bbox = draw.textbbox((0, 0), line or "A", font=font)
             self._draw_advice_text(
                 draw, (x - bbox[0], y - bbox[1]), line,
-                font=font, fill=fill, brand_fill=brand_fill,
+                font=font, fill=fill, brand_fill=brand_fill, brand_word=brand_word,
             )
             y += (bbox[3] - bbox[1]) + line_gap
 

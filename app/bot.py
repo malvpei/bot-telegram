@@ -63,7 +63,8 @@ from app.state import BATCH_SCHEDULE_SCHEMA_VERSION, StateStore
     LANGUAGE_STATE,
     LOWERCASE_STATE,
     STORY_PHOTO_STATE,
-) = range(6)
+    GOGRADUATE_STATE,
+) = range(7)
 REGENERATE_ACCEPT = "regen:accept"
 REGENERATE_SKIP_ACCOUNT = "regen:skip_account"
 REGENERATE_CANCEL = "regen:cancel"
@@ -128,10 +129,14 @@ def run_bot() -> None:
         entry_points=[
             CommandHandler("create", create_command),
             CommandHandler("createp", createp_command),
+            CommandHandler("g", gograduate_command),
             CommandHandler("wizard", create_command),
             CommandHandler("story_carousel", story_carousel_command),
         ],
         states={
+            GOGRADUATE_STATE: [
+                CallbackQueryHandler(gograduate_type_1, pattern=r"^gograduate:type:1$"),
+            ],
             GENDER_STATE: [
                 CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
                 CallbackQueryHandler(parkez_gender, pattern=r"^parkez:gender:(?:female|male)$"),
@@ -866,6 +871,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/schedule off - desactivar la programacion\n"
         "/create — crear contenido con fotos de hombres\n"
         "/createp — crear carruseles promocionales de ParkEz y Tools\n"
+        "/g — crear contenido de GoGraduate para estudiantes\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
         "/cancel — cancelar el wizard actual"
@@ -980,6 +986,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "5. mode3 usa fotos del pool de Dropradar, el cierre de Hombre y textos "
         "sobre carnet, velocidad, radares y aparcamiento; rota 15 títulos y descripciones\n"
         "6. en Mujer, Hombre o mode3 puedes pedir otra foto distinta de la misma cuenta\n\n"
+        "GoGraduate:\n"
+        "1. /g\n"
+        "2. elige Tipo 1: cuatro tarjetas o cinco filas de consejos para estudiantes, con "
+        "el icono de GoGraduate y textos relacionados fuera de la imagen\n\n"
         "Las cuentas de hombres se leen de accounts.txt. Las de mujeres se "
         "leen de accounts_women.txt para el flujo /createp (una por línea).\n\n"
         "/create usa primero el pool local si hay fotos aptas. "
@@ -1546,6 +1556,41 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         reply_markup=keyboard,
     )
     return GENDER_STATE
+
+
+async def gograduate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not await _ensure_allowed(update):
+        return ConversationHandler.END
+    _clear_wizard_state(context)
+    context.user_data.pop("repeat_request", None)
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "Tipo 1 · Consejos para estudiantes", callback_data="gograduate:type:1",
+        ),
+    ]])
+    await update.effective_message.reply_text(
+        "GoGraduate · ¿Qué contenido quieres crear?", reply_markup=keyboard,
+    )
+    return GOGRADUATE_STATE
+
+
+async def gograduate_type_1(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    await query.edit_message_text(
+        "Preparando consejos para estudiantes con GoGraduate."
+    )
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.GOGRADUATE_TYPE_1,
+        language=Language.ES,
+        account_inputs=[],
+        separate_slide_text=False,
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
 
 
 async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -2201,7 +2246,9 @@ async def _execute_job(
     request: VideoRequest,
 ) -> None:
     chat = update.effective_chat
-    if request.video_type == VideoType.ADVICE:
+    if request.video_type == VideoType.GOGRADUATE_TYPE_1:
+        status_text = "Estoy creando el siguiente diseño de consejos para estudiantes."
+    elif request.video_type == VideoType.ADVICE:
         status_text = (
             "Estoy creando el siguiente diseño rotativo del Tipo 4 y preparando "
             "la siguiente foto de R2."
@@ -2247,7 +2294,12 @@ async def _execute_job(
         await status_message.edit_text(f"No pude generar el video.\n\n{error}")
         return
 
-    if result.video_type == VideoType.ADVICE:
+    if result.video_type == VideoType.GOGRADUATE_TYPE_1:
+        header = (
+            "GoGraduate · Tipo 1 listo\n"
+            "Entrega: una imagen de consejos para estudiantes"
+        )
+    elif result.video_type == VideoType.ADVICE:
         header = (
             "Tipo 4 listo\n"
             f"Idioma: {result.language.value.upper()}\n"
@@ -2330,6 +2382,7 @@ async def _execute_job(
             VideoType.TYPE_5,
             VideoType.ADVICE,
             VideoType.TOOLS,
+            VideoType.GOGRADUATE_TYPE_1,
         }:
             return
         context.user_data["repeat_request"] = {

@@ -15,6 +15,7 @@ class VideoType(str, Enum):
     PARKEZ = "parkez"
     PARKEZ_MODE3 = "mode3"
     TOOLS = "tools"
+    GOGRADUATE_TYPE_1 = "gograduate_1"
 
 
 class VideoGender(str, Enum):

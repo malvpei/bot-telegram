@@ -2,7 +2,7 @@ import asyncio
 import shutil
 from dataclasses import replace
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import uuid4
 
 import pytest
@@ -14,6 +14,7 @@ from telegram.ext import ConversationHandler
 from app.bot import (
     DELIVERY_STATE,
     GENDER_STATE,
+    GOGRADUATE_STATE,
     LANGUAGE_STATE,
     REGENERATE_ACCEPT,
     REGENERATE_CANCEL,
@@ -39,6 +40,8 @@ from app.bot import (
     _send_slides_text_then_image,
     create_command,
     createp_command,
+    gograduate_command,
+    gograduate_type_1,
     parkez_gender,
     parkez_mode3,
     parkez_tools,
@@ -1724,6 +1727,68 @@ def test_wizard_gender_offers_advice_without_ai_story():
         for row in buttons
         for button in row
     )
+
+
+def test_gograduate_command_opens_its_submenu_and_clears_previous_wizard():
+    context = FakeContext()
+    context.user_data.update({"video_type": "advice", "repeat_request": {"chosen_account": "old"}})
+    update = FakeUpdate()
+    with patch("app.bot._ensure_allowed", AsyncMock(return_value=True)):
+        state = asyncio.run(gograduate_command(update, context))
+    assert state == GOGRADUATE_STATE
+    assert context.user_data == {}
+    buttons = update.effective_message.reply_markup.inline_keyboard
+    assert buttons[0][0].callback_data == "gograduate:type:1"
+    assert "Tipo 1" in buttons[0][0].text
+
+
+def test_gograduate_submenu_type_1_starts_student_cards_without_accounts():
+    context = FakeContext()
+    query = FakeRegenerateQuery("gograduate:type:1")
+    execute = AsyncMock()
+    with patch("app.bot._execute_job", execute):
+        state = asyncio.run(gograduate_type_1(FakeRegenerateUpdate(query), context))
+    assert state == ConversationHandler.END
+    assert query.answered is True
+    request = execute.call_args.args[2]
+    assert request.video_type == VideoType.GOGRADUATE_TYPE_1
+    assert request.language == Language.ES
+    assert request.account_inputs == []
+    assert request.separate_slide_text is False
+
+
+def test_gograduate_sends_social_messages_and_image_without_account_controls():
+    context = FakeContext()
+    context.bot = type("GoGraduateBot", (), {
+        "send_message": AsyncMock(return_value=FakeStatusMessage()),
+    })()
+    result = GenerationResult(
+        video_path=None, script_path=Path("script.txt"), preview_text="Cinco consejos",
+        social_copy=SocialCopy(
+            hook="5 trucos para estudiantes", title="Estudia mejor",
+            description="Tus apuntes con GoGraduate", hashtags=["#estudiantes"],
+        ),
+        chosen_account="gograduate:tipo1:students-01",
+        video_type=VideoType.GOGRADUATE_TYPE_1, language=Language.ES,
+        fallback_accounts=[], slides=[],
+    )
+    service = type("GoGraduateService", (), {"create_video": lambda self, request: result})()
+    context.application = FakeApplication(service)
+    update = FakeUpdate()
+    update.effective_chat = FakeChat()
+    send = AsyncMock()
+    album = AsyncMock()
+    with patch("app.bot._send_message", send), patch("app.bot._send_slides_text_then_image", album):
+        asyncio.run(_execute_job(update, context, VideoRequest(
+            chat_id=123, user_id=456, video_type=VideoType.GOGRADUATE_TYPE_1,
+            language=Language.ES, account_inputs=[],
+        )))
+    texts = [call.args[2] for call in send.call_args_list]
+    assert texts[0].startswith("GoGraduate · Tipo 1 listo")
+    assert texts[1:] == result.social_copy.messages
+    album.assert_awaited_once()
+    assert album.call_args.kwargs["separate_slide_text"] is False
+    assert "repeat_request" not in context.user_data
 
 
 def test_createp_offers_woman_man_tools_and_mode3():

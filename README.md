@@ -12,6 +12,7 @@ Este proyecto monta un bot de Telegram que:
 - renderiza un video vertical `.mp4` listo para subir
 - crea carruseles promocionales de ParkEz con `/createp`: Mujer, Hombre y mode3
   con texto separado, o Tools con texto incrustado
+- crea imágenes de consejos para estudiantes con `/g` y GoGraduate
 
 ## Lo que hace el pipeline
 
@@ -70,6 +71,7 @@ app/
   instagram.py   — login diferido, sesión persistente, retries con backoff
   selector.py    — scoring, asignación por rol, fallback de paisaje
   texts.py       — guiones es/en, coherencia monetaria, validación de tokens
+  gograduate.py  — consejos de estudio y copy rotativo para /g
   render.py      — render vertical, fallback de fuentes, enforce de tamaño
   state.py       — JSON + filelock cross-proceso, writes atómicos
   service.py     — orquestación, reserva atómica, limpieza de outputs
@@ -78,6 +80,7 @@ assets/
   fixed/imagen6.png      — imagen fija obligatoria
   fixed/parkez_male.png  — cierre limpio de ParkEz para Hombre
   fixed/parkez_female.png — cierre limpio de ParkEz para Mujer
+  gograduate.png          — icono oficial de GoGraduate con fondo transparente
   fonts/*.ttf            — opcional, fuentes preferidas para el render
 cartools/
   iconos/radarbot.png    — icono de RadarBot para `/createp` Tools
@@ -188,6 +191,7 @@ el bot.
 /pool         — muestra el stock del pool por tipo y cuenta
 /create       — lanza el wizard (tipo → idioma → render)
 /createp      — crea un carrusel ParkEz para Mujer, Hombre, Tools o mode3
+/g            — abre el menú de GoGraduate (Tipo 1: consejos para estudiantes)
 /wizard       — alias de /create
 /cancel       — cancela el wizard en curso
 ```
@@ -196,7 +200,8 @@ El **Tipo 4** genera una imagen vertical de consejos y no necesita cuentas de
 Instagram. Rota entre sus cinco diseños y cuatro guiones en español e inglés;
 el último consejo siempre recomienda Dropradar. El nombre de la app aparece en
 verde en los cinco diseños y su icono sustituye al gráfico genérico del cuarto
-consejo en la plantilla ilustrada. Incluye 39 pares de título y
+consejo en la plantilla ilustrada y del quinto en la plantilla editorial de
+cinco filas. Incluye 39 pares de título y
 descripción por idioma, vinculados a los consejos de cada guion. Cada guion
 recorre sus propios textos antes de repetirlos, también al reiniciar el ciclo
 general. Cada entrega incluye fuera de
@@ -209,6 +214,30 @@ se reordenan las fotos pendientes por fecha de subida, de más reciente a más
 antigua. Después siguen las anteriores pendientes, sin repetir las ya usadas
 hasta completar el ciclo.
 La Historia IA no aparece como opción dentro de `/create`.
+
+El flujo **/g → Tipo 1** genera una imagen PNG de consejos en español.
+Alterna entre las tarjetas ilustradas y la lista editorial de cinco filas del
+Tipo 4 de `/create`. En la versión de tarjetas se omite el cuarto consejo del
+grupo original y la promoción queda renumerada como 4; la lista editorial
+conserva los cinco consejos y coloca el icono oficial de GoGraduate en el paso 5.
+El hook y la descripción se ajustan al número de consejos y al contenido que
+realmente aparece. Rota entre cuatro
+grupos de consejos: recordar sin mirar, espaciar repasos, mezclar ejercicios y
+revisar errores. El último punto siempre recomienda GoGraduate y conserva el
+texto promocional solicitado. Su icono es el birrete oficial negro y dorado,
+tomado del recurso transparente aprobado de la aplicación GoGraduate
+(`mobile/assets/gograduate-browser-symbol.png`) y incluido en
+`assets/gograduate.png`; no utiliza el icono de Dropradar.
+El hook, el título y la descripción con hashtags se envían como mensajes
+independientes antes de la imagen, que se entrega como archivo sin compresión.
+Las colas propias `DATA_DIR/state/gograduate_type_1_queue.json` (consejos) y
+`DATA_DIR/state/gograduate_type_1_design_queue.json` (diseños) persisten tras
+reinicios y solo avanzan cuando se genera correctamente la entrega. Este flujo
+no descarga fotos ni utiliza Instagram, R2 o las rotaciones de otros tipos.
+Los consejos de estudio se basan en prácticas de
+[recuperación de memoria](https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.2006.01693.x/),
+[repaso espaciado](https://www.psychologicalscience.org/journals/psychological-science/0956797615617778/)
+y [ejercicios intercalados](https://pubmed.ncbi.nlm.nih.gov/24578089/).
 
 El flujo **/createp** permite elegir Mujer, Hombre, Tools o mode3. Para Mujer y Hombre,
 elige tres fotos nuevas de una sola cuenta del banco correspondiente y añade
