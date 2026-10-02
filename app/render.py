@@ -26,6 +26,10 @@ from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
 
 LOGGER = logging.getLogger(__name__)
 
+ADVICE_DROPRADAR_GREEN = (0, 137, 79)
+ADVICE_DROPRADAR_GREEN_ON_DARK = (163, 245, 48)
+_ADVICE_DROPRADAR_WORD = re.compile(r"\bDropradar\b", re.IGNORECASE)
+
 
 SYSTEM_FONT_CANDIDATES = (
     "DejaVuSans-Bold.ttf",
@@ -598,13 +602,19 @@ class VideoRenderer:
                     font=selected_title_font,
                     stroke_width=stroke_width,
                 )
-                draw.text(
+                self._draw_advice_text(
+                    draw,
                     (x - bbox[0], y - bbox[1]),
                     line,
                     font=selected_title_font,
                     fill=fill,
                     stroke_width=stroke_width,
                     stroke_fill=stroke_fill,
+                    brand_fill=(
+                        ADVICE_DROPRADAR_GREEN_ON_DARK
+                        if sum(fill[:3]) > 500
+                        else ADVICE_DROPRADAR_GREEN
+                    ),
                 )
                 if line_index == len(title_lines) - 1:
                     line_width = bbox[2] - bbox[0]
@@ -636,13 +646,19 @@ class VideoRenderer:
                     font=selected_body_font,
                     stroke_width=stroke_width,
                 )
-                draw.text(
+                self._draw_advice_text(
+                    draw,
                     (x - bbox[0], y - bbox[1]),
                     line,
                     font=selected_body_font,
                     fill=body_fill,
                     stroke_width=stroke_width,
                     stroke_fill=stroke_fill,
+                    brand_fill=(
+                        ADVICE_DROPRADAR_GREEN_ON_DARK
+                        if sum(fill[:3]) > 500
+                        else ADVICE_DROPRADAR_GREEN
+                    ),
                 )
                 y += (bbox[3] - bbox[1]) + line_gap
             if body_lines:
@@ -1574,12 +1590,13 @@ class VideoRenderer:
                 card_left + _scale_x(215, width),
                 top + card_height // 2,
             )
-            self._draw_advice_icon(
-                image,
-                icon_center,
-                _scale_x(124, width),
-                index,
+            icon_size = _scale_x(124, width)
+            brand_icon_drawn = (
+                bool(_ADVICE_DROPRADAR_WORD.search(f"{tip.title} {tip.body}"))
+                and self._draw_advice_brand_icon(image, icon_center, icon_size)
             )
+            if not brand_icon_drawn:
+                self._draw_advice_icon(image, icon_center, icon_size, index)
 
             text_left = card_left + _scale_x(315, width)
             text_right = card_right - _scale_x(40, width)
@@ -1768,6 +1785,7 @@ class VideoRenderer:
                 start_y=y,
                 fill=ADVICE_BROWN_TEXT[:3],
                 line_gap=line_gap,
+                brand_fill=ADVICE_DROPRADAR_GREEN_ON_DARK,
             )
             y += title_height + title_gap
             self._draw_left_aligned_lines(
@@ -1778,6 +1796,7 @@ class VideoRenderer:
                 start_y=y,
                 fill=ADVICE_BROWN_TEXT[:3],
                 line_gap=line_gap,
+                brand_fill=ADVICE_DROPRADAR_GREEN_ON_DARK,
             )
             y += body_height
             if block_index < len(selected_blocks) - 1:
@@ -2047,6 +2066,56 @@ class VideoRenderer:
             (center[0] - size // 2, center[1] - size // 2),
         )
 
+    @staticmethod
+    def _draw_advice_text(
+        draw: ImageDraw.ImageDraw,
+        position: tuple[int, int],
+        text: str,
+        *,
+        font: ImageFont.ImageFont,
+        fill: tuple[int, ...],
+        stroke_width: int = 0,
+        stroke_fill: tuple[int, ...] | None = None,
+        brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+    ) -> None:
+        """Color only the brand word, retaining the original line's geometry."""
+        matches = list(_ADVICE_DROPRADAR_WORD.finditer(text))
+        if not matches:
+            draw.text(
+                position, text, font=font, fill=fill,
+                stroke_width=stroke_width, stroke_fill=stroke_fill,
+            )
+            return
+        cursor = 0
+        runs: list[tuple[int, int, tuple[int, ...]]] = []
+        for match in matches:
+            runs.append((cursor, match.start(), fill))
+            runs.append((match.start(), match.end(), brand_fill))
+            cursor = match.end()
+        runs.append((cursor, len(text), fill))
+        for start, end, run_fill in runs:
+            run = text[start:end]
+            if not run:
+                continue
+            # Prefix advances include kerning, so changing color never moves
+            # the word or the following text or alters wrapping.
+            advance = draw.textlength(text[:end], font=font) - draw.textlength(run, font=font)
+            draw.text(
+                (position[0] + advance, position[1]), run, font=font,
+                fill=run_fill, stroke_width=stroke_width, stroke_fill=stroke_fill,
+            )
+
+    def _draw_advice_brand_icon(
+        self, image: Image.Image, center: tuple[int, int], size: int,
+    ) -> bool:
+        icon_path = self._icon_path_for_tool_key("dropradar")
+        if icon_path is None:
+            return False
+        with Image.open(icon_path) as source:
+            icon = self._fit_type_3_icon(source.convert("RGBA"), size)
+        image.alpha_composite(icon, (center[0] - size // 2, center[1] - size // 2))
+        return True
+
     def _draw_left_aligned_lines(
         self,
         draw: ImageDraw.ImageDraw,
@@ -2057,11 +2126,15 @@ class VideoRenderer:
         start_y: int,
         fill: tuple[int, int, int],
         line_gap: int,
+        brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
     ) -> None:
         y = start_y
         for line in lines:
             bbox = draw.textbbox((0, 0), line or "A", font=font)
-            draw.text((x - bbox[0], y - bbox[1]), line, font=font, fill=fill)
+            self._draw_advice_text(
+                draw, (x - bbox[0], y - bbox[1]), line,
+                font=font, fill=fill, brand_fill=brand_fill,
+            )
             y += (bbox[3] - bbox[1]) + line_gap
 
     @staticmethod

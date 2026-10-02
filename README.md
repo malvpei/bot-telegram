@@ -194,7 +194,9 @@ el bot.
 
 El **Tipo 4** genera una imagen vertical de consejos y no necesita cuentas de
 Instagram. Rota entre sus cinco diseños y cuatro guiones en español e inglés;
-el último consejo siempre recomienda Dropradar. Incluye 39 pares de título y
+el último consejo siempre recomienda Dropradar. El nombre de la app aparece en
+verde en los cinco diseños y su icono sustituye al gráfico genérico del cuarto
+consejo en la plantilla ilustrada. Incluye 39 pares de título y
 descripción por idioma, vinculados a los consejos de cada guion. Cada guion
 recorre sus propios textos antes de repetirlos, también al reiniciar el ciclo
 general. Cada entrega incluye fuera de
@@ -246,8 +248,8 @@ siguiente carrusel Tools avanza al siguiente de su rotación. El carrusel se
 completa con una quinta imagen limpia obtenida del
 prefijo R2 configurado por `R2_CARTOOLS_IMAGE_PREFIX` (`cartools` por defecto,
 sin incluir el nombre de `R2_BUCKET`).
-Antes del álbum, el bot envía tres mensajes separados: la frase «apps que son
-lirteralmente obligatorias si tiene coche», un título y una descripción con
+Antes del álbum, el bot envía tres mensajes separados: la frase «Apps que son
+literalmente obligatorias si tiene coche», un título y una descripción con
 hashtags. Hay 15 parejas de título y descripción relacionadas con las cuatro
 apps; recorren una cola propia antes de volver a empezar.
 Esta quinta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,

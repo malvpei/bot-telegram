@@ -137,7 +137,7 @@ def test_car_tools_copy_preserves_the_supplied_text_exactly():
     ]
     assert CAR_TOOLS_SLIDE_TEXTS == EXPECTED_CAR_TOOLS_TEXTS
     assert car_tools_slide_texts() == EXPECTED_CAR_TOOLS_TEXTS
-    assert CAR_TOOLS_HOOK == "apps que son lirteralmente obligatorias si tiene coche"
+    assert CAR_TOOLS_HOOK == "Apps que son literalmente obligatorias si tiene coche"
 
 
 def test_car_tools_has_15_varied_social_copies_with_driving_hashtags():

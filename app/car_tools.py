@@ -3,7 +3,7 @@ from __future__ import annotations
 from app.models import CAR_TOOLS_ROLES, SlideRole
 
 
-CAR_TOOLS_HOOK = "apps que son lirteralmente obligatorias si tiene coche"
+CAR_TOOLS_HOOK = "Apps que son literalmente obligatorias si tiene coche"
 
 
 # Curated from catalog numbers 2, 3, 4, 5, 6, 7, 8, 9, 11, 13, 15, 16 and 17.
