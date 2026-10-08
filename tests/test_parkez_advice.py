@@ -1,6 +1,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from threading import Lock
+import shutil
 
 import numpy as np
 import pytest
@@ -14,6 +15,7 @@ from app.parkez_advice import (
     PARKEZ_ADVICE_DESIGN_IDS,
     PARKEZ_ADVICE_HOOK_IDS,
     PARKEZ_ADVICE_HOOKS,
+    PARKEZ_ADVICE_ICON_FILES,
     PARKEZ_ADVICE_PACK_IDS,
     PARKEZ_ADVICE_PACKS,
     PARKEZ_ADVICE_PROMO,
@@ -29,30 +31,44 @@ from app.state import StateStore
 
 @pytest.mark.parametrize("pack_id", PARKEZ_ADVICE_PACK_IDS)
 @pytest.mark.parametrize("background", PARKEZ_ADVICE_BACKGROUNDS)
-def test_parkez_designs_keep_the_layout_and_use_the_real_blue_icon(pack_id, background, monkeypatch):
+def test_parkez_designs_show_each_app_name_explanation_and_real_icon_on_the_left(pack_id, background, monkeypatch):
     renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
     blocks = []
+    icons = []
     draw_lines = renderer._draw_left_aligned_lines
+    draw_icon = renderer._draw_advice_brand_icon
 
     def record_lines(draw, lines, font, **kwargs):
         blocks.append((lines, font, kwargs))
         draw_lines(draw, lines, font, **kwargs)
 
+    def record_icon(image, center, size, *, icon_path=None):
+        icons.append((center, size, icon_path))
+        return draw_icon(image, center, size, icon_path=icon_path)
+
+    def reject_generic_icon(*args, **kwargs):
+        pytest.fail("El recopilatorio debe usar el icono real de cada app, no uno genérico")
+
     monkeypatch.setattr(renderer, "_draw_left_aligned_lines", record_lines)
+    monkeypatch.setattr(renderer, "_draw_advice_brand_icon", record_icon)
+    monkeypatch.setattr(renderer, "_draw_advice_icon", reject_generic_icon)
+    monkeypatch.setattr(renderer, "_draw_editorial_advice_icon", reject_generic_icon)
     tips = parkez_advice_tips(pack_id, background)
     result = renderer.render_parkez_advice_card(tips, Language.ES, background)
     draw = ImageDraw.Draw(result)
     illustrated = background == AdviceBackground.ILLUSTRATED
-    count = 4 if illustrated else 5
+    count = 4
     assert result.size == (1080, 1920)
     assert result.getpixel((0, 0)) == ((247, 247, 245) if illustrated else (229, 229, 229))
     assert len(tips) == count
     assert len(blocks) == count * 2
+    assert len(icons) == count
+    assert [tip.title for tip in tips] == list(PARKEZ_ADVICE_ICON_FILES)
     assert tips[-1] == PARKEZ_ADVICE_PROMO
     assert "ParkEz" in tips[-1].title
     for index, tip in enumerate(tips):
-        top = 260 + index * 374 if illustrated else 280 + index * 274
-        bottom = top + (338 if illustrated else 262)
+        top = 260 + index * 374 if illustrated else 280 + index * 343
+        bottom = top + (338 if illustrated else 331)
         for lines, font, kwargs in blocks[index * 2:index * 2 + 2]:
             assert kwargs["x"] == (385 if illustrated else 412)
             assert kwargs["start_y"] >= top + (24 if illustrated else 12)
@@ -60,7 +76,19 @@ def test_parkez_designs_keep_the_layout_and_use_the_real_blue_icon(pack_id, back
             assert kwargs["start_y"] + block_height <= bottom - (24 if illustrated else 12)
             assert all(draw.textlength(line, font=font) <= (585 if illustrated else 596) for line in lines)
         assert " ".join(blocks[index * 2 + 1][0]) == tip.body
+        assert " ".join(blocks[index * 2][0]) == tip.title
         assert blocks[index * 2][2]["brand_fill"] == ADVICE_PARKEZ_BLUE
+        center, size, path = icons[index]
+        assert path == renderer.settings.root_dir / "cartools/iconos" / PARKEZ_ADVICE_ICON_FILES[tip.title]
+        assert center == ((285 if illustrated else 287), top + (338 if illustrated else 331) // 2)
+        assert center[0] + size // 2 < blocks[index * 2][2]["x"]
+        with Image.open(path) as source:
+            fitted = renderer._fit_type_3_icon(source.convert("RGBA"), size)
+        expected_icon = Image.new("RGBA", (size, size), "white")
+        expected_icon.alpha_composite(fitted)
+        actual_icon = result.crop((center[0] - size // 2, center[1] - size // 2,
+                                   center[0] - size // 2 + size, center[1] - size // 2 + size))
+        assert np.array_equal(np.asarray(actual_icon), np.asarray(expected_icon.convert("RGB")))
     pixels = np.asarray(result).astype(int)
     icon = pixels[1488:1620, 218:350] if illustrated else pixels[1432:1582, 212:362]
     blue = (icon[..., 2] > icon[..., 0] + 25) & (icon[..., 1] > icon[..., 0] + 10)
@@ -82,10 +110,9 @@ def test_twenty_parkez_copies_match_only_the_visible_tips(pack_id, background):
         for tip in parkez_advice_tips(pack_id, background):
             assert tip.title in copy.description
             assert tip.body in copy.description
-        if background == AdviceBackground.ILLUSTRATED:
-            assert PARKEZ_ADVICE_PACKS[pack_id][3].body not in copy.description
-            assert "cinco" not in copy.description
-            assert "5. " not in copy.description
+        assert "cuatro" in copy.description
+        assert "cinco" not in copy.description
+        assert "5. " not in copy.description
 
 
 class ParkEzR2Storage:
@@ -153,7 +180,10 @@ def test_parkez_delivers_two_images_without_consuming_tools_gograduate_or_dropra
         assert result.preview_text == result.slides[0].text
         assert result.preview_text in result.script_path.read_text(encoding="utf-8")
         assert PARKEZ_ADVICE_PROMO.body in result.preview_text
-        assert PARKEZ_ADVICE_PACKS[pack_id][3].body not in result.preview_text
+        assert "5. " not in result.preview_text
+        for tip in PARKEZ_ADVICE_PACKS[pack_id]:
+            assert tip.title in result.preview_text
+            assert tip.body in result.preview_text
         for slide in result.slides:
             with Image.open(slide.media.local_path) as image:
                 assert image.format == "PNG"
@@ -264,10 +294,35 @@ def test_parkez_prefix_can_include_bucket_and_have_its_own_folder(tmp_path):
 
 
 @pytest.mark.parametrize("background", PARKEZ_ADVICE_BACKGROUNDS)
-def test_missing_parkez_icon_fails_instead_of_substituting_another_brand(tmp_path, background):
+@pytest.mark.parametrize("app_name", PARKEZ_ADVICE_ICON_FILES)
+def test_any_missing_app_icon_fails_instead_of_using_a_generic_icon(tmp_path, background, app_name):
+    original_root = get_settings().root_dir
+    icons_dir = tmp_path / "cartools/iconos"
+    icons_dir.mkdir(parents=True)
+    for name, filename in PARKEZ_ADVICE_ICON_FILES.items():
+        if name != app_name:
+            shutil.copyfile(original_root / "cartools/iconos" / filename, icons_dir / filename)
     renderer = VideoRenderer(replace(get_settings(), root_dir=tmp_path))
-    with pytest.raises(FileNotFoundError, match="icono de ParkEz"):
+    with pytest.raises(FileNotFoundError, match=f"icono de {app_name}"):
         renderer.render_parkez_advice_card(parkez_advice_tips(PARKEZ_ADVICE_PACK_IDS[0], background), Language.ES, background)
+
+
+@pytest.mark.parametrize("background", PARKEZ_ADVICE_BACKGROUNDS)
+@pytest.mark.parametrize("invalid", ["missing", "unknown", "duplicate"])
+def test_recap_requires_four_distinct_apps_with_configured_icons(background, invalid):
+    renderer = VideoRenderer(get_settings())
+    tips = parkez_advice_tips(PARKEZ_ADVICE_PACK_IDS[0], background)
+    if invalid == "missing":
+        tips = tips[:-1]
+        message = "necesita cuatro aplicaciones"
+    elif invalid == "unknown":
+        tips = (replace(tips[0], title="Otra app"),) + tips[1:]
+        message = "sin icono configurado"
+    else:
+        tips = (tips[0], tips[0]) + tips[2:]
+        message = "no puede repetir aplicaciones"
+    with pytest.raises(ValueError, match=message):
+        renderer.render_parkez_advice_card(tips, Language.ES, background)
 
 
 @pytest.mark.parametrize("pack_id", ["../outside", "", "/tmp/pack", "Pack"])

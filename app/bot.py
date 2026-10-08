@@ -986,8 +986,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "imagen de la cola R2 cartools, dentro del bucket configurado\n"
         "5. mode3 usa fotos del pool de Dropradar, el cierre de Hombre y textos "
         "sobre carnet, velocidad, radares y aparcamiento; rota 15 títulos y descripciones\n"
-        "6. Consejos entrega un diseño con tips y una foto R2, más hook, título y "
-        "descripción separados; rota apps útiles, conducción y aparcamiento\n"
+        "6. Consejos entrega un recopilatorio de cuatro apps con su icono y "
+        "explicación, una foto R2 y hook, título y descripción separados\n"
         "7. en Mujer, Hombre o mode3 puedes pedir otra foto distinta de la misma cuenta\n\n"
         "GoGraduate:\n"
         "1. /g\n"
@@ -1662,7 +1662,7 @@ async def parkez_advice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await query.answer()
     context.user_data.pop("repeat_request", None)
     await query.edit_message_text(
-        "Preparando consejos de ParkEz: apps útiles, conducción y aparcamiento."
+        "Preparando el recopilatorio de apps con sus iconos y explicaciones."
     )
     request = VideoRequest(
         chat_id=update.effective_chat.id,
@@ -2273,7 +2273,7 @@ async def _execute_job(
     if request.video_type == VideoType.GOGRADUATE_TYPE_1:
         status_text = "Estoy creando los consejos y preparando la siguiente imagen de R2 para GoGraduate."
     elif request.video_type == VideoType.PARKEZ_ADVICE:
-        status_text = "Estoy creando los consejos de ParkEz y preparando su siguiente imagen de R2."
+        status_text = "Estoy creando el recopilatorio de apps y preparando la siguiente imagen de R2 para ParkEz."
     elif request.video_type == VideoType.ADVICE:
         status_text = (
             "Estoy creando el siguiente diseño rotativo del Tipo 4 y preparando "
@@ -2329,7 +2329,7 @@ async def _execute_job(
     elif result.video_type == VideoType.PARKEZ_ADVICE:
         header = (
             "ParkEz · Consejos listo\n"
-            "Entrega: diseño de consejos + imagen limpia de R2\n"
+            "Entrega: cuatro apps con iconos y explicación + imagen limpia de R2\n"
             "Hook, título y descripción de las colas de Consejos"
         )
     elif result.video_type == VideoType.ADVICE:

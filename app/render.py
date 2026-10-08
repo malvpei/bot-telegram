@@ -23,7 +23,7 @@ from app.config import Settings
 from app.face_detection import build_face_detector
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
 from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
-from app.parkez_advice import PARKEZ_ADVICE_ICON_RELATIVE_PATH
+from app.parkez_advice import PARKEZ_ADVICE_ICON_FILES, PARKEZ_ADVICE_ICON_RELATIVE_PATH
 
 
 LOGGER = logging.getLogger(__name__)
@@ -522,12 +522,19 @@ class VideoRenderer:
     ) -> Image.Image:
         if background not in {AdviceBackground.ILLUSTRATED, AdviceBackground.EDITORIAL}:
             raise ValueError("Diseño de consejos de ParkEz no disponible.")
-        count = 4 if background == AdviceBackground.ILLUSTRATED else 5
-        if len(tips) != count:
-            raise ValueError(f"ParkEz {background.value} necesita {count} consejos.")
-        icon_path = self.settings.root_dir / PARKEZ_ADVICE_ICON_RELATIVE_PATH
-        if not icon_path.is_file():
-            raise FileNotFoundError(f"Falta el icono de ParkEz: {icon_path}")
+        if len(tips) != len(PARKEZ_ADVICE_ICON_FILES):
+            raise ValueError("El recopilatorio de ParkEz necesita cuatro aplicaciones.")
+        if len({tip.title for tip in tips}) != len(tips):
+            raise ValueError("El recopilatorio de ParkEz no puede repetir aplicaciones.")
+        icon_paths = []
+        for tip in tips:
+            icon_file = PARKEZ_ADVICE_ICON_FILES.get(tip.title)
+            if icon_file is None:
+                raise ValueError(f"Aplicación sin icono configurado: {tip.title}")
+            icon_path = self._car_tools_icons_dir / icon_file
+            if not icon_path.is_file():
+                raise FileNotFoundError(f"Falta el icono de {tip.title}: {icon_path}")
+            icon_paths.append(icon_path)
         render_card = (
             self._render_illustrated_advice_card
             if background == AdviceBackground.ILLUSTRATED
@@ -537,7 +544,8 @@ class VideoRenderer:
             tips, language,
             brand_word=_ADVICE_PARKEZ_WORD,
             brand_fill=ADVICE_PARKEZ_BLUE,
-            brand_icon_path=icon_path,
+            brand_icon_path=self.settings.root_dir / PARKEZ_ADVICE_ICON_RELATIVE_PATH,
+            row_icon_paths=tuple(icon_paths),
         )
 
     def _draw_flat_advice_list(
@@ -1575,7 +1583,10 @@ class VideoRenderer:
         brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
         brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
         brand_icon_path: Path | None = None,
+        row_icon_paths: tuple[Path, ...] | None = None,
     ) -> Image.Image:
+        if row_icon_paths is not None and len(row_icon_paths) != len(tips):
+            raise ValueError("Cada aplicación necesita su propio icono.")
         del language  # The selected tips are already localized.
         width, height = self.settings.width, self.settings.height
         image = Image.new("RGBA", (width, height), (247, 247, 245, 255))
@@ -1657,13 +1668,15 @@ class VideoRenderer:
                 top + card_height // 2,
             )
             icon_size = _scale_x(124, width)
-            brand_icon_drawn = (
-                bool(brand_word.search(f"{tip.title} {tip.body}"))
+            is_brand_tip = bool(brand_word.search(f"{tip.title} {tip.body}"))
+            icon_drawn = (
+                (row_icon_paths is not None or is_brand_tip)
                 and self._draw_advice_brand_icon(
-                    image, icon_center, icon_size, icon_path=brand_icon_path,
+                    image, icon_center, icon_size,
+                    icon_path=row_icon_paths[index - 1] if row_icon_paths is not None else brand_icon_path,
                 )
             )
-            if not brand_icon_drawn:
+            if not icon_drawn:
                 self._draw_advice_icon(image, icon_center, icon_size, index)
 
             text_left = card_left + _scale_x(315, width)
@@ -1741,7 +1754,7 @@ class VideoRenderer:
                 ),
                 radius=divider_height // 2,
                 fill=(
-                    brand_fill if brand_icon_drawn and brand_icon_path
+                    brand_fill if icon_drawn and is_brand_tip and brand_icon_path
                     else self._advice_icon_palette(index)[2]
                 ),
             )
@@ -1924,8 +1937,11 @@ class VideoRenderer:
         brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
         brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
         brand_icon_path: Path | None = None,
+        row_icon_paths: tuple[Path, ...] | None = None,
     ) -> Image.Image:
-        """Render the clean five-row advice layout from the supplied reference."""
+        """Render the clean advice rows, optionally with per-app icons."""
+        if row_icon_paths is not None and len(row_icon_paths) != len(tips):
+            raise ValueError("Cada aplicación necesita su propio icono.")
         del language  # The selected tips are already localized.
         width, height = self.settings.width, self.settings.height
         image = Image.new("RGBA", (width, height), (255, 255, 255, 255))
@@ -1976,13 +1992,14 @@ class VideoRenderer:
             )
             icon_center = (icon_center_x, row_center_y)
             icon_size = _scale_x(150, width)
-            brand_icon_drawn = (
-                bool(brand_word.search(f"{tip.title} {tip.body}"))
+            icon_drawn = (
+                (row_icon_paths is not None or bool(brand_word.search(f"{tip.title} {tip.body}")))
                 and self._draw_advice_brand_icon(
-                    image, icon_center, icon_size, icon_path=brand_icon_path,
+                    image, icon_center, icon_size,
+                    icon_path=row_icon_paths[index - 1] if row_icon_paths is not None else brand_icon_path,
                 )
             )
-            if not brand_icon_drawn:
+            if not icon_drawn:
                 self._draw_editorial_advice_icon(image, icon_center, icon_size, index)
 
             title_font: ImageFont.ImageFont | None = None

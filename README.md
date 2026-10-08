@@ -293,25 +293,31 @@ la velocidad indicada no debe ser inferior a la real según el
 [Reglamento ONU n.º 39, apartado 5.4](https://www.boe.es/buscar/doc.php?id=DOUE-L-2025-81410).
 Los títulos y descripciones nuevos no repiten esa afirmación.
 
-La opción **Consejos** de `/createp` mantiene el formato de `/g`: un diseño
-vertical de consejos y una segunda imagen limpia de R2, ambas en PNG y enviadas
-como documentos sin compresión. Hay cuatro grupos rotativos: apps útiles
-(Waze y Google Maps), hábitos de conducción, preparación del trayecto con menos
-improvisación y aparcamiento urbano. El último punto recomienda ParkEz, con su
-nombre destacado en azul y el icono real `cartools/iconos/parkez.png`.
-Cada grupo alterna entre tarjetas ilustradas (tres consejos + ParkEz en el
-paso 4) y una lista editorial (cuatro consejos + ParkEz en el paso 5).
-Las descripciones incluyen solo los consejos que se muestran en ese diseño.
+La opción **Consejos** de `/createp` entrega un recopilatorio vertical de apps
+y una segunda imagen limpia de R2, ambas en PNG y enviadas como documentos sin
+compresión. Sigue la orientación de Tools: cada fila lleva el icono real de la
+app a la izquierda, su nombre y una explicación de su utilidad al lado. Usa los
+mismos cuatro iconos de `cartools/iconos/`, sin símbolos genéricos ni logos
+inventados: RadarBot, Waze, Google Maps y ParkEz. ParkEz cierra el recopilatorio
+en el paso 4, con su nombre destacado en azul.
+
+Hay cuatro grupos de explicaciones rotativas sobre estas aplicaciones: uso
+general, preparación de la ruta, organización con más margen y llegada/regreso
+al coche. Cada grupo alterna entre tarjetas ilustradas y una lista editorial;
+ambos diseños muestran siempre las cuatro apps, una vez cada una. Las
+descripciones explican las mismas apps y funciones que aparecen en la imagen.
 
 Antes del álbum se envían tres mensajes independientes: hook, título y
 descripción con hashtags. Los hooks alternan entre:
 
-- «Los trucos que hacen más fácil tu día a día con el coche»
-- «Apps y hábitos para conducir con menos líos y aparcar con más calma»
+- «Apps que te hacen más fácil el día a día con el coche»
+- «Apps para preparar tus trayectos y buscar aparcamiento con más calma»
 
 Hay veinte pares de título y descripción por grupo: ochenta títulos diferentes
 en total. Se entrega un par por carrusel y no se repite dentro de un grupo hasta
-agotar sus veinte variantes. Consejos, diseños, hooks, copy e imágenes tienen
+agotar sus veinte variantes. Los identificadores se conservan para mantener la
+posición de las colas al pasar de consejos genéricos a recopilatorio de apps.
+Consejos, diseños, hooks, copy e imágenes tienen
 colas persistentes independientes de Mujer, Hombre, Tools, mode3, Dropradar y
 GoGraduate. No necesita cuentas de Instagram.
 
@@ -324,14 +330,15 @@ renderizado, normalización o guardado del guion/job no consumen las selecciones
 
 El contenido evita prometer plazas libres o librarse de multas. Las funciones
 de apps se contrastaron con la ayuda de
+[avisos de RadarBot](https://help.radarbot.com/es/articles/13886047-06_alertas-y-avisos),
 [viajes programados de Waze](https://support.google.com/waze/answer/6378906?hl=es-419),
 [mapas sin conexión](https://support.google.com/maps/answer/6291838?hl=es)
-y [ubicación del coche aparcado](https://support.google.com/maps/answer/7257797?hl=es).
+y [ubicación del coche aparcado](https://support.google.com/maps/answer/7257797?hl=es),
+además de [sitios favoritos de Google Maps](https://support.google.com/maps/answer/3184808?hl=es)
+y [navegación por voz de Waze](https://support.google.com/waze/answer/10264825?hl=es).
 Las recomendaciones de preparar el navegador y evitar manipular el móvil al
 volante siguen los consejos de la
-[DGT sobre distracciones](https://revista.dgt.es/es/reportajes/2017/07JULIO/0707-Distracciones-viaje-verano.shtml),
-y el contenido sobre descansos se apoya en su información sobre
-[fatiga](https://www.dgt.es/muevete-con-seguridad/evita-conductas-de-riesgo/conducir-con-fatiga/).
+[DGT sobre distracciones](https://revista.dgt.es/es/reportajes/2017/07JULIO/0707-Distracciones-viaje-verano.shtml).
 
 La opción **Tools** de `/createp` crea cuatro slides dedicados a RadarBot,
 ParkEz, Waze y Google Maps. Cada uno lleva su icono y su texto incrustado sobre
