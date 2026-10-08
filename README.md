@@ -11,8 +11,8 @@ Este proyecto monta un bot de Telegram que:
 - evita repetir el mismo guion seguido y mantiene un historial de firmas
 - renderiza un video vertical `.mp4` listo para subir
 - crea carruseles promocionales de ParkEz con `/createp`: Mujer, Hombre y mode3
-  con texto separado, o Tools con texto incrustado
-- crea imágenes de consejos para estudiantes con `/g` y GoGraduate
+  con texto separado, Tools con texto incrustado, o Consejos con diseño + foto R2
+- crea consejos para estudiantes con `/g` y GoGraduate, acompañados de una foto de R2
 
 ## Lo que hace el pipeline
 
@@ -72,6 +72,7 @@ app/
   selector.py    — scoring, asignación por rol, fallback de paisaje
   texts.py       — guiones es/en, coherencia monetaria, validación de tokens
   gograduate.py  — consejos de estudio y copy rotativo para /g
+  gograduate_social.py — veinte variantes de copy para cada grupo de consejos
   render.py      — render vertical, fallback de fuentes, enforce de tamaño
   state.py       — JSON + filelock cross-proceso, writes atómicos
   service.py     — orquestación, reserva atómica, limpieza de outputs
@@ -155,8 +156,10 @@ Todas las variables viven en `.env`. Las interesantes:
 | `ACCOUNT_CACHE_TTL_HOURS` | 0 | 0 = cache permanente; las cuentas ya descargadas se leen de `data/downloads/<cuenta>` |
 | `ACCOUNT_PICK_ATTEMPTS` | 0 | objetivo inicial heredado; el selector puede seguir probando más cuentas para evitar falsos "sin imágenes" |
 | `R2_TYPE_4_IMAGE_PREFIX` | `4` | carpeta R2 de la imagen limpia que acompaña al Tipo 4 - Consejos |
+| `R2_GOGRADUATE_IMAGE_PREFIX` | `c` | carpeta R2 de la imagen limpia que acompaña a `/g`, dentro de `R2_BUCKET` |
 | `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 de la que el Tipo 5 toma tres imágenes al azar |
 | `R2_CARTOOLS_IMAGE_PREFIX` | `cartools` | carpeta dentro de `R2_BUCKET` recorrida por la cola cíclica de imágenes limpias de `/createp` Tools |
+| `R2_PARKEZ_ADVICE_IMAGE_PREFIX` | misma carpeta que Tools | carpeta de la imagen adicional de `/createp` Consejos; tiene su propia cola aunque use los mismos archivos |
 
 ### Instagram y 2FA
 
@@ -190,7 +193,7 @@ el bot.
 /download_pool — rellena el pool precargado de fotos aptas
 /pool         — muestra el stock del pool por tipo y cuenta
 /create       — lanza el wizard (tipo → idioma → render)
-/createp      — crea un carrusel ParkEz para Mujer, Hombre, Tools o mode3
+/createp      — crea un carrusel ParkEz para Mujer, Hombre, Tools, mode3 o Consejos
 /g            — abre el menú de GoGraduate (Tipo 1: consejos para estudiantes)
 /wizard       — alias de /create
 /cancel       — cancela el wizard en curso
@@ -215,12 +218,19 @@ antigua. Después siguen las anteriores pendientes, sin repetir las ya usadas
 hasta completar el ciclo.
 La Historia IA no aparece como opción dentro de `/create`.
 
-El flujo **/g → Tipo 1** genera una imagen PNG de consejos en español.
+El flujo **/g → Tipo 1** genera una imagen PNG de consejos en español y una
+segunda imagen limpia del prefijo `c/` dentro de `R2_BUCKET` (bucket `videos`
+en Cloudflare). Se configura con `R2_GOGRADUATE_IMAGE_PREFIX=c`, no con un bucket
+independiente llamado `c`. Las dos imágenes se entregan en un único álbum de
+documentos sin compresión, con la foto de R2 ajustada al mismo formato vertical.
+La cola de fotos es independiente de Dropradar: prioriza las subidas más nuevas,
+deduplica objetos por contenido y no repite una imagen hasta terminar la vuelta.
+Las incorporaciones nuevas pasan delante de las anteriores aún pendientes.
 Alterna entre las tarjetas ilustradas y la lista editorial de cinco filas del
 Tipo 4 de `/create`. En la versión de tarjetas se omite el cuarto consejo del
 grupo original y la promoción queda renumerada como 4; la lista editorial
 conserva los cinco consejos y coloca el icono oficial de GoGraduate en el paso 5.
-El hook y la descripción se ajustan al número de consejos y al contenido que
+La descripción se ajusta al número de consejos y al contenido que
 realmente aparece. Rota entre cuatro
 grupos de consejos: recordar sin mirar, espaciar repasos, mezclar ejercicios y
 revisar errores. El último punto siempre recomienda GoGraduate y conserva el
@@ -228,18 +238,33 @@ texto promocional solicitado. Su icono es el birrete oficial negro y dorado,
 tomado del recurso transparente aprobado de la aplicación GoGraduate
 (`mobile/assets/gograduate-browser-symbol.png`) y incluido en
 `assets/gograduate.png`; no utiliza el icono de Dropradar.
-El hook, el título y la descripción con hashtags se envían como mensajes
-independientes antes de la imagen, que se entrega como archivo sin compresión.
+El hook alterna entre las dos frases literales solicitadas:
+
+- «Un amigo que entro en Oxford me dio el consejo numero #1 para aprobar cualquier examen»
+- «Un amigo que se graduo en biomedicina con matricula de honor me dio el consejo numero #1 para aprobar cualquier examen»
+
+El hook, el título y la descripción con hashtags se envían como tres mensajes
+independientes antes del álbum. Hay veinte pares de título y descripción para
+cada grupo de consejos (ochenta títulos distintos en total). Cada entrega recibe
+un solo par; cada grupo agota sus veinte variantes antes de repetirlas. La
+descripción reproduce únicamente los consejos presentes en el diseño elegido,
+sin volver a incluir el cuarto consejo omitido en la versión de tarjetas.
 Las colas propias `DATA_DIR/state/gograduate_type_1_queue.json` (consejos) y
-`DATA_DIR/state/gograduate_type_1_design_queue.json` (diseños) persisten tras
-reinicios y solo avanzan cuando se genera correctamente la entrega. Este flujo
-no descarga fotos ni utiliza Instagram, R2 o las rotaciones de otros tipos.
+`DATA_DIR/state/gograduate_type_1_design_queue.json` (diseños),
+`DATA_DIR/state/gograduate_image_queue.json` (fotos),
+`DATA_DIR/state/gograduate_hook_queue.json` (hooks) y
+`DATA_DIR/state/gograduate_social_students-01_queue.json` a
+`DATA_DIR/state/gograduate_social_students-04_queue.json` (copy por grupo)
+persisten tras reinicios y solo avanzan cuando se generan correctamente las dos
+imágenes y el guion. Este flujo no utiliza Instagram ni modifica las rotaciones
+de otros tipos. Si `c/` está vacía o una imagen falla, no se consumen las colas ni
+se sustituyen las fotos por otras de Dropradar.
 Los consejos de estudio se basan en prácticas de
 [recuperación de memoria](https://www.psychologicalscience.org/journals/psychological-science/j.1467-9280.2006.01693.x/),
 [repaso espaciado](https://www.psychologicalscience.org/journals/psychological-science/0956797615617778/)
 y [ejercicios intercalados](https://pubmed.ncbi.nlm.nih.gov/24578089/).
 
-El flujo **/createp** permite elegir Mujer, Hombre, Tools o mode3. Para Mujer y Hombre,
+El flujo **/createp** permite elegir Mujer, Hombre, Tools, mode3 o Consejos. Para Mujer y Hombre,
 elige tres fotos nuevas de una sola cuenta del banco correspondiente y añade
 como cuarta imagen el cierre limpio de ParkEz del perfil elegido. Entrega el
 hook, dos consejos y la promoción de ParkEz como cuatro mensajes independientes;
@@ -267,6 +292,46 @@ usuario, pero su afirmación sobre que el velocímetro marca menos es incorrecta
 la velocidad indicada no debe ser inferior a la real según el
 [Reglamento ONU n.º 39, apartado 5.4](https://www.boe.es/buscar/doc.php?id=DOUE-L-2025-81410).
 Los títulos y descripciones nuevos no repiten esa afirmación.
+
+La opción **Consejos** de `/createp` mantiene el formato de `/g`: un diseño
+vertical de consejos y una segunda imagen limpia de R2, ambas en PNG y enviadas
+como documentos sin compresión. Hay cuatro grupos rotativos: apps útiles
+(Waze y Google Maps), hábitos de conducción, preparación del trayecto con menos
+improvisación y aparcamiento urbano. El último punto recomienda ParkEz, con su
+nombre destacado en azul y el icono real `cartools/iconos/parkez.png`.
+Cada grupo alterna entre tarjetas ilustradas (tres consejos + ParkEz en el
+paso 4) y una lista editorial (cuatro consejos + ParkEz en el paso 5).
+Las descripciones incluyen solo los consejos que se muestran en ese diseño.
+
+Antes del álbum se envían tres mensajes independientes: hook, título y
+descripción con hashtags. Los hooks alternan entre:
+
+- «Los trucos que hacen más fácil tu día a día con el coche»
+- «Apps y hábitos para conducir con menos líos y aparcar con más calma»
+
+Hay veinte pares de título y descripción por grupo: ochenta títulos diferentes
+en total. Se entrega un par por carrusel y no se repite dentro de un grupo hasta
+agotar sus veinte variantes. Consejos, diseños, hooks, copy e imágenes tienen
+colas persistentes independientes de Mujer, Hombre, Tools, mode3, Dropradar y
+GoGraduate. No necesita cuentas de Instagram.
+
+La foto adicional se toma de `R2_PARKEZ_ADVICE_IMAGE_PREFIX`. Si no se configura,
+se usa `R2_CARTOOLS_IMAGE_PREFIX` (`cartools/` dentro de `R2_BUCKET`, no un bucket
+nuevo). Recorre todas las fotos sin repetir antes de reiniciar, deduplica por
+contenido y prioriza las nuevas subidas. Nunca consume la cola de Tools ni toma
+fotos de `c/` o `4/` como sustitución de una carpeta vacía. Los errores de descarga,
+renderizado, normalización o guardado del guion/job no consumen las selecciones.
+
+El contenido evita prometer plazas libres o librarse de multas. Las funciones
+de apps se contrastaron con la ayuda de
+[viajes programados de Waze](https://support.google.com/waze/answer/6378906?hl=es-419),
+[mapas sin conexión](https://support.google.com/maps/answer/6291838?hl=es)
+y [ubicación del coche aparcado](https://support.google.com/maps/answer/7257797?hl=es).
+Las recomendaciones de preparar el navegador y evitar manipular el móvil al
+volante siguen los consejos de la
+[DGT sobre distracciones](https://revista.dgt.es/es/reportajes/2017/07JULIO/0707-Distracciones-viaje-verano.shtml),
+y el contenido sobre descansos se apoya en su información sobre
+[fatiga](https://www.dgt.es/muevete-con-seguridad/evita-conductas-de-riesgo/conducir-con-fatiga/).
 
 La opción **Tools** de `/createp` crea cuatro slides dedicados a RadarBot,
 ParkEz, Waze y Google Maps. Cada uno lleva su icono y su texto incrustado sobre
@@ -438,6 +503,11 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `data/state/cartools_image_queue.json` — cola cíclica de la imagen R2 de `/createp` Tools
 - `data/state/cartools_social_copy_queue.json` — rotación de los 15 títulos y descripciones de Tools
 - `data/state/parkez_mode3_social_queue.json` — rotación independiente de los 15 títulos y descripciones de mode3
+- `data/state/parkez_advice_queue.json` — rotación de los cuatro grupos de Consejos de ParkEz
+- `data/state/parkez_advice_image_queue.json` — cola propia de su foto R2
+- `data/state/parkez_advice_hook_queue.json` — rotación de los dos hooks de Consejos
+- `data/state/parkez_advice_design_*_queue.json` — alternancia de diseño por grupo de consejos
+- `data/state/parkez_advice_social_*_queue.json` — veinte títulos y descripciones por grupo
 - `data/state/telegram_users.json` — usuarios autorizados y último acceso
 - `data/state/.state.lock` — lock de `filelock` cross-proceso
 

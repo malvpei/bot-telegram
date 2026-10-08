@@ -23,6 +23,7 @@ from app.config import Settings
 from app.face_detection import build_face_detector
 from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
 from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
+from app.parkez_advice import PARKEZ_ADVICE_ICON_RELATIVE_PATH
 
 
 LOGGER = logging.getLogger(__name__)
@@ -32,6 +33,8 @@ ADVICE_DROPRADAR_GREEN_ON_DARK = (163, 245, 48)
 _ADVICE_DROPRADAR_WORD = re.compile(r"\bDropradar\b", re.IGNORECASE)
 ADVICE_GOGRADUATE_GOLD = (150, 108, 8)
 _ADVICE_GOGRADUATE_WORD = re.compile(r"\bGoGraduate\b", re.IGNORECASE)
+ADVICE_PARKEZ_BLUE = (24, 97, 159)
+_ADVICE_PARKEZ_WORD = re.compile(r"\bParkEz\b", re.IGNORECASE)
 
 
 SYSTEM_FONT_CANDIDATES = (
@@ -510,6 +513,30 @@ class VideoRenderer:
             tips, language,
             brand_word=_ADVICE_GOGRADUATE_WORD,
             brand_fill=ADVICE_GOGRADUATE_GOLD,
+            brand_icon_path=icon_path,
+        )
+
+    def render_parkez_advice_card(
+        self, tips: tuple[AdviceTip, ...], language: Language,
+        background: AdviceBackground = AdviceBackground.ILLUSTRATED,
+    ) -> Image.Image:
+        if background not in {AdviceBackground.ILLUSTRATED, AdviceBackground.EDITORIAL}:
+            raise ValueError("Diseño de consejos de ParkEz no disponible.")
+        count = 4 if background == AdviceBackground.ILLUSTRATED else 5
+        if len(tips) != count:
+            raise ValueError(f"ParkEz {background.value} necesita {count} consejos.")
+        icon_path = self.settings.root_dir / PARKEZ_ADVICE_ICON_RELATIVE_PATH
+        if not icon_path.is_file():
+            raise FileNotFoundError(f"Falta el icono de ParkEz: {icon_path}")
+        render_card = (
+            self._render_illustrated_advice_card
+            if background == AdviceBackground.ILLUSTRATED
+            else self._render_editorial_advice_card
+        )
+        return render_card(
+            tips, language,
+            brand_word=_ADVICE_PARKEZ_WORD,
+            brand_fill=ADVICE_PARKEZ_BLUE,
             brand_icon_path=icon_path,
         )
 

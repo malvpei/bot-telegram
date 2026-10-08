@@ -1,4 +1,6 @@
 from pathlib import Path
+
+import pytest
 import shutil
 from uuid import uuid4
 
@@ -264,6 +266,23 @@ def test_r2_type_4_image_prefix_blank_value_falls_back_to_folder_four(monkeypatc
         get_settings.cache_clear()
 
 
+@pytest.mark.parametrize("raw,expected", [(None, "c"), (" / ", "c"), (" /c/campaign/ ", "c/campaign")])
+def test_gograduate_prefix_defaults_to_c_and_is_normalized_without_changing_bucket(monkeypatch, raw, expected):
+    monkeypatch.setattr("app.config.load_dotenv", lambda *_args, **_kwargs: False)
+    monkeypatch.setenv("R2_BUCKET", "videos")
+    if raw is None:
+        monkeypatch.delenv("R2_GOGRADUATE_IMAGE_PREFIX", raising=False)
+    else:
+        monkeypatch.setenv("R2_GOGRADUATE_IMAGE_PREFIX", raw)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        assert settings.r2_gograduate_image_prefix == expected
+        assert settings.r2_bucket == "videos"
+    finally:
+        get_settings.cache_clear()
+
+
 def test_r2_cartools_image_prefix_is_loaded_and_normalized(monkeypatch):
     monkeypatch.setenv("R2_CARTOOLS_IMAGE_PREFIX", " /videos/cartools/campaign/ ")
     get_settings.cache_clear()
@@ -383,6 +402,24 @@ def test_story_quality_settings_are_clamped(monkeypatch):
         assert settings.story_review_fal_model == "provider/vision-reviewer"
         assert settings.story_review_min_score == 10
         assert settings.story_image_max_attempts == 4
+    finally:
+        get_settings.cache_clear()
+
+
+@pytest.mark.parametrize("raw,expected", [(None, "park-images"), ("", "park-images"), (" /consejos/ ", "consejos")])
+def test_parkez_advice_prefix_defaults_to_tools_but_can_use_its_own_folder(monkeypatch, raw, expected):
+    monkeypatch.setenv("R2_CARTOOLS_IMAGE_PREFIX", " /park-images/ ")
+    monkeypatch.setenv("R2_BUCKET", "videos")
+    if raw is None:
+        monkeypatch.delenv("R2_PARKEZ_ADVICE_IMAGE_PREFIX", raising=False)
+    else:
+        monkeypatch.setenv("R2_PARKEZ_ADVICE_IMAGE_PREFIX", raw)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        assert settings.r2_parkez_advice_image_prefix == expected
+        assert settings.r2_cartools_image_prefix == "park-images"
+        assert settings.r2_bucket == "videos"
     finally:
         get_settings.cache_clear()
 

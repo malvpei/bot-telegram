@@ -35,12 +35,15 @@ from app.car_tools_social import (
 from app.config import (
     DEFAULT_ACCOUNT_PICK_ATTEMPTS,
     DEFAULT_R2_CARTOOLS_IMAGE_PREFIX,
+    DEFAULT_R2_GOGRADUATE_IMAGE_PREFIX,
     DEFAULT_R2_TYPE_4_IMAGE_PREFIX,
     get_settings,
 )
 from app.gograduate import (
     GOGRADUATE_DESIGN_IDS,
+    GOGRADUATE_HOOK_IDS,
     GOGRADUATE_PACK_IDS,
+    GOGRADUATE_SOCIAL_COPY_IDS,
     gograduate_social_copy,
     gograduate_tips,
 )
@@ -63,6 +66,14 @@ from app.models import (
     SlideRole,
 )
 from app.parkez import build_parkez_script, parkez_fixed_image_name
+from app.parkez_advice import (
+    PARKEZ_ADVICE_DESIGN_IDS,
+    PARKEZ_ADVICE_HOOK_IDS,
+    PARKEZ_ADVICE_PACK_IDS,
+    PARKEZ_ADVICE_SOCIAL_COPY_IDS,
+    parkez_advice_social_copy,
+    parkez_advice_tips,
+)
 from app.parkez_mode3 import PARKEZ_MODE3_SOCIAL_COPY_IDS, build_parkez_mode3_script
 from app.r2_storage import R2_IMAGE_EXTENSIONS, R2Object, R2StorageClient
 from app.render import VideoRenderer
@@ -92,7 +103,7 @@ class _CarToolsR2Selection:
 
 
 @dataclass(frozen=True)
-class _Type4AdviceR2Selection:
+class _AdviceR2Selection:
     media: MediaCandidate
     prefix: str
     queue_id: str
@@ -591,6 +602,8 @@ class VideoCreationService:
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
         if request.video_type == VideoType.GOGRADUATE_TYPE_1:
             return self._create_gograduate_type_1_locked(request)
+        if request.video_type == VideoType.PARKEZ_ADVICE:
+            return self._create_parkez_advice_locked(request)
         if request.video_type == VideoType.PARKEZ_MODE3:
             request = replace(
                 request,
@@ -748,9 +761,16 @@ class VideoCreationService:
             raise ValueError("No hay diseños de GoGraduate disponibles.")
         background = AdviceBackground(design_id)
         tips = gograduate_tips(pack_id, background)
-        social_copy = gograduate_social_copy(pack_id, background)
+        hook_id, _ = self.state.peek_next_gograduate_hook_id(GOGRADUATE_HOOK_IDS)
+        copy_id, _ = self.state.peek_next_gograduate_social_copy_id(
+            pack_id, GOGRADUATE_SOCIAL_COPY_IDS,
+        )
+        if hook_id is None or copy_id is None:
+            raise ValueError("No hay textos de GoGraduate disponibles.")
+        social_copy = gograduate_social_copy(pack_id, background, copy_id=copy_id, hook_id=hook_id)
         job_id = self._build_job_id()
         job_dir = self._job_output_dir(job_id, request.user_id)
+        r2_selection = self._download_next_gograduate_image_from_r2(job_dir)
         slides_dir = job_dir / "slides"
         slides_dir.mkdir(parents=True, exist_ok=True)
         output_path = slides_dir / "slide_01.png"
@@ -768,20 +788,27 @@ class VideoCreationService:
             height=self.settings.height,
             created_at=datetime.now(timezone.utc).isoformat(),
         )
+        r2_media = self._normalize_advice_image(r2_selection.media, job_dir, label="GoGraduate")
         plan = VideoPlan(
             chosen_account=f"gograduate:tipo1:{design_id}:{pack_id}",
             video_type=VideoType.GOGRADUATE_TYPE_1,
             language=Language.ES,
-            slides=[SlidePlan(
-                index=1, role=SlideRole.ADVICE_CARD, text=script_text,
-                media=media, fixed_asset=True,
-            )],
+            slides=[
+                SlidePlan(
+                    index=1, role=SlideRole.ADVICE_CARD, text=script_text,
+                    media=media, fixed_asset=True,
+                ),
+                SlidePlan(
+                    index=2, role=SlideRole.ADVICE_R2_CLEAN, text="",
+                    media=r2_media, fixed_asset=False,
+                ),
+            ],
         )
         script_path = self.renderer.write_script(plan, job_dir)
         self.state.log_job(self.state.build_job_record(
             job_id=job_id,
             chosen_account=plan.chosen_account,
-            requested_accounts=[],
+            requested_accounts=[r2_media.source_id],
             fallback_accounts=[],
             video_type=plan.video_type,
             language=Language.ES,
@@ -793,6 +820,89 @@ class VideoCreationService:
         ))
         self.state.remember_gograduate_type_1_pack_choice(pack_id, GOGRADUATE_PACK_IDS)
         self.state.remember_gograduate_type_1_design_choice(design_id, GOGRADUATE_DESIGN_IDS)
+        self.state.remember_gograduate_image_choice(r2_selection.queue_id, list(r2_selection.queue_ids))
+        self.state.remember_gograduate_hook_choice(hook_id, GOGRADUATE_HOOK_IDS)
+        self.state.remember_gograduate_social_copy_choice(pack_id, copy_id, GOGRADUATE_SOCIAL_COPY_IDS)
+        self._cleanup_old_outputs()
+        return GenerationResult(
+            video_path=None,
+            script_path=script_path,
+            preview_text=script_text,
+            social_copy=social_copy,
+            chosen_account=plan.chosen_account,
+            video_type=plan.video_type,
+            language=Language.ES,
+            fallback_accounts=[],
+            slides=plan.slides,
+            separate_slide_text=False,
+        )
+
+    def _create_parkez_advice_locked(self, request: VideoRequest) -> GenerationResult:
+        pack_id, _ = self.state.peek_next_parkez_advice_pack_id(PARKEZ_ADVICE_PACK_IDS)
+        if pack_id is None:
+            raise ValueError("No hay consejos de ParkEz disponibles.")
+        design_id, _ = self.state.peek_next_parkez_advice_design_id(pack_id, PARKEZ_ADVICE_DESIGN_IDS)
+        if design_id is None:
+            raise ValueError("No hay diseños de consejos de ParkEz disponibles.")
+        background = AdviceBackground(design_id)
+        tips = parkez_advice_tips(pack_id, background)
+        hook_id, _ = self.state.peek_next_parkez_advice_hook_id(PARKEZ_ADVICE_HOOK_IDS)
+        copy_id, _ = self.state.peek_next_parkez_advice_social_copy_id(
+            pack_id, PARKEZ_ADVICE_SOCIAL_COPY_IDS,
+        )
+        if hook_id is None or copy_id is None:
+            raise ValueError("No hay textos de consejos de ParkEz disponibles.")
+        social_copy = parkez_advice_social_copy(pack_id, background, copy_id=copy_id, hook_id=hook_id)
+        job_id = self._build_job_id()
+        job_dir = self._job_output_dir(job_id, request.user_id)
+        r2_selection = self._download_next_parkez_advice_image_from_r2(job_dir)
+        slides_dir = job_dir / "slides"
+        slides_dir.mkdir(parents=True, exist_ok=True)
+        output_path = slides_dir / "slide_01.png"
+        script_text = format_advice_script(tips)
+        self.renderer.render_parkez_advice_card(tips, Language.ES, background).convert("RGB").save(
+            output_path, format="PNG", optimize=True,
+        )
+        media = MediaCandidate(
+            source_account="parkez_advice",
+            source_id=f"parkez:consejos:{design_id}:{pack_id}",
+            local_path=output_path,
+            permalink="",
+            caption="",
+            width=self.settings.width,
+            height=self.settings.height,
+            created_at=datetime.now(timezone.utc).isoformat(),
+        )
+        r2_media = self._normalize_advice_image(r2_selection.media, job_dir, label="ParkEz")
+        plan = VideoPlan(
+            chosen_account=media.source_id,
+            video_type=VideoType.PARKEZ_ADVICE,
+            language=Language.ES,
+            slides=[
+                SlidePlan(index=1, role=SlideRole.ADVICE_CARD, text=script_text, media=media, fixed_asset=True),
+                SlidePlan(index=2, role=SlideRole.ADVICE_R2_CLEAN, text="", media=r2_media, fixed_asset=False),
+            ],
+        )
+        script_path = self.renderer.write_script(plan, job_dir)
+        self.state.log_job(self.state.build_job_record(
+            job_id=job_id,
+            chosen_account=plan.chosen_account,
+            requested_accounts=[r2_media.source_id],
+            fallback_accounts=[],
+            video_type=plan.video_type,
+            language=Language.ES,
+            video_path=None,
+            script_path=str(script_path),
+            gender=request.gender.value,
+            user_id=request.user_id,
+            chat_id=request.chat_id,
+        ))
+        # Consume choices only after both images and the job record are ready.
+        self.state.remember_parkez_advice_pack_choice(pack_id, PARKEZ_ADVICE_PACK_IDS)
+        self.state.remember_parkez_advice_design_choice(pack_id, design_id, PARKEZ_ADVICE_DESIGN_IDS)
+        self.state.remember_parkez_advice_image_choice(r2_selection.queue_id, list(r2_selection.queue_ids))
+        self.state.remember_parkez_advice_hook_choice(hook_id, PARKEZ_ADVICE_HOOK_IDS)
+        self.state.remember_parkez_advice_social_copy_choice(pack_id, copy_id, PARKEZ_ADVICE_SOCIAL_COPY_IDS)
         self._cleanup_old_outputs()
         return GenerationResult(
             video_path=None,
@@ -930,23 +1040,58 @@ class VideoCreationService:
     def _download_next_type_4_image_from_r2(
         self,
         job_dir: Path,
-    ) -> _Type4AdviceR2Selection:
+    ) -> _AdviceR2Selection:
         prefix = (
             self.settings.r2_type_4_image_prefix.strip().strip("/")
             or DEFAULT_R2_TYPE_4_IMAGE_PREFIX
         )
+        return self._download_next_advice_image_from_r2(job_dir, prefix=prefix)
+
+    def _download_next_gograduate_image_from_r2(self, job_dir: Path) -> _AdviceR2Selection:
+        prefix = (
+            self.settings.r2_gograduate_image_prefix.strip().strip("/")
+            or DEFAULT_R2_GOGRADUATE_IMAGE_PREFIX
+        )
+        return self._download_next_advice_image_from_r2(
+            job_dir, prefix=prefix, video_type=VideoType.GOGRADUATE_TYPE_1,
+        )
+
+    def _download_next_parkez_advice_image_from_r2(self, job_dir: Path) -> _AdviceR2Selection:
+        prefix = (
+            self.settings.r2_parkez_advice_image_prefix.strip().strip("/")
+            or self.settings.r2_cartools_image_prefix.strip().strip("/")
+            or DEFAULT_R2_CARTOOLS_IMAGE_PREFIX
+        )
+        return self._download_next_advice_image_from_r2(
+            job_dir, prefix=prefix, video_type=VideoType.PARKEZ_ADVICE,
+        )
+
+    def _download_next_advice_image_from_r2(
+        self, job_dir: Path, *, prefix: str, video_type: VideoType = VideoType.ADVICE,
+    ) -> _AdviceR2Selection:
+        if video_type == VideoType.GOGRADUATE_TYPE_1:
+            label, origin, source_key, source_prefix = "GoGraduate", "de GoGraduate", "gograduate", "r2-gograduate"
+            peek_choice = self.state.peek_next_gograduate_image_id
+        elif video_type == VideoType.PARKEZ_ADVICE:
+            label, origin, source_key, source_prefix = "ParkEz", "de ParkEz", "parkez_advice", "r2-parkez-advice"
+            peek_choice = self.state.peek_next_parkez_advice_image_id
+        elif video_type == VideoType.ADVICE:
+            label, origin, source_key, source_prefix = "El Tipo 4", "del Tipo 4", "type_4", "r2-type4"
+            peek_choice = self.state.peek_next_type_4_image_id
+        else:
+            raise ValueError("Tipo de consejos no disponible para la cola R2.")
         if (
             getattr(self, "r2_storage", None) is None
             or not self.r2_storage.is_configured
         ):
             raise ValueError(
-                "El Tipo 4 necesita Cloudflare R2 configurado. Sube al menos "
+                f"{label} necesita Cloudflare R2 configurado. Sube al menos "
                 f"una imagen al prefijo {prefix!r}."
             )
 
         attempted_prefixes = [prefix]
         listing_prefix = f"{prefix}/" if prefix else ""
-        listed_images = self._list_type_4_images(listing_prefix)
+        listed_images = self._list_advice_images(listing_prefix)
         bucket_prefix = self.settings.r2_bucket.strip().strip("/")
         qualified_bucket_prefix = f"{bucket_prefix}/" if bucket_prefix else ""
         if (
@@ -958,12 +1103,12 @@ class VideoCreationService:
             if fallback_prefix:
                 attempted_prefixes.append(fallback_prefix)
                 fallback_listing_prefix = f"{fallback_prefix}/"
-                fallback_images = self._list_type_4_images(
+                fallback_images = self._list_advice_images(
                     fallback_listing_prefix
                 )
                 if fallback_images:
                     LOGGER.info(
-                        "R2 Type 4 prefix %s included bucket %s; using %s",
+                        "R2 advice prefix %s included bucket %s; using %s",
                         prefix,
                         bucket_prefix,
                         fallback_prefix,
@@ -975,42 +1120,43 @@ class VideoCreationService:
         images_by_identity: dict[str, R2Object] = {}
         for image in listed_images:
             identity = self._r2_template_content_identity(image)
+            if video_type != VideoType.ADVICE:
+                identity = f"{self.settings.r2_bucket}:{prefix}:{identity}"
             images_by_identity.setdefault(identity, image)
         if not images_by_identity:
             attempted = " o ".join(repr(item) for item in attempted_prefixes)
             raise ValueError(
-                "El Tipo 4 necesita al menos una imagen en R2 bajo el "
+                f"{label} necesita al menos una imagen en R2 bajo el "
                 f"prefijo {attempted}."
             )
 
         queue_ids = list(images_by_identity)
-        selected_identity, queue_restarted = self.state.peek_next_type_4_image_id(
-            queue_ids
-        )
+        selected_identity, queue_restarted = peek_choice(queue_ids)
         selected = images_by_identity.get(str(selected_identity or ""))
         if selected is None:
-            raise RuntimeError("La cola R2 del Tipo 4 no devolvió una imagen válida.")
+            raise RuntimeError(f"La cola R2 {origin} no devolvió una imagen válida.")
 
         suffix = Path(selected.key).suffix.lower()
         if suffix not in R2_IMAGE_EXTENSIONS:
             suffix = ".jpg"
-        local_path = job_dir / "type_4_inputs" / f"source_02{suffix}"
+        inputs_dir = f"{source_key}_inputs"
+        local_path = job_dir / inputs_dir / f"source_02{suffix}"
         downloaded = self.r2_storage.download(selected.key, local_path)
         try:
             with Image.open(downloaded) as image:
                 width, height = ImageOps.exif_transpose(image).size
         except OSError as error:
             raise ValueError(
-                f"La imagen {selected.key!r} del Tipo 4 no se pudo abrir."
+                f"La imagen {selected.key!r} {origin} no se pudo abrir."
             ) from error
 
-        return _Type4AdviceR2Selection(
+        return _AdviceR2Selection(
             media=MediaCandidate(
-                source_account="r2_type_4",
-                source_id=f"r2-type4:{selected.key}",
+                source_account=f"r2_{source_key}",
+                source_id=f"{source_prefix}:{selected.key}",
                 local_path=downloaded,
                 permalink=f"r2:{selected.key}",
-                caption="clean Type 4 R2 image",
+                caption=f"clean {label if video_type != VideoType.ADVICE else 'Type 4'} R2 image",
                 width=width,
                 height=height,
                 created_at="r2",
@@ -1021,7 +1167,7 @@ class VideoCreationService:
             queue_restarted=queue_restarted,
         )
 
-    def _list_type_4_images(self, listing_prefix: str) -> list[R2Object]:
+    def _list_advice_images(self, listing_prefix: str) -> list[R2Object]:
         """Put the newest R2 uploads first, with a stable key order for ties."""
         return sorted(
             (
@@ -1042,6 +1188,12 @@ class VideoCreationService:
         media: MediaCandidate,
         job_dir: Path,
     ) -> MediaCandidate:
+        return self._normalize_advice_image(media, job_dir, label="Tipo 4")
+
+    def _normalize_advice_image(
+        self, media: MediaCandidate, job_dir: Path, *, label: str,
+    ) -> MediaCandidate:
+        origin = "del Tipo 4" if label == "Tipo 4" else f"de {label}"
         output_path = job_dir / "slides" / "slide_02.png"
         output_path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -1054,7 +1206,7 @@ class VideoCreationService:
                 )
         except OSError as error:
             raise ValueError(
-                f"La imagen R2 del Tipo 4 {media.local_path} no se pudo normalizar."
+                f"La imagen R2 {origin} {media.local_path} no se pudo normalizar."
             ) from error
         normalized.save(
             output_path,

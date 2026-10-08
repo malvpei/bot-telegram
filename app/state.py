@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import tempfile
 import time
 from contextlib import contextmanager
@@ -69,6 +70,11 @@ class StateStore:
         self._gograduate_type_1_design_queue_path = (
             self.state_dir / "gograduate_type_1_design_queue.json"
         )
+        self._gograduate_image_queue_path = self.state_dir / "gograduate_image_queue.json"
+        self._gograduate_hook_queue_path = self.state_dir / "gograduate_hook_queue.json"
+        self._parkez_advice_queue_path = self.state_dir / "parkez_advice_queue.json"
+        self._parkez_advice_image_queue_path = self.state_dir / "parkez_advice_image_queue.json"
+        self._parkez_advice_hook_queue_path = self.state_dir / "parkez_advice_hook_queue.json"
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
@@ -1015,6 +1021,129 @@ class StateStore:
         return self._remember_simple_cycle_choice(
             self._gograduate_type_1_design_queue_path, selected_id, design_ids,
             prefer_input_order=True,
+        )
+
+    def peek_next_gograduate_image_id(
+        self, image_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(
+            self._gograduate_image_queue_path, image_ids, prefer_input_order=True,
+        )
+
+    def remember_gograduate_image_choice(
+        self, selected_id: str, image_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._gograduate_image_queue_path, selected_id, image_ids,
+            prefer_input_order=True,
+        )
+
+    def peek_next_gograduate_hook_id(
+        self, hook_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(
+            self._gograduate_hook_queue_path, hook_ids, prefer_input_order=True,
+        )
+
+    def remember_gograduate_hook_choice(
+        self, selected_id: str, hook_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._gograduate_hook_queue_path, selected_id, hook_ids,
+            prefer_input_order=True,
+        )
+
+    def _gograduate_social_copy_path(self, pack_id: str) -> Path:
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", pack_id):
+            raise ValueError("El identificador de consejos de GoGraduate no es válido.")
+        return self.state_dir / f"gograduate_social_{pack_id}_queue.json"
+
+    def peek_next_gograduate_social_copy_id(
+        self, pack_id: str, copy_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(self._gograduate_social_copy_path(pack_id), copy_ids)
+
+    def remember_gograduate_social_copy_choice(
+        self, pack_id: str, selected_id: str, copy_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._gograduate_social_copy_path(pack_id), selected_id, copy_ids,
+        )
+
+    def peek_next_parkez_advice_pack_id(
+        self, pack_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(self._parkez_advice_queue_path, pack_ids)
+
+    def remember_parkez_advice_pack_choice(
+        self, selected_id: str, pack_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._parkez_advice_queue_path, selected_id, pack_ids,
+        )
+
+    def _parkez_advice_scoped_queue_path(self, pack_id: str, kind: str) -> Path:
+        if kind not in {"design", "social"} or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", pack_id):
+            raise ValueError("El identificador de consejos de ParkEz no es válido.")
+        return self.state_dir / f"parkez_advice_{kind}_{pack_id}_queue.json"
+
+    def peek_next_parkez_advice_design_id(
+        self, pack_id: str, design_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        # Each pack visits both designs, even when the pack cycle has even length.
+        return self._peek_simple_cycle_id(
+            self._parkez_advice_scoped_queue_path(pack_id, "design"), design_ids,
+            prefer_input_order=True,
+        )
+
+    def remember_parkez_advice_design_choice(
+        self, pack_id: str, selected_id: str, design_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._parkez_advice_scoped_queue_path(pack_id, "design"), selected_id, design_ids,
+            prefer_input_order=True,
+        )
+
+    def peek_next_parkez_advice_image_id(
+        self, image_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(
+            self._parkez_advice_image_queue_path, image_ids, prefer_input_order=True,
+        )
+
+    def remember_parkez_advice_image_choice(
+        self, selected_id: str, image_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._parkez_advice_image_queue_path, selected_id, image_ids, prefer_input_order=True,
+        )
+
+    def peek_next_parkez_advice_hook_id(
+        self, hook_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(
+            self._parkez_advice_hook_queue_path, hook_ids, prefer_input_order=True,
+        )
+
+    def remember_parkez_advice_hook_choice(
+        self, selected_id: str, hook_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._parkez_advice_hook_queue_path, selected_id, hook_ids, prefer_input_order=True,
+        )
+
+    def peek_next_parkez_advice_social_copy_id(
+        self, pack_id: str, copy_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        return self._peek_simple_cycle_id(
+            self._parkez_advice_scoped_queue_path(pack_id, "social"), copy_ids,
+        )
+
+    def remember_parkez_advice_social_copy_choice(
+        self, pack_id: str, selected_id: str, copy_ids: list[str],
+    ) -> bool:
+        return self._remember_simple_cycle_choice(
+            self._parkez_advice_scoped_queue_path(pack_id, "social"), selected_id, copy_ids,
         )
 
     def read_media_pool(self) -> dict[str, Any]:

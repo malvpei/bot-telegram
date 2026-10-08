@@ -43,6 +43,7 @@ from app.bot import (
     gograduate_command,
     gograduate_type_1,
     parkez_gender,
+    parkez_advice,
     parkez_mode3,
     parkez_tools,
     story_carousel_command,
@@ -56,7 +57,9 @@ from app.bot import (
 from app.config import get_settings
 from app.batches import BatchItem, BatchItemKind
 from app.car_tools import CAR_TOOLS_HOOK
+from app.gograduate import GOGRADUATE_HOOK_IDS, GOGRADUATE_HOOKS
 from app.parkez_mode3 import PARKEZ_MODE3_TEXTS
+from app.parkez_advice import PARKEZ_ADVICE_HOOK_IDS, PARKEZ_ADVICE_HOOKS
 from app.state import StateStore
 from app.models import (
     CAR_TOOLS_ROLES,
@@ -1757,7 +1760,8 @@ def test_gograduate_submenu_type_1_starts_student_cards_without_accounts():
     assert request.separate_slide_text is False
 
 
-def test_gograduate_sends_social_messages_and_image_without_account_controls():
+@pytest.mark.parametrize("hook_id", GOGRADUATE_HOOK_IDS)
+def test_gograduate_sends_hook_title_description_and_both_images_without_account_controls(hook_id, tmp_path):
     context = FakeContext()
     context.bot = type("GoGraduateBot", (), {
         "send_message": AsyncMock(return_value=FakeStatusMessage()),
@@ -1765,12 +1769,23 @@ def test_gograduate_sends_social_messages_and_image_without_account_controls():
     result = GenerationResult(
         video_path=None, script_path=Path("script.txt"), preview_text="Cinco consejos",
         social_copy=SocialCopy(
-            hook="5 trucos para estudiantes", title="Estudia mejor",
+            hook=GOGRADUATE_HOOKS[hook_id], title="Estudia mejor",
             description="Tus apuntes con GoGraduate", hashtags=["#estudiantes"],
         ),
         chosen_account="gograduate:tipo1:students-01",
         video_type=VideoType.GOGRADUATE_TYPE_1, language=Language.ES,
-        fallback_accounts=[], slides=[],
+        fallback_accounts=[],
+        slides=[
+            SlidePlan(
+                index=index, role=role, text="Consejos" if index == 1 else "",
+                media=MediaCandidate(
+                    source_account="gograduate", source_id=f"image-{index}",
+                    local_path=tmp_path / f"slide_0{index}.png", permalink="", caption="",
+                    width=1080, height=1920, created_at="",
+                ),
+            )
+            for index, role in enumerate([SlideRole.ADVICE_CARD, SlideRole.ADVICE_R2_CLEAN], start=1)
+        ],
     )
     service = type("GoGraduateService", (), {"create_video": lambda self, request: result})()
     context.application = FakeApplication(service)
@@ -1786,12 +1801,15 @@ def test_gograduate_sends_social_messages_and_image_without_account_controls():
     texts = [call.args[2] for call in send.call_args_list]
     assert texts[0].startswith("GoGraduate · Tipo 1 listo")
     assert texts[1:] == result.social_copy.messages
+    assert texts[1] == GOGRADUATE_HOOKS[hook_id]
     album.assert_awaited_once()
+    assert album.call_args.args[2] == result.slides
+    assert len(album.call_args.args[2]) == 2
     assert album.call_args.kwargs["separate_slide_text"] is False
     assert "repeat_request" not in context.user_data
 
 
-def test_createp_offers_woman_man_tools_and_mode3():
+def test_createp_offers_woman_man_tools_mode3_and_advice():
     async def allow(update):
         return True
 
@@ -1814,12 +1832,70 @@ def test_createp_offers_woman_man_tools_and_mode3():
     assert [[button.text for button in row] for row in buttons] == [
         ["Mujer", "Hombre"],
         ["Tools", "mode3"],
+        ["Consejos"],
     ]
     assert [[button.callback_data for button in row] for row in buttons] == [
         ["parkez:gender:female", "parkez:gender:male"],
         ["parkez:tools", "parkez:mode3"],
+        ["parkez:advice"],
     ]
     assert "repeat_request" not in context.user_data
+
+
+def test_createp_advice_callback_starts_its_own_carousel_without_accounts():
+    context = FakeContext()
+    context.user_data.update({"accounts_by_gender": {"male": [], "female": []}, "repeat_request": {"chosen_account": "stale"}})
+    query = FakeRegenerateQuery("parkez:advice")
+    execute = AsyncMock()
+    with patch("app.bot._execute_job", execute):
+        state = asyncio.run(parkez_advice(FakeRegenerateUpdate(query), context))
+    assert state == ConversationHandler.END
+    assert query.answered is True
+    assert context.user_data == {}
+    request = execute.call_args.args[2]
+    assert request.video_type == VideoType.PARKEZ_ADVICE
+    assert request.language == Language.ES
+    assert request.account_inputs == []
+    assert request.separate_slide_text is False
+
+
+@pytest.mark.parametrize("hook_id", PARKEZ_ADVICE_HOOK_IDS)
+def test_parkez_advice_sends_independent_copy_and_two_uncompressed_images_without_account_controls(hook_id, tmp_path):
+    context = FakeContext()
+    context.bot = type("ParkEzBot", (), {"send_message": AsyncMock(return_value=FakeStatusMessage())})()
+    slides = []
+    for index, role in enumerate([SlideRole.ADVICE_CARD, SlideRole.ADVICE_R2_CLEAN], start=1):
+        path = tmp_path / f"slide_0{index}.png"
+        Image.new("RGB", (90, 160), "blue").save(path)
+        slides.append(SlidePlan(
+            index=index, role=role, text="Consejos" if index == 1 else "",
+            media=MediaCandidate(source_account="parkez_advice", source_id=f"image-{index}",
+                                 local_path=path, permalink="", caption="", width=90, height=160, created_at=""),
+        ))
+    result = GenerationResult(
+        video_path=None, script_path=tmp_path / "script.txt", preview_text="Consejos",
+        social_copy=SocialCopy(hook=PARKEZ_ADVICE_HOOKS[hook_id], title="Tu próximo trayecto", description="Prepara la llegada con ParkEz", hashtags=["#ParkEz"]),
+        chosen_account="parkez:consejos:illustrated:apps-01", video_type=VideoType.PARKEZ_ADVICE,
+        language=Language.ES, fallback_accounts=[], slides=slides,
+    )
+    service = type("ParkEzAdviceService", (), {"create_video": lambda self, request: result})()
+    context.application = FakeApplication(service)
+    update = FakeUpdate()
+    update.effective_chat = FakeChat()
+    send = AsyncMock()
+    album = AsyncMock()
+    with patch("app.bot._send_message", send), patch("app.bot._send_slides_text_then_image", album):
+        asyncio.run(_execute_job(update, context, VideoRequest(chat_id=123, user_id=456, video_type=VideoType.PARKEZ_ADVICE, language=Language.ES, account_inputs=[])))
+    texts = [call.args[2] for call in send.call_args_list]
+    assert texts[0].startswith("ParkEz · Consejos listo")
+    assert texts[1:] == result.social_copy.messages
+    assert "repeat_request" not in context.user_data
+    assert album.call_args.kwargs["video_type"] == VideoType.PARKEZ_ADVICE
+    assert album.call_args.kwargs["separate_slide_text"] is False
+    image_context = type("ImagesContext", (), {"bot": FakeTelegramBot()})()
+    asyncio.run(_send_slides_text_then_image(image_context, 123, slides, video_type=VideoType.PARKEZ_ADVICE, separate_slide_text=False))
+    assert image_context.bot.media_group_types == [(InputMediaDocument, InputMediaDocument)]
+    assert image_context.bot.media_group_payloads == [tuple(slide.media.local_path.read_bytes() for slide in slides)]
 
 
 def test_createp_tools_callback_starts_embedded_spanish_carousel_without_accounts():

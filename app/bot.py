@@ -142,6 +142,7 @@ def run_bot() -> None:
                 CallbackQueryHandler(parkez_gender, pattern=r"^parkez:gender:(?:female|male)$"),
                 CallbackQueryHandler(parkez_tools, pattern=r"^parkez:tools$"),
                 CallbackQueryHandler(parkez_mode3, pattern=r"^parkez:mode3$"),
+                CallbackQueryHandler(parkez_advice, pattern=r"^parkez:advice$"),
                 CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:5|advice)$"),
                 CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:male$"),
             ],
@@ -870,7 +871,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/schedule 5 08:00 17:00 - programar lotes diarios\n"
         "/schedule off - desactivar la programacion\n"
         "/create — crear contenido con fotos de hombres\n"
-        "/createp — crear carruseles promocionales de ParkEz y Tools\n"
+        "/createp — crear carruseles de ParkEz: Mujer, Hombre, Tools, mode3 y Consejos\n"
         "/g — crear contenido de GoGraduate para estudiantes\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
@@ -978,18 +979,20 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "5 = comparación de negocios con tres fotos R2 aleatorias y cierre fijo\n"
         "\nParkEz:\n"
         "1. /createp\n"
-        "2. elige Mujer, Hombre, Tools o mode3\n"
-        "3. el bot entrega tres fotos del banco correspondiente y un cierre "
-        "fijo de ParkEz, siempre con los cuatro textos separados\n"
+        "2. elige Mujer, Hombre, Tools, mode3 o Consejos\n"
+        "3. Mujer y Hombre entregan tres fotos del banco correspondiente y un cierre "
+        "fijo de ParkEz, con los cuatro textos separados\n"
         "4. Tools entrega cuatro diseños con texto incrustado y una quinta "
         "imagen de la cola R2 cartools, dentro del bucket configurado\n"
         "5. mode3 usa fotos del pool de Dropradar, el cierre de Hombre y textos "
         "sobre carnet, velocidad, radares y aparcamiento; rota 15 títulos y descripciones\n"
-        "6. en Mujer, Hombre o mode3 puedes pedir otra foto distinta de la misma cuenta\n\n"
+        "6. Consejos entrega un diseño con tips y una foto R2, más hook, título y "
+        "descripción separados; rota apps útiles, conducción y aparcamiento\n"
+        "7. en Mujer, Hombre o mode3 puedes pedir otra foto distinta de la misma cuenta\n\n"
         "GoGraduate:\n"
         "1. /g\n"
         "2. elige Tipo 1: cuatro tarjetas o cinco filas de consejos para estudiantes, con "
-        "el icono de GoGraduate y textos relacionados fuera de la imagen\n\n"
+        "el icono de GoGraduate, una foto limpia de R2 y textos separados que rotan\n\n"
         "Las cuentas de hombres se leen de accounts.txt. Las de mujeres se "
         "leen de accounts_women.txt para el flujo /createp (una por línea).\n\n"
         "/create usa primero el pool local si hay fotos aptas. "
@@ -1623,6 +1626,7 @@ async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 ),
                 InlineKeyboardButton("mode3", callback_data="parkez:mode3"),
             ],
+            [InlineKeyboardButton("Consejos", callback_data="parkez:advice")],
         ]
     )
     await update.effective_message.reply_text(
@@ -1646,6 +1650,26 @@ async def parkez_tools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
         language=Language.ES,
         account_inputs=[],
         lowercase_text=False,
+        separate_slide_text=False,
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
+
+
+async def parkez_advice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("repeat_request", None)
+    await query.edit_message_text(
+        "Preparando consejos de ParkEz: apps útiles, conducción y aparcamiento."
+    )
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.PARKEZ_ADVICE,
+        language=Language.ES,
+        account_inputs=[],
         separate_slide_text=False,
     )
     await _execute_job(update, context, request)
@@ -2247,7 +2271,9 @@ async def _execute_job(
 ) -> None:
     chat = update.effective_chat
     if request.video_type == VideoType.GOGRADUATE_TYPE_1:
-        status_text = "Estoy creando el siguiente diseño de consejos para estudiantes."
+        status_text = "Estoy creando los consejos y preparando la siguiente imagen de R2 para GoGraduate."
+    elif request.video_type == VideoType.PARKEZ_ADVICE:
+        status_text = "Estoy creando los consejos de ParkEz y preparando su siguiente imagen de R2."
     elif request.video_type == VideoType.ADVICE:
         status_text = (
             "Estoy creando el siguiente diseño rotativo del Tipo 4 y preparando "
@@ -2297,7 +2323,14 @@ async def _execute_job(
     if result.video_type == VideoType.GOGRADUATE_TYPE_1:
         header = (
             "GoGraduate · Tipo 1 listo\n"
-            "Entrega: una imagen de consejos para estudiantes"
+            "Entrega: diseño de consejos + imagen limpia de R2\n"
+            "Hook, título y descripción de las colas de GoGraduate"
+        )
+    elif result.video_type == VideoType.PARKEZ_ADVICE:
+        header = (
+            "ParkEz · Consejos listo\n"
+            "Entrega: diseño de consejos + imagen limpia de R2\n"
+            "Hook, título y descripción de las colas de Consejos"
         )
     elif result.video_type == VideoType.ADVICE:
         header = (
@@ -2383,6 +2416,7 @@ async def _execute_job(
             VideoType.ADVICE,
             VideoType.TOOLS,
             VideoType.GOGRADUATE_TYPE_1,
+            VideoType.PARKEZ_ADVICE,
         }:
             return
         context.user_data["repeat_request"] = {

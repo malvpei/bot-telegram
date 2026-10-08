@@ -14,6 +14,7 @@ DEFAULT_POOL_REFILL_MAX_ACCOUNTS = 12
 DEFAULT_POOL_REFILL_MAX_FRESH_ACCOUNTS = 8
 DEFAULT_R2_IMAGE_PREFIX = "imagenes"
 DEFAULT_R2_TYPE_4_IMAGE_PREFIX = "4"
+DEFAULT_R2_GOGRADUATE_IMAGE_PREFIX = "c"
 DEFAULT_R2_TYPE_5_IMAGE_PREFIX = "tipo4/imagenstipo4"
 DEFAULT_R2_CARTOOLS_IMAGE_PREFIX = "cartools"
 DEFAULT_UPLOAD_SITE_ENABLED = True
@@ -166,8 +167,10 @@ class Settings:
     r2_input_prefix: str
     r2_image_prefix: str
     r2_type_4_image_prefix: str
+    r2_gograduate_image_prefix: str
     r2_type_5_image_prefix: str
     r2_cartools_image_prefix: str
+    r2_parkez_advice_image_prefix: str
     upload_site_enabled: bool
     upload_site_host: str
     upload_site_port: int
@@ -236,6 +239,10 @@ def get_settings() -> Settings:
         "WOMEN_ACCOUNTS_FILE",
         root_dir / "accounts_women.txt",
         root_dir,
+    )
+    r2_cartools_image_prefix = (
+        os.getenv("R2_CARTOOLS_IMAGE_PREFIX", DEFAULT_R2_CARTOOLS_IMAGE_PREFIX)
+        .strip().strip("/") or DEFAULT_R2_CARTOOLS_IMAGE_PREFIX
     )
 
     return Settings(
@@ -311,20 +318,22 @@ def get_settings() -> Settings:
             .strip("/")
             or DEFAULT_R2_TYPE_4_IMAGE_PREFIX
         ),
+        r2_gograduate_image_prefix=(
+            os.getenv("R2_GOGRADUATE_IMAGE_PREFIX", DEFAULT_R2_GOGRADUATE_IMAGE_PREFIX)
+            .strip()
+            .strip("/")
+            or DEFAULT_R2_GOGRADUATE_IMAGE_PREFIX
+        ),
         r2_type_5_image_prefix=os.getenv(
             "R2_TYPE_5_IMAGE_PREFIX",
             DEFAULT_R2_TYPE_5_IMAGE_PREFIX,
         )
         .strip()
         .lstrip("/"),
-        r2_cartools_image_prefix=(
-            os.getenv(
-                "R2_CARTOOLS_IMAGE_PREFIX",
-                DEFAULT_R2_CARTOOLS_IMAGE_PREFIX,
-            )
-            .strip()
-            .strip("/")
-            or DEFAULT_R2_CARTOOLS_IMAGE_PREFIX
+        r2_cartools_image_prefix=r2_cartools_image_prefix,
+        r2_parkez_advice_image_prefix=(
+            os.getenv("R2_PARKEZ_ADVICE_IMAGE_PREFIX", r2_cartools_image_prefix)
+            .strip().strip("/") or r2_cartools_image_prefix
         ),
         upload_site_enabled=_env_bool(
             "UPLOAD_SITE_ENABLED",

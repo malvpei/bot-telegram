@@ -3,11 +3,26 @@ from __future__ import annotations
 from pathlib import Path
 
 from app.advice_cards import AdviceBackground, AdviceTip
+from app.gograduate_social import (
+    GOGRADUATE_SOCIAL_COPY_IDS,
+    GOGRADUATE_SOCIAL_INTROS,
+    GOGRADUATE_SOCIAL_TITLES,
+)
 from app.models import SocialCopy
 
 
 GOGRADUATE_ICON_RELATIVE_PATH = Path("assets/gograduate.png")
-GOGRADUATE_HOOK = "{count} trucos para estudiantes que no te cuentan en clase"
+GOGRADUATE_HOOKS = {
+    "oxford": (
+        "Un amigo que entro en Oxford me dio el consejo numero #1 "
+        "para aprobar cualquier examen"
+    ),
+    "biomedicina": (
+        "Un amigo que se graduo en biomedicina con matricula de honor "
+        "me dio el consejo numero #1 para aprobar cualquier examen"
+    ),
+}
+GOGRADUATE_HOOK_IDS = list(GOGRADUATE_HOOKS)
 GOGRADUATE_BACKGROUNDS = (AdviceBackground.ILLUSTRATED, AdviceBackground.EDITORIAL)
 GOGRADUATE_DESIGN_IDS = [background.value for background in GOGRADUATE_BACKGROUNDS]
 GOGRADUATE_PROMO = AdviceTip(
@@ -117,31 +132,6 @@ GOGRADUATE_PACKS: dict[str, tuple[AdviceTip, ...]] = {
 }
 
 GOGRADUATE_PACK_IDS = list(GOGRADUATE_PACKS)
-_SOCIAL_COPY = {
-    "students-01": (
-        "Estudiar más no siempre es estudiar mejor",
-        "Recordar sin mirar, repartir los repasos y mezclar ejercicios"
-        "{error_habit}: hábitos para tus próximas sesiones. "
-        "El último consejo es usar GoGraduate como tu propio profesor con tus apuntes.",
-    ),
-    "students-02": (
-        "Deja de copiar apuntes y empieza a hacerte preguntas",
-        "Transforma los apartados en preguntas, intenta responder antes de "
-        "corregir y detecta qué conceptos estás confundiendo. Guarda estos "
-        "{count_word} consejos para estudiantes y prepara tus apuntes con GoGraduate.",
-    ),
-    "students-03": (
-        "La hoja en blanco también sirve para estudiar",
-        "¿Qué recuerdas antes de abrir los apuntes? Prueba a recuperarlo, "
-        "explica tus errores y compruébalo otra vez días después. {count_title} "
-        "consejos de estudio con GoGraduate como cierre.",
-    ),
-    "students-04": (
-        "Si cambia la pregunta, ¿sigues sabiendo la respuesta?",
-        "Practica con ejemplos diferentes, esconde las respuestas y decide "
-        "qué método necesitas antes de resolver. {last_step}",
-    ),
-}
 
 
 def gograduate_tips(
@@ -157,21 +147,21 @@ def gograduate_tips(
 
 def gograduate_social_copy(
     pack_id: str, background: AdviceBackground = AdviceBackground.ILLUSTRATED,
+    *, copy_id: str = GOGRADUATE_SOCIAL_COPY_IDS[0], hook_id: str = GOGRADUATE_HOOK_IDS[0],
 ) -> SocialCopy:
-    count = len(gograduate_tips(pack_id, background))
-    count_word = "cuatro" if count == 4 else "cinco"
-    title, description = _SOCIAL_COPY[pack_id]
+    tips = gograduate_tips(pack_id, background)
+    count_word = "cuatro" if len(tips) == 4 else "cinco"
+    copy_index = GOGRADUATE_SOCIAL_COPY_IDS.index(copy_id)
+    intro = GOGRADUATE_SOCIAL_INTROS[copy_index].format(count_word=count_word)
+    points = "\n\n".join(
+        f"{index}. {tip.title}: {tip.body}" for index, tip in enumerate(tips, start=1)
+    )
     return SocialCopy(
-        title=title,
-        description=description.format(
-            count_word=count_word,
-            count_title=count_word.capitalize(),
-            error_habit=" y aprender de los errores" if count == 5 else "",
-            last_step=(
-                "Vuelve a los errores del último repaso y usa GoGraduate con tus apuntes."
-                if count == 5 else "Usa GoGraduate con tus apuntes."
-            ),
+        title=GOGRADUATE_SOCIAL_TITLES[pack_id][copy_index],
+        description=(
+            f"{intro}\n\n{points}\n\n"
+            "Guarda estos consejos para tu próximo repaso y prepara tus apuntes con GoGraduate."
         ),
         hashtags=["#estudiantes", "#estudio", "#examenes", "#gograduate"],
-        hook=GOGRADUATE_HOOK.format(count=count),
+        hook=GOGRADUATE_HOOKS[hook_id],
     )
