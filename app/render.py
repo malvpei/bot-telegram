@@ -468,10 +468,10 @@ class VideoRenderer:
             max_height=round(height * 0.20),
             base_size=max(10, round(width * 0.060)),
             min_size=max(8, round(width * 0.038)),
-            bold=True,
+            bold=False,
             stroke_width=0,
             line_gap=max(2, round(width * 0.015)),
-            font_loader=self._load_parkez_apps_font,
+            font_loader=self._load_parkez_apps_description_font,
         )
         padding_x = max(2, round(width * 0.021))
         padding_y = max(2, round(width * 0.013))
@@ -489,8 +489,9 @@ class VideoRenderer:
             padding_x=padding_x,
             padding_y=padding_y,
             line_gap=line_gap,
+            faux_bold=False,
         )
-        save_font = self._load_parkez_apps_font(max(8, round(width * 0.042)), True)
+        save_font = self._load_parkez_apps_description_font(max(8, round(width * 0.042)), False)
         save_text = "(Guarda esto)"
         bbox = draw.textbbox((0, 0), save_text, font=save_font)
         draw.text(

@@ -353,9 +353,13 @@ en cajas blancas redondeadas. Notion, Claude, Waze y Mathway conservan los texto
 de las capturas; ScreenZen, Fintonic y ParkEz llevan explicaciones de sus funciones.
 
 Los tres hooks proporcionados se alternan, respetando literalmente su texto.
-También se envían hook, título y descripción en mensajes separados: veinte
+Los hooks y las explicaciones de las apps utilizan una tipografía de peso medio,
+sin negrita artificial; los nombres de las fichas mantienen su negrita.
+También se envían hook, título y descripción en mensajes separados: cuarenta
 variantes de título y descripción se adaptan a las apps que aparecen realmente
-en ese carrusel. Los fondos se descargan únicamente de `apps/` dentro del bucket
+en ese carrusel. Las veinte nuevas incluyen nombres y usos de las apps
+seleccionadas, con explicaciones variadas, sin reiniciar la cola anterior.
+Los fondos se descargan únicamente de `apps/` dentro del bucket
 existente `videos`, configurable con `R2_PARKEZ_APPS_IMAGE_PREFIX`; no se crea un
 bucket independiente ni se toman fotos de Tools como alternativa. R2 representa
 las carpetas mediante prefijos: basta con subir al menos cinco fondos a

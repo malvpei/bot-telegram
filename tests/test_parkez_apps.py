@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+from itertools import combinations
 from pathlib import Path
 from threading import Lock
 
@@ -12,6 +13,8 @@ from app.parkez_apps import (
     APP_BY_KEY,
     PARKEZ_APP,
     PARKEZ_APPS_HOOKS,
+    PARKEZ_APPS_SOCIAL_COPY_IDS,
+    PARKEZ_APPS_SOCIAL_VARIANT_COUNT,
     ROTATING_APPS,
     build_parkez_apps_social_copy,
 )
@@ -22,7 +25,7 @@ from app.state import StateStore
 
 
 HOOK_IDS = [str(index) for index in range(3)]
-COPY_IDS = [str(index) for index in range(20)]
+COPY_IDS = list(PARKEZ_APPS_SOCIAL_COPY_IDS)
 
 
 def test_requested_hooks_and_reference_app_store_cards_are_literal():
@@ -60,11 +63,23 @@ def test_requested_hooks_and_reference_app_store_cards_are_literal():
     assert all(app.icon_file for app in (*ROTATING_APPS, PARKEZ_APP))
 
 
-@pytest.mark.parametrize("selected", [ROTATING_APPS[:3], ROTATING_APPS[3:]])
-def test_twenty_social_copies_are_distinct_and_match_only_the_visible_apps(selected):
-    copies = [build_parkez_apps_social_copy(PARKEZ_APPS_HOOKS[0], selected, index) for index in range(20)]
-    assert len({copy.title for copy in copies}) == 20
-    assert len({copy.description for copy in copies}) == 20
+def test_social_catalog_has_forty_stable_ids_and_preserves_the_original_twenty():
+    assert PARKEZ_APPS_SOCIAL_VARIANT_COUNT == 40
+    assert COPY_IDS == [str(index) for index in range(PARKEZ_APPS_SOCIAL_VARIANT_COUNT)]
+    assert COPY_IDS[:20] == [str(index) for index in range(20)]
+
+
+@pytest.mark.parametrize(
+    "selected", tuple(combinations(ROTATING_APPS, 3)),
+    ids=lambda selected: "-".join(app.key for app in selected),
+)
+def test_forty_social_copies_are_distinct_and_match_only_the_visible_apps(selected):
+    copies = [
+        build_parkez_apps_social_copy(PARKEZ_APPS_HOOKS[0], selected, int(copy_id))
+        for copy_id in COPY_IDS
+    ]
+    assert len({copy.title for copy in copies}) == PARKEZ_APPS_SOCIAL_VARIANT_COUNT
+    assert len({copy.description for copy in copies}) == PARKEZ_APPS_SOCIAL_VARIANT_COUNT
     expected_names = [selected[0].name, selected[1].name, "ParkEz", selected[2].name]
     absent = set(app.name for app in ROTATING_APPS) - set(expected_names)
     for copy in copies:
@@ -73,8 +88,43 @@ def test_twenty_social_copies_are_distinct_and_match_only_the_visible_apps(selec
         assert all(len(message) <= 4096 for message in copy.messages)
         numbered_rows = [line for line in copy.description.splitlines() if line[:1].isdigit()]
         assert [row.split(". ", 1)[1].split(":", 1)[0] for row in numbered_rows] == expected_names
-        assert not any(name in copy.description for name in absent)
-    assert build_parkez_apps_social_copy(PARKEZ_APPS_HOOKS[0], selected, 20) == copies[0]
+        assert not any(name in f"{copy.title}\n{copy.description}" for name in absent)
+        assert "{" not in copy.title and "}" not in copy.title
+        assert "{" not in copy.description and "}" not in copy.description
+    assert build_parkez_apps_social_copy(
+        PARKEZ_APPS_HOOKS[0], selected, PARKEZ_APPS_SOCIAL_VARIANT_COUNT,
+    ) == copies[0]
+
+
+@pytest.mark.parametrize("copy_id", COPY_IDS[20:])
+def test_new_social_titles_and_intros_follow_the_selected_apps(copy_id):
+    selections = (ROTATING_APPS[:3], tuple(reversed(ROTATING_APPS[3:])))
+    copies = [
+        build_parkez_apps_social_copy(PARKEZ_APPS_HOOKS[0], selected, int(copy_id))
+        for selected in selections
+    ]
+    assert copies[0].title != copies[1].title
+    assert copies[0].description.split("\n\n", 1)[0] != copies[1].description.split("\n\n", 1)[0]
+    for selected, copy in zip(selections, copies):
+        intro = copy.description.split("\n\n", 1)[0]
+        assert any(app.name in copy.title for app in selected)
+        assert any(app.name in intro for app in selected)
+        numbered_rows = [line for line in copy.description.splitlines() if line[:1].isdigit()]
+        assert [row.split(". ", 1)[1].split(":", 1)[0] for row in numbered_rows] == [
+            selected[0].name, selected[1].name, PARKEZ_APP.name, selected[2].name,
+        ]
+
+
+@pytest.mark.parametrize("selected", [ROTATING_APPS[:3], ROTATING_APPS[3:]])
+def test_new_social_descriptions_vary_each_visible_app_explanation(selected):
+    summaries = {app.name: set() for app in (*selected, PARKEZ_APP)}
+    for copy_id in COPY_IDS[20:]:
+        copy = build_parkez_apps_social_copy(PARKEZ_APPS_HOOKS[0], selected, int(copy_id))
+        for row in copy.description.splitlines():
+            if row[:1].isdigit():
+                name, summary = row.split(". ", 1)[1].split(": ", 1)
+                summaries[name].add(summary)
+    assert all(len(app_summaries) > 1 for app_summaries in summaries.values())
 
 
 @pytest.mark.parametrize("apps", [(), ROTATING_APPS[:2], (ROTATING_APPS[0],) * 3, (ROTATING_APPS[0], ROTATING_APPS[1], PARKEZ_APP)])
@@ -103,7 +153,7 @@ def test_apps_queue_peek_is_read_only_and_all_rotations_survive_restart(tmp_path
     copies = []
     previous_apps = set()
     previous_images = set()
-    for index in range(20):
+    for index in range(PARKEZ_APPS_SOCIAL_VARIANT_COUNT):
         choices = state.peek_parkez_apps_choices(*inputs)
         assert len(choices["app_ids"]) == len(set(choices["app_ids"])) == 3
         assert len(choices["image_ids"]) == len(set(choices["image_ids"])) == 5
@@ -122,8 +172,36 @@ def test_apps_queue_peek_is_read_only_and_all_rotations_survive_restart(tmp_path
         assert (path.read_bytes() if path.exists() else None) == before
         state.commit_parkez_apps_choices(choices, *inputs)
         state = StateStore(state.state_dir)
-    assert hooks == [HOOK_IDS[index % 3] for index in range(20)]
+    assert hooks == [HOOK_IDS[index % 3] for index in range(PARKEZ_APPS_SOCIAL_VARIANT_COUNT)]
     assert copies == COPY_IDS
+    assert state.peek_parkez_apps_choices(*inputs)["copy_id"] == COPY_IDS[0]
+
+
+@pytest.mark.parametrize("consumed", [7, 20])
+def test_expanding_social_queue_to_forty_adds_new_ids_without_repeating_consumed_copies(tmp_path, consumed):
+    inputs = _queue_inputs()
+    original_inputs = (*inputs[:3], COPY_IDS[:20])
+    state = StateStore(tmp_path / "state")
+    path = state.state_dir / "parkez_apps_queues.json"
+    for expected_id in COPY_IDS[:consumed]:
+        choices = state.peek_parkez_apps_choices(*original_inputs)
+        assert choices["copy_id"] == expected_id
+        state.commit_parkez_apps_choices(choices, *original_inputs)
+        state = StateStore(state.state_dir)
+    pending = state.peek_parkez_apps_choices(*original_inputs)
+    before = path.read_bytes()
+    expanded = state.peek_parkez_apps_choices(*inputs)
+    assert path.read_bytes() == before
+    assert expanded["copy_id"] == COPY_IDS[consumed]
+    assert expanded["_after"]["social"]["order"] == COPY_IDS
+    assert expanded["_after"]["social"]["remaining"] == COPY_IDS[consumed + 1:]
+    for kind in ("app_ids", "image_ids", "hook_id"):
+        assert expanded[kind] == pending[kind]
+    for expected_id in COPY_IDS[consumed:]:
+        choices = state.peek_parkez_apps_choices(*inputs)
+        assert choices["copy_id"] == expected_id
+        state.commit_parkez_apps_choices(choices, *inputs)
+        state = StateStore(state.state_dir)
     assert state.peek_parkez_apps_choices(*inputs)["copy_id"] == COPY_IDS[0]
 
 
@@ -409,8 +487,8 @@ def _background(tmp_path):
 
 
 def _drawn_words_once(calls):
-    # The existing caption renderer draws each line twice, one pixel apart,
-    # to emulate the heavier TikTok font; this is one visible line, not two.
+    # Ignore duplicate draws when recovering words; separate assertions check
+    # that hooks and captions do not simulate bold with a second draw.
     return " ".join(
         text for _y, text in dict.fromkeys((xy[1], text) for xy, text, _ in calls)
     )
@@ -478,15 +556,18 @@ def test_hook_keeps_requested_words_on_white_boxes_and_red_save_prompt(tmp_path,
     monkeypatch.setattr(ImageDraw.ImageDraw, "text", record_text)
     output = tmp_path / "hook.png"
     renderer.render_parkez_apps_hook(_background(tmp_path), hook, output)
-    words = _drawn_words_once([(xy, text, kwargs) for xy, text, kwargs in calls if kwargs["fill"] == (0, 0, 0)])
+    hook_calls = [(xy, text, kwargs) for xy, text, kwargs in calls if kwargs["fill"] == (0, 0, 0)]
+    words = _drawn_words_once(hook_calls)
     assert words.split() == hook.split()
     assert all(
-        Path(kwargs["font"].path).name == "Inter-Bold.ttf"
-        for _, _, kwargs in calls if kwargs["fill"] == (0, 0, 0)
+        Path(kwargs["font"].path).name == "Inter-Medium.ttf"
+        for _, _, kwargs in hook_calls
     )
+    assert len(hook_calls) == len({(xy[1], text) for xy, text, _ in hook_calls})
     save = [(xy, text, kwargs) for xy, text, kwargs in calls if text == "(Guarda esto)"]
     assert len(save) == 1
     assert save[0][2]["fill"] == (244, 59, 63)
+    assert Path(save[0][2]["font"].path).name == "Inter-Medium.ttf"
     with Image.open(output) as result:
         assert result.format == "PNG"
         assert result.size == (1080, 1920)
