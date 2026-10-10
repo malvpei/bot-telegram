@@ -36,6 +36,7 @@ from app.config import (
     DEFAULT_ACCOUNT_PICK_ATTEMPTS,
     DEFAULT_R2_CARTOOLS_IMAGE_PREFIX,
     DEFAULT_R2_GOGRADUATE_IMAGE_PREFIX,
+    DEFAULT_R2_PARKEZ_APPS_IMAGE_PREFIX,
     DEFAULT_R2_TYPE_4_IMAGE_PREFIX,
     get_settings,
 )
@@ -75,6 +76,10 @@ from app.parkez_advice import (
     parkez_advice_tips,
 )
 from app.parkez_mode3 import PARKEZ_MODE3_SOCIAL_COPY_IDS, build_parkez_mode3_script
+from app.parkez_apps import (
+    APP_BY_KEY, PARKEZ_APP, PARKEZ_APPS_HOOKS, PARKEZ_APPS_SOCIAL_COPY_IDS, ROTATING_APPS,
+    build_parkez_apps_social_copy,
+)
 from app.r2_storage import R2_IMAGE_EXTENSIONS, R2Object, R2StorageClient
 from app.render import VideoRenderer
 from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
@@ -600,6 +605,8 @@ class VideoCreationService:
         }
 
     def _create_video_locked(self, request: VideoRequest) -> GenerationResult:
+        if request.video_type == VideoType.PARKEZ_APPS:
+            return self._create_parkez_apps_locked(request)
         if request.video_type == VideoType.GOGRADUATE_TYPE_1:
             return self._create_gograduate_type_1_locked(request)
         if request.video_type == VideoType.PARKEZ_ADVICE:
@@ -835,6 +842,89 @@ class VideoCreationService:
             fallback_accounts=[],
             slides=plan.slides,
             separate_slide_text=False,
+        )
+
+    def _create_parkez_apps_locked(self, request: VideoRequest) -> GenerationResult:
+        prefix = self.settings.r2_parkez_apps_image_prefix.strip().strip("/") or DEFAULT_R2_PARKEZ_APPS_IMAGE_PREFIX
+        bucket = self.settings.r2_bucket.strip().strip("/")
+        # Accept a pasted bucket/folder route without ever searching other folders.
+        if bucket and prefix.startswith(f"{bucket}/"):
+            prefix = prefix[len(bucket) + 1:]
+        if getattr(self, "r2_storage", None) is None or not self.r2_storage.is_configured:
+            raise ValueError(f"Apps iPhone necesita Cloudflare R2 configurado y al menos cinco fotos distintas en {bucket or 'videos'}/{prefix}/.")
+        images: dict[str, R2Object] = {}
+        for image in self._list_advice_images(f"{prefix}/"):
+            identity = f"{bucket}:{prefix}:{self._r2_template_content_identity(image)}"
+            images.setdefault(identity, image)
+        if len(images) < 5:
+            raise ValueError(
+                f"Apps iPhone necesita al menos cinco fotos distintas en {bucket}/{prefix}/; "
+                f"encontré {len(images)}. Sube los fondos a esa carpeta."
+            )
+        app_ids = [app.key for app in ROTATING_APPS]
+        image_ids = list(images)
+        hook_ids = [str(index) for index in range(len(PARKEZ_APPS_HOOKS))]
+        copy_ids = list(PARKEZ_APPS_SOCIAL_COPY_IDS)
+        choices = self.state.peek_parkez_apps_choices(app_ids, image_ids, hook_ids, copy_ids)
+        selected_apps = [APP_BY_KEY[key] for key in choices["app_ids"]]
+        hook = PARKEZ_APPS_HOOKS[int(choices["hook_id"])]
+        social_copy = build_parkez_apps_social_copy(hook, selected_apps, int(choices["copy_id"]))
+        job_id = self._build_job_id()
+        job_dir = self._job_output_dir(job_id, request.user_id)
+        slides_dir = job_dir / "slides"
+        slides_dir.mkdir(parents=True, exist_ok=True)
+        backgrounds: list[MediaCandidate] = []
+        for index, identity in enumerate(choices["image_ids"], start=1):
+            image = images[identity]
+            suffix = Path(image.key).suffix.lower()
+            local_path = job_dir / "parkez_apps_inputs" / f"source_{index:02d}{suffix}"
+            downloaded = self.r2_storage.download(image.key, local_path)
+            try:
+                with Image.open(downloaded) as opened:
+                    width, height = ImageOps.exif_transpose(opened).size
+            except OSError as error:
+                raise ValueError(f"El fondo {image.key!r} de Apps iPhone no se pudo abrir.") from error
+            backgrounds.append(MediaCandidate(
+                source_account="r2_parkez_apps", source_id=f"r2-parkez-apps:{image.key}",
+                local_path=downloaded, permalink=f"r2:{image.key}", caption="Apps iPhone background",
+                width=width, height=height, created_at="r2",
+            ))
+        # Four app cards: two rotating, the fixed ParkEz fourth slide, then the third rotating app.
+        ordered_apps = [None, selected_apps[0], selected_apps[1], PARKEZ_APP, selected_apps[2]]
+        slides: list[SlidePlan] = []
+        for index, (background, app) in enumerate(zip(backgrounds, ordered_apps), start=1):
+            output_path = slides_dir / f"slide_{index:02d}.png"
+            if app is None:
+                self.renderer.render_parkez_apps_hook(background, hook, output_path)
+                text, role = hook, SlideRole.HOOK
+            else:
+                self.renderer.render_parkez_apps_slide(background, app, output_path)
+                text = f"{app.title}\n{app.subtitle}\n{app.description}"
+                role = SlideRole.PARKEZ_PROMO if app.key == PARKEZ_APP.key else SlideRole.APP_STORE
+            slides.append(SlidePlan(
+                index=index, role=role, text=text,
+                media=replace(background, local_path=output_path, width=self.settings.width, height=self.settings.height),
+                fixed_asset=app is PARKEZ_APP,
+            ))
+        plan = VideoPlan(
+            chosen_account="parkez:apps:" + ",".join(choices["app_ids"]),
+            video_type=VideoType.PARKEZ_APPS, language=Language.ES, slides=slides,
+        )
+        script_path = self.renderer.write_script(plan, job_dir)
+        self.state.log_job(self.state.build_job_record(
+            job_id=job_id, chosen_account=plan.chosen_account,
+            requested_accounts=[media.source_id for media in backgrounds], fallback_accounts=[],
+            video_type=plan.video_type, language=Language.ES, video_path=None,
+            script_path=str(script_path), gender=request.gender.value,
+            user_id=request.user_id, chat_id=request.chat_id,
+        ))
+        # No partial consumption: download/render/script failures leave every queue untouched.
+        self.state.commit_parkez_apps_choices(choices, app_ids, image_ids, hook_ids, copy_ids)
+        self._cleanup_old_outputs()
+        return GenerationResult(
+            video_path=None, script_path=script_path, preview_text="\n\n".join(slide.text for slide in slides),
+            social_copy=social_copy, chosen_account=plan.chosen_account, video_type=plan.video_type,
+            language=Language.ES, fallback_accounts=[], slides=slides, separate_slide_text=False,
         )
 
     def _create_parkez_advice_locked(self, request: VideoRequest) -> GenerationResult:

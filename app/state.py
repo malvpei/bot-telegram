@@ -75,6 +75,7 @@ class StateStore:
         self._parkez_advice_queue_path = self.state_dir / "parkez_advice_queue.json"
         self._parkez_advice_image_queue_path = self.state_dir / "parkez_advice_image_queue.json"
         self._parkez_advice_hook_queue_path = self.state_dir / "parkez_advice_hook_queue.json"
+        self._parkez_apps_queues_path = self.state_dir / "parkez_apps_queues.json"
         self._story_environment_queue_path = self.state_dir / "story_environment_queue.json"
         self._batch_schedule_path = self.state_dir / "batch_schedule.json"
         self._batch_rotation_path = self.state_dir / "batch_rotation.json"
@@ -1145,6 +1146,79 @@ class StateStore:
         return self._remember_simple_cycle_choice(
             self._parkez_advice_scoped_queue_path(pack_id, "social"), selected_id, copy_ids,
         )
+
+    def _parkez_apps_choices_locked(
+        self, app_ids: list[str], image_ids: list[str],
+        hook_ids: list[str], copy_ids: list[str],
+    ) -> dict[str, Any]:
+        payload = self._read_json(self._parkez_apps_queues_path, {})
+        if not isinstance(payload, dict):
+            payload = {}
+        choices: dict[str, Any] = {}
+        after: dict[str, Any] = {}
+        for kind, supplied, count, priority in (
+            ("apps", app_ids, 3, False),
+            ("images", image_ids, 5, True),
+            ("hooks", hook_ids, 1, True),
+            ("social", copy_ids, 1, True),
+        ):
+            available = self._normalize_template_video_order({}, supplied)
+            if len(available) < count:
+                raise ValueError(f"La cola de {kind} de Apps iPhone necesita {count} elementos distintos.")
+            queue = payload.get(kind, {})
+            if not isinstance(queue, dict):
+                queue = {}
+            order = self._normalize_template_video_order({} if priority else queue, available)
+            raw_pending = queue.get("remaining")
+            if isinstance(raw_pending, list):
+                pending = self._normalize_template_video_order(
+                    {}, [item for item in raw_pending if item in order],
+                )
+                old_order = queue.get("order", [])
+                if not isinstance(old_order, list):
+                    old_order = []
+                pending.extend(item for item in order if item not in old_order and item not in pending)
+                if priority:
+                    pending = [item for item in order if item in pending]
+            else:
+                pending = list(order)
+            selected: list[str] = []
+            for _ in range(count):
+                if not pending:
+                    pending = list(order)
+                # A batch can cross a cycle boundary, but never repeat an item
+                # within the same carousel. Skipped items remain for next time.
+                next_item = next(item for item in pending if item not in selected)
+                pending.remove(next_item)
+                selected.append(next_item)
+            after[kind] = {
+                "order": order, "remaining": pending,
+                "last_selected": selected[-1], "started": True,
+            }
+            choices[{"apps": "app_ids", "images": "image_ids", "hooks": "hook_id", "social": "copy_id"}[kind]] = (
+                selected if count > 1 else selected[0]
+            )
+        choices["_after"] = after
+        return choices
+
+    def peek_parkez_apps_choices(
+        self, app_ids: list[str], image_ids: list[str],
+        hook_ids: list[str], copy_ids: list[str],
+    ) -> dict[str, Any]:
+        """Plan all four queues together without writing or consuming state."""
+        with self._exclusive():
+            return self._parkez_apps_choices_locked(app_ids, image_ids, hook_ids, copy_ids)
+
+    def commit_parkez_apps_choices(
+        self, choices: dict[str, Any], app_ids: list[str], image_ids: list[str],
+        hook_ids: list[str], copy_ids: list[str],
+    ) -> None:
+        """Advance the entire successful carousel with one atomic replacement."""
+        with self._exclusive():
+            current = self._parkez_apps_choices_locked(app_ids, image_ids, hook_ids, copy_ids)
+            if any(current.get(key) != choices.get(key) for key in ("app_ids", "image_ids", "hook_id", "copy_id")):
+                raise RuntimeError("La cola de Apps iPhone cambió mientras se generaba el carrusel.")
+            self._write_json(self._parkez_apps_queues_path, current["_after"])
 
     def read_media_pool(self) -> dict[str, Any]:
         with self._exclusive():

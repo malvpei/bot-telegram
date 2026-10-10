@@ -15,6 +15,7 @@ class VideoType(str, Enum):
     PARKEZ = "parkez"
     PARKEZ_MODE3 = "mode3"
     PARKEZ_ADVICE = "parkez_advice"
+    PARKEZ_APPS = "parkez_apps"
     TOOLS = "tools"
     GOGRADUATE_TYPE_1 = "gograduate_1"
 
@@ -60,6 +61,7 @@ class SlideRole(str, Enum):
     ADVICE_CARD = "advice_card"
     ADVICE_R2_CLEAN = "advice_r2_clean"
     PARKEZ_PROMO = "parkez_promo"
+    APP_STORE = "app_store"
     CAR_TOOL_RADARBOT = "car_tool_radarbot"
     CAR_TOOL_PARKEZ = "car_tool_parkez"
     CAR_TOOL_WAZE = "car_tool_waze"

@@ -44,6 +44,7 @@ from app.bot import (
     gograduate_type_1,
     parkez_gender,
     parkez_advice,
+    parkez_apps,
     parkez_mode3,
     parkez_tools,
     story_carousel_command,
@@ -1809,7 +1810,7 @@ def test_gograduate_sends_hook_title_description_and_both_images_without_account
     assert "repeat_request" not in context.user_data
 
 
-def test_createp_offers_woman_man_tools_mode3_and_advice():
+def test_createp_offers_woman_man_tools_mode3_advice_and_iphone_apps():
     async def allow(update):
         return True
 
@@ -1832,12 +1833,12 @@ def test_createp_offers_woman_man_tools_mode3_and_advice():
     assert [[button.text for button in row] for row in buttons] == [
         ["Mujer", "Hombre"],
         ["Tools", "mode3"],
-        ["Consejos"],
+        ["Consejos", "Apps iPhone"],
     ]
     assert [[button.callback_data for button in row] for row in buttons] == [
         ["parkez:gender:female", "parkez:gender:male"],
         ["parkez:tools", "parkez:mode3"],
-        ["parkez:advice"],
+        ["parkez:advice", "parkez:apps"],
     ]
     assert "repeat_request" not in context.user_data
 
@@ -1857,6 +1858,65 @@ def test_createp_advice_callback_starts_its_own_carousel_without_accounts():
     assert request.language == Language.ES
     assert request.account_inputs == []
     assert request.separate_slide_text is False
+
+
+def test_createp_apps_callback_starts_spanish_five_slide_carousel_without_accounts():
+    context = FakeContext()
+    context.user_data.update({"accounts_by_gender": {"male": [], "female": []}, "repeat_request": {"chosen_account": "stale"}})
+    query = FakeRegenerateQuery("parkez:apps")
+    execute = AsyncMock()
+    with patch("app.bot._execute_job", execute):
+        state = asyncio.run(parkez_apps(FakeRegenerateUpdate(query), context))
+    assert state == ConversationHandler.END
+    assert query.answered is True
+    assert context.user_data == {}
+    request = execute.call_args.args[2]
+    assert request.video_type == VideoType.PARKEZ_APPS
+    assert request.language == Language.ES
+    assert request.account_inputs == []
+    assert request.separate_slide_text is False
+
+
+def test_parkez_apps_sends_copy_and_five_original_pngs_without_account_controls(tmp_path):
+    context = FakeContext()
+    context.bot = type("ParkEzBot", (), {"send_message": AsyncMock(return_value=FakeStatusMessage())})()
+    roles = [SlideRole.HOOK, SlideRole.APP_STORE, SlideRole.APP_STORE, SlideRole.PARKEZ_PROMO, SlideRole.APP_STORE]
+    slides = []
+    for index, role in enumerate(roles, start=1):
+        path = tmp_path / f"slide_0{index}.png"
+        Image.new("RGB", (90, 160), (index * 40, 60, 100)).save(path)
+        slides.append(SlidePlan(
+            index=index, role=role, text="Hook" if index == 1 else "App y explicación",
+            media=MediaCandidate(source_account="parkez_apps", source_id=f"image-{index}",
+                                 local_path=path, permalink="", caption="", width=90, height=160, created_at=""),
+        ))
+    result = GenerationResult(
+        video_path=None, script_path=tmp_path / "script.txt", preview_text="Apps iPhone",
+        social_copy=SocialCopy(hook="Hook", title="Apps para tu iPhone", description="Organízate y busca aparcamiento con ParkEz", hashtags=["#ParkEz"]),
+        chosen_account="parkez:apps", video_type=VideoType.PARKEZ_APPS,
+        language=Language.ES, fallback_accounts=[], slides=slides,
+    )
+    service = type("ParkEzAppsService", (), {"create_video": lambda self, request: result})()
+    context.application = FakeApplication(service)
+    update = FakeUpdate()
+    update.effective_chat = FakeChat()
+    send = AsyncMock()
+    album = AsyncMock()
+    with patch("app.bot._send_message", send), patch("app.bot._send_slides_text_then_image", album):
+        asyncio.run(_execute_job(update, context, VideoRequest(chat_id=123, user_id=456, video_type=VideoType.PARKEZ_APPS, language=Language.ES, account_inputs=[])))
+    texts = [call.args[2] for call in send.call_args_list]
+    assert "ParkEz" in texts[0]
+    assert "Apps" in texts[0]
+    assert texts[1:] == result.social_copy.messages
+    assert "repeat_request" not in context.user_data
+    assert album.call_args.args[2] == slides
+    assert album.call_args.kwargs["video_type"] == VideoType.PARKEZ_APPS
+    assert album.call_args.kwargs["separate_slide_text"] is False
+    image_context = type("ImagesContext", (), {"bot": FakeTelegramBot()})()
+    asyncio.run(_send_slides_text_then_image(image_context, 123, slides, video_type=VideoType.PARKEZ_APPS, separate_slide_text=False))
+    assert image_context.bot.media_group_types == [(InputMediaDocument,) * 5]
+    assert image_context.bot.media_group_payloads == [tuple(slide.media.local_path.read_bytes() for slide in slides)]
+    assert not any(event[0] == "message" for event in image_context.bot.events)
 
 
 @pytest.mark.parametrize("hook_id", PARKEZ_ADVICE_HOOK_IDS)

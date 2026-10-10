@@ -6,6 +6,7 @@ import shutil
 import subprocess
 from collections.abc import Callable
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import cv2
 import imageio.v2 as imageio
@@ -21,9 +22,12 @@ from app.car_tools import CAR_TOOLS_BODY_LINES
 from app.gograduate import GOGRADUATE_ICON_RELATIVE_PATH
 from app.config import Settings
 from app.face_detection import build_face_detector
-from app.models import Language, SlidePlan, SlideRole, VideoPlan, VideoType
+from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoType
 from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
 from app.parkez_advice import PARKEZ_ADVICE_ICON_FILES, PARKEZ_ADVICE_ICON_RELATIVE_PATH
+
+if TYPE_CHECKING:
+    from app.parkez_apps import ParkEzApp
 
 
 LOGGER = logging.getLogger(__name__)
@@ -444,6 +448,248 @@ class VideoRenderer:
             self._prepare_slide_text_overlay(slide, source_image, video_type)
         frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
         return Image.fromarray(frame)
+
+    def render_parkez_apps_hook(
+        self,
+        background: MediaCandidate,
+        hook: str,
+        output_path: Path,
+    ) -> Path:
+        """Render the iPhone-apps introduction without modifying its wording."""
+        if not hook.strip():
+            raise ValueError("El hook de Apps iPhone no puede estar vacío.")
+        image = self._parkez_apps_background(background)
+        width, height = image.size
+        draw = ImageDraw.Draw(image)
+        font, lines = self._fit_text(
+            hook,
+            draw,
+            max_width=round(width * 0.84),
+            max_height=round(height * 0.20),
+            base_size=max(10, round(width * 0.060)),
+            min_size=max(8, round(width * 0.038)),
+            bold=True,
+            stroke_width=0,
+            line_gap=max(2, round(width * 0.015)),
+            font_loader=self._load_parkez_apps_font,
+        )
+        padding_x = max(2, round(width * 0.021))
+        padding_y = max(2, round(width * 0.013))
+        line_gap = -max(1, round(width * 0.012))
+        block_height = self._pill_lines_height(
+            lines, font, draw, padding_y=padding_y, line_gap=line_gap
+        )
+        start_y = round(height * 0.50 - block_height * 0.50)
+        end_y = self._draw_connected_pill_lines(
+            draw,
+            lines,
+            font,
+            start_y=start_y,
+            canvas_width=width,
+            padding_x=padding_x,
+            padding_y=padding_y,
+            line_gap=line_gap,
+        )
+        save_font = self._load_parkez_apps_font(max(8, round(width * 0.042)), True)
+        save_text = "(Guarda esto)"
+        bbox = draw.textbbox((0, 0), save_text, font=save_font)
+        draw.text(
+            ((width - (bbox[2] - bbox[0])) // 2 - bbox[0], end_y + round(height * 0.025) - bbox[1]),
+            save_text,
+            font=save_font,
+            fill=(244, 59, 63),
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        image.convert("RGB").save(output_path, format="PNG")
+        return output_path
+
+    def render_parkez_apps_slide(
+        self,
+        background: MediaCandidate,
+        app: ParkEzApp,
+        output_path: Path,
+    ) -> Path:
+        """Compose a real app icon, App Store-style card and literal caption."""
+        if not app.title.strip() or not app.description.strip():
+            raise ValueError("La ficha de Apps iPhone necesita nombre y descripción.")
+        if app.action not in {"Get", "Update", "Obtener", "cloud"}:
+            raise ValueError(f"Acción de ficha no válida para {app.key}: {app.action}")
+        icon_path = self._parkez_apps_icon_path(app)
+        image = self._parkez_apps_background(background)
+        width, height = image.size
+        draw = ImageDraw.Draw(image)
+        card_width = round(width * 0.80)
+        card_height = round(width * 0.285)
+        card_left = (width - card_width) // 2
+        card_top = round(height * 0.345)
+        card_right, card_bottom = card_left + card_width, card_top + card_height
+        draw.rectangle((card_left, card_top, card_right, card_bottom), fill=(255, 255, 255))
+
+        icon_size = round(width * 0.235)
+        icon_left = card_left + round(width * 0.022)
+        icon_top = card_top + (card_height - icon_size) // 2
+        with Image.open(icon_path) as source:
+            icon = self._fit_type_3_icon(ImageOps.exif_transpose(source).convert("RGBA"), icon_size)
+        # iOS applies a rounded-square mask to published, square App Store art.
+        icon_mask = Image.new("L", (icon_size, icon_size), 0)
+        ImageDraw.Draw(icon_mask).rounded_rectangle(
+            (0, 0, icon_size - 1, icon_size - 1), radius=round(icon_size * 0.23), fill=255
+        )
+        alpha = np.minimum(np.asarray(icon.getchannel("A")), np.asarray(icon_mask))
+        icon.putalpha(Image.fromarray(alpha))
+        image.alpha_composite(icon, (icon_left, icon_top))
+        draw = ImageDraw.Draw(image)
+
+        text_left = icon_left + icon_size + round(width * 0.035)
+        text_width = card_right - text_left - round(width * 0.018)
+        reference_titles = {
+            "notion": "Notion: notes,\ntasks, AI",
+            "waze": "Waze Navigation &\nLive Traffic",
+        }
+        title_text = reference_titles.get(app.key, app.title)
+        if " ".join(title_text.split()) != " ".join(app.title.split()):
+            title_text = app.title
+        title_font, title_lines = self._fit_text(
+            title_text,
+            draw,
+            max_width=text_width,
+            max_height=round(card_height * 0.36),
+            base_size=max(9, round(width * 0.037)),
+            min_size=max(7, round(width * 0.025)),
+            bold=True,
+            stroke_width=0,
+            line_gap=max(1, round(width * 0.007)),
+            font_loader=self._load_parkez_apps_font,
+        )
+        text_y = card_top + round(card_height * 0.09)
+        for line in title_lines:
+            bbox = draw.textbbox((0, 0), line, font=title_font)
+            draw.text((text_left - bbox[0], text_y - bbox[1]), line, font=title_font, fill=(0, 0, 0))
+            text_y += bbox[3] - bbox[1] + max(1, round(width * 0.007))
+        text_y += round(width * 0.009)
+        subtitle_font, subtitle_lines = self._fit_text(
+            app.subtitle,
+            draw,
+            max_width=text_width,
+            max_height=round(card_height * 0.19),
+            base_size=max(8, round(width * 0.025)),
+            min_size=max(6, round(width * 0.018)),
+            bold=False,
+            stroke_width=0,
+            line_gap=max(1, round(width * 0.005)),
+            font_loader=self._load_parkez_apps_font,
+        )
+        for line in subtitle_lines:
+            bbox = draw.textbbox((0, 0), line, font=subtitle_font)
+            draw.text((text_left - bbox[0], text_y - bbox[1]), line, font=subtitle_font, fill=(143, 143, 143))
+            text_y += bbox[3] - bbox[1] + max(1, round(width * 0.005))
+
+        action_top = card_bottom - round(card_height * 0.30)
+        action_height = round(card_height * 0.21)
+        blue = (0, 147, 244)
+        if app.action == "cloud":
+            self._draw_parkez_apps_cloud(draw, text_left, action_top, action_height, blue)
+        else:
+            action_font = self._load_parkez_apps_font(max(8, round(width * 0.027)), True)
+            bbox = draw.textbbox((0, 0), app.action, font=action_font)
+            action_width = max(round(width * 0.13), bbox[2] - bbox[0] + round(width * 0.055))
+            draw.rounded_rectangle(
+                (text_left, action_top, text_left + action_width, action_top + action_height),
+                radius=action_height // 2,
+                fill=blue,
+            )
+            draw.text(
+                (text_left + (action_width - (bbox[2] - bbox[0])) // 2 - bbox[0],
+                 action_top + (action_height - (bbox[3] - bbox[1])) // 2 - bbox[1]),
+                app.action,
+                font=action_font,
+                fill=(255, 255, 255),
+            )
+            if app.purchase_note:
+                note_font = self._load_font(size=max(5, round(width * 0.010)), bold=False)
+                note_lines = self._wrap_text(app.purchase_note, note_font, max(10, round(text_width * 0.25)), draw, stroke_width=0)
+                note_y = action_top
+                for line in note_lines:
+                    bbox = draw.textbbox((0, 0), line, font=note_font)
+                    draw.text((text_left + action_width + round(width * 0.012), note_y - bbox[1]), line, font=note_font, fill=(130, 130, 130))
+                    note_y += bbox[3] - bbox[1] + max(1, round(width * 0.002))
+
+        description_top = card_bottom + round(height * 0.025)
+        padding_x, padding_y = max(2, round(width * 0.020)), max(2, round(width * 0.014))
+        reference_captions = {
+            "notion": "Te permite controlar tu\ntiempo y tus proyectos de\nuna manera que ninguna\napp iguala",
+            "waze": "Si conoces Google Maps,\nesta app es su evolución",
+            "claude": "Un gran poder conlleva una\ngran responsabilidad y esta\napp te da el poder de hacer\nlo que quieras",
+            "mathway": "Si tienes algún problema\nmatemático que no\nsepas resolver, hazle una\nfoto y lo tienes",
+        }
+        description_text = reference_captions.get(app.key, app.description)
+        if " ".join(description_text.split()) != " ".join(app.description.split()):
+            description_text = app.description
+        font, lines = self._fit_text(
+            description_text,
+            draw,
+            max_width=round(width * 0.82) - padding_x * 2,
+            max_height=round(height * 0.21),
+            base_size=max(10, round(width * 0.055)),
+            min_size=max(8, round(width * 0.038)),
+            bold=True,
+            stroke_width=0,
+            line_gap=max(2, round(width * 0.015)),
+            font_loader=self._load_parkez_apps_font,
+        )
+        self._draw_connected_pill_lines(
+            draw,
+            lines,
+            font,
+            start_y=description_top,
+            canvas_width=width,
+            padding_x=padding_x,
+            padding_y=padding_y,
+            line_gap=-max(1, round(width * 0.012)),
+        )
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        image.convert("RGB").save(output_path, format="PNG")
+        return output_path
+
+    def _parkez_apps_background(self, media: MediaCandidate) -> Image.Image:
+        return ImageOps.fit(
+            self._load_source_image(media.local_path),
+            (self.settings.width, self.settings.height),
+            method=Image.Resampling.LANCZOS,
+        ).convert("RGBA")
+
+    def _load_parkez_apps_font(self, size: int, bold: bool) -> ImageFont.ImageFont:
+        # Packaged fonts keep card text consistently bold on macOS and Linux.
+        return self._load_advice_font(size=size, weight=700 if bold else 400)
+
+    def _parkez_apps_icon_path(self, app: ParkEzApp) -> Path:
+        # The file name is a packaged asset, never a user-supplied path.
+        if Path(app.icon_file).name != app.icon_file or not app.icon_file:
+            raise ValueError(f"Nombre de icono no válido para {app.key}.")
+        candidates = [self.settings.root_dir / "apps" / "iconos" / app.icon_file]
+        if app.key in {"parkez", "waze"}:
+            candidates.append(self.settings.root_dir / "cartools" / "iconos" / app.icon_file)
+        for candidate in candidates:
+            if candidate.is_file():
+                return candidate
+        raise FileNotFoundError(f"Falta el icono real de {app.title}: {candidates[0]}")
+
+    @staticmethod
+    def _draw_parkez_apps_cloud(
+        draw: ImageDraw.ImageDraw,
+        x: int,
+        y: int,
+        size: int,
+        color: tuple[int, int, int],
+    ) -> None:
+        """Code-native cloud-download glyph, matching the reference action."""
+        unit = size / 64
+        stroke = max(1, round(unit * 4))
+        points = [(2, 29), (5, 18), (16, 15), (20, 6), (33, 4), (44, 13), (48, 24), (56, 25), (59, 32), (56, 40), (42, 40)]
+        draw.line([(x + round(px * unit), y + round(py * unit)) for px, py in points], fill=color, width=stroke, joint="curve")
+        draw.line([(x + round(23 * unit), y + round(40 * unit)), (x + round(9 * unit), y + round(40 * unit)), (x + round(2 * unit), y + round(29 * unit))], fill=color, width=stroke, joint="curve")
+        draw.line([(x + round(32 * unit), y + round(25 * unit)), (x + round(32 * unit), y + round(59 * unit))], fill=color, width=stroke)
+        draw.line([(x + round(22 * unit), y + round(49 * unit)), (x + round(32 * unit), y + round(59 * unit)), (x + round(42 * unit), y + round(49 * unit))], fill=color, width=stroke, joint="curve")
 
     def render_advice_card(
         self,

@@ -11,7 +11,8 @@ Este proyecto monta un bot de Telegram que:
 - evita repetir el mismo guion seguido y mantiene un historial de firmas
 - renderiza un video vertical `.mp4` listo para subir
 - crea carruseles promocionales de ParkEz con `/createp`: Mujer, Hombre y mode3
-  con texto separado, Tools con texto incrustado, o Consejos con diseño + foto R2
+  con texto separado, Tools con texto incrustado, Consejos con diseño + foto R2,
+  o Apps iPhone con cinco fotos y fichas de aplicaciones
 - crea consejos para estudiantes con `/g` y GoGraduate, acompañados de una foto de R2
 
 ## Lo que hace el pipeline
@@ -160,6 +161,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 de la que el Tipo 5 toma tres imágenes al azar |
 | `R2_CARTOOLS_IMAGE_PREFIX` | `cartools` | carpeta dentro de `R2_BUCKET` recorrida por la cola cíclica de imágenes limpias de `/createp` Tools |
 | `R2_PARKEZ_ADVICE_IMAGE_PREFIX` | misma carpeta que Tools | carpeta de la imagen adicional de `/createp` Consejos; tiene su propia cola aunque use los mismos archivos |
+| `R2_PARKEZ_APPS_IMAGE_PREFIX` | `apps` | carpeta de los cinco fondos de `/createp` Apps iPhone dentro de `R2_BUCKET` (`videos/apps/`); requiere cinco fotos de contenido distinto |
 
 ### Instagram y 2FA
 
@@ -193,7 +195,7 @@ el bot.
 /download_pool — rellena el pool precargado de fotos aptas
 /pool         — muestra el stock del pool por tipo y cuenta
 /create       — lanza el wizard (tipo → idioma → render)
-/createp      — crea un carrusel ParkEz para Mujer, Hombre, Tools, mode3 o Consejos
+/createp      — crea un carrusel ParkEz para Mujer, Hombre, Tools, mode3, Consejos o Apps iPhone
 /g            — abre el menú de GoGraduate (Tipo 1: consejos para estudiantes)
 /wizard       — alias de /create
 /cancel       — cancela el wizard en curso
@@ -264,7 +266,7 @@ Los consejos de estudio se basan en prácticas de
 [repaso espaciado](https://www.psychologicalscience.org/journals/psychological-science/0956797615617778/)
 y [ejercicios intercalados](https://pubmed.ncbi.nlm.nih.gov/24578089/).
 
-El flujo **/createp** permite elegir Mujer, Hombre, Tools, mode3 o Consejos. Para Mujer y Hombre,
+El flujo **/createp** permite elegir Mujer, Hombre, Tools, mode3, Consejos o Apps iPhone. Para Mujer y Hombre,
 elige tres fotos nuevas de una sola cuenta del banco correspondiente y añade
 como cuarta imagen el cierre limpio de ParkEz del perfil elegido. Entrega el
 hook, dos consejos y la promoción de ParkEz como cuatro mensajes independientes;
@@ -339,6 +341,35 @@ y [navegación por voz de Waze](https://support.google.com/waze/answer/10264825?
 Las recomendaciones de preparar el navegador y evitar manipular el móvil al
 volante siguen los consejos de la
 [DGT sobre distracciones](https://revista.dgt.es/es/reportajes/2017/07JULIO/0707-Distracciones-viaje-verano.shtml).
+
+La opción **Apps iPhone** de `/createp` añade un estilo independiente del
+recopilatorio de Consejos y de Tools. Entrega cinco PNG como documentos sin
+compresión: hook → app rotativa → app rotativa → ParkEz → app rotativa. ParkEz
+siempre ocupa la cuarta imagen contando el hook. Las otras tres aplicaciones
+son distintas y recorren Notion, Claude, Waze, Mathway, ScreenZen y Fintonic
+antes de repetir. Cada ficha reproduce un bloque blanco estilo App Store, con
+el icono real a la izquierda, nombre, subtítulo y botón, y debajo su explicación
+en cajas blancas redondeadas. Notion, Claude, Waze y Mathway conservan los textos
+de las capturas; ScreenZen, Fintonic y ParkEz llevan explicaciones de sus funciones.
+
+Los tres hooks proporcionados se alternan, respetando literalmente su texto.
+También se envían hook, título y descripción en mensajes separados: veinte
+variantes de título y descripción se adaptan a las apps que aparecen realmente
+en ese carrusel. Los fondos se descargan únicamente de `apps/` dentro del bucket
+existente `videos`, configurable con `R2_PARKEZ_APPS_IMAGE_PREFIX`; no se crea un
+bucket independiente ni se toman fotos de Tools como alternativa. R2 representa
+las carpetas mediante prefijos: basta con subir al menos cinco fondos a
+`videos/apps/`. Cada entrega usa cinco fondos distintos, deduplicados por
+contenido; las subidas nuevas tienen prioridad. Al agotarse el catálogo comienza
+otro ciclo sin duplicar un fondo dentro del mismo carrusel.
+
+Las cuatro colas de este estilo se guardan juntas en
+`data/state/parkez_apps_queues.json` y solo avanzan después de generar las cinco
+imágenes y guardar el guion y el registro del trabajo. Un fallo de descarga,
+renderizado o guardado no las consume. No utiliza Instagram ni modifica ninguna
+cola de los otros estilos. Las nuevas explicaciones se contrastaron con
+[ScreenZen](https://screenzen.co/), [Fintonic](https://www.fintonic.com/es-ES/alertas/)
+y [ParkEz en App Store](https://apps.apple.com/dk/app/parkez/id6799709478).
 
 La opción **Tools** de `/createp` crea cuatro slides dedicados a RadarBot,
 ParkEz, Waze y Google Maps. Cada uno lleva su icono y su texto incrustado sobre

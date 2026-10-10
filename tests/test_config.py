@@ -283,6 +283,23 @@ def test_gograduate_prefix_defaults_to_c_and_is_normalized_without_changing_buck
         get_settings.cache_clear()
 
 
+@pytest.mark.parametrize("raw,expected", [(None, "apps"), (" / ", "apps"), (" /videos/apps/campaign/ ", "videos/apps/campaign")])
+def test_parkez_apps_prefix_defaults_to_apps_and_is_normalized_without_changing_bucket(monkeypatch, raw, expected):
+    monkeypatch.setattr("app.config.load_dotenv", lambda *_args, **_kwargs: False)
+    monkeypatch.setenv("R2_BUCKET", "videos")
+    if raw is None:
+        monkeypatch.delenv("R2_PARKEZ_APPS_IMAGE_PREFIX", raising=False)
+    else:
+        monkeypatch.setenv("R2_PARKEZ_APPS_IMAGE_PREFIX", raw)
+    get_settings.cache_clear()
+    try:
+        settings = get_settings()
+        assert settings.r2_parkez_apps_image_prefix == expected
+        assert settings.r2_bucket == "videos"
+    finally:
+        get_settings.cache_clear()
+
+
 def test_r2_cartools_image_prefix_is_loaded_and_normalized(monkeypatch):
     monkeypatch.setenv("R2_CARTOOLS_IMAGE_PREFIX", " /videos/cartools/campaign/ ")
     get_settings.cache_clear()

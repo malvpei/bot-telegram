@@ -143,6 +143,7 @@ def run_bot() -> None:
                 CallbackQueryHandler(parkez_tools, pattern=r"^parkez:tools$"),
                 CallbackQueryHandler(parkez_mode3, pattern=r"^parkez:mode3$"),
                 CallbackQueryHandler(parkez_advice, pattern=r"^parkez:advice$"),
+                CallbackQueryHandler(parkez_apps, pattern=r"^parkez:apps$"),
                 CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:5|advice)$"),
                 CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:male$"),
             ],
@@ -871,7 +872,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "/schedule 5 08:00 17:00 - programar lotes diarios\n"
         "/schedule off - desactivar la programacion\n"
         "/create — crear contenido con fotos de hombres\n"
-        "/createp — crear carruseles de ParkEz: Mujer, Hombre, Tools, mode3 y Consejos\n"
+        "/createp — crear carruseles de ParkEz: Mujer, Hombre, Tools, mode3, Consejos y Apps iPhone\n"
         "/g — crear contenido de GoGraduate para estudiantes\n"
         "/accounts — ver las cuentas de hombres cargadas\n"
         "/accounts_women — ver las cuentas de mujeres cargadas\n"
@@ -979,7 +980,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "5 = comparación de negocios con tres fotos R2 aleatorias y cierre fijo\n"
         "\nParkEz:\n"
         "1. /createp\n"
-        "2. elige Mujer, Hombre, Tools, mode3 o Consejos\n"
+        "2. elige Mujer, Hombre, Tools, mode3, Consejos o Apps iPhone\n"
         "3. Mujer y Hombre entregan tres fotos del banco correspondiente y un cierre "
         "fijo de ParkEz, con los cuatro textos separados\n"
         "4. Tools entrega cuatro diseños con texto incrustado y una quinta "
@@ -988,7 +989,9 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "sobre carnet, velocidad, radares y aparcamiento; rota 15 títulos y descripciones\n"
         "6. Consejos entrega un recopilatorio de cuatro apps con su icono y "
         "explicación, una foto R2 y hook, título y descripción separados\n"
-        "7. en Mujer, Hombre o mode3 puedes pedir otra foto distinta de la misma cuenta\n\n"
+        "7. Apps iPhone entrega cinco fotos de videos/apps/ con fichas blancas: "
+        "hook, dos apps, ParkEz y una tercera app; rotan apps, fondos y textos\n"
+        "8. en Mujer, Hombre o mode3 puedes pedir otra foto distinta de la misma cuenta\n\n"
         "GoGraduate:\n"
         "1. /g\n"
         "2. elige Tipo 1: cuatro tarjetas o cinco filas de consejos para estudiantes, con "
@@ -1626,7 +1629,10 @@ async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 ),
                 InlineKeyboardButton("mode3", callback_data="parkez:mode3"),
             ],
-            [InlineKeyboardButton("Consejos", callback_data="parkez:advice")],
+            [
+                InlineKeyboardButton("Consejos", callback_data="parkez:advice"),
+                InlineKeyboardButton("Apps iPhone", callback_data="parkez:apps"),
+            ],
         ]
     )
     await update.effective_message.reply_text(
@@ -1670,6 +1676,27 @@ async def parkez_advice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         video_type=VideoType.PARKEZ_ADVICE,
         language=Language.ES,
         account_inputs=[],
+        separate_slide_text=False,
+    )
+    await _execute_job(update, context, request)
+    _clear_wizard_state(context)
+    return ConversationHandler.END
+
+
+async def parkez_apps(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop("repeat_request", None)
+    await query.edit_message_text(
+        "Preparando Apps iPhone: hook, tres apps rotativas y ParkEz en la cuarta imagen."
+    )
+    request = VideoRequest(
+        chat_id=update.effective_chat.id,
+        user_id=update.effective_user.id,
+        video_type=VideoType.PARKEZ_APPS,
+        language=Language.ES,
+        account_inputs=[],
+        lowercase_text=False,
         separate_slide_text=False,
     )
     await _execute_job(update, context, request)
@@ -2274,6 +2301,8 @@ async def _execute_job(
         status_text = "Estoy creando los consejos y preparando la siguiente imagen de R2 para GoGraduate."
     elif request.video_type == VideoType.PARKEZ_ADVICE:
         status_text = "Estoy creando el recopilatorio de apps y preparando la siguiente imagen de R2 para ParkEz."
+    elif request.video_type == VideoType.PARKEZ_APPS:
+        status_text = "Estoy preparando cinco fondos de R2 y las fichas de Apps iPhone para ParkEz."
     elif request.video_type == VideoType.ADVICE:
         status_text = (
             "Estoy creando el siguiente diseño rotativo del Tipo 4 y preparando "
@@ -2331,6 +2360,12 @@ async def _execute_job(
             "ParkEz · Consejos listo\n"
             "Entrega: cuatro apps con iconos y explicación + imagen limpia de R2\n"
             "Hook, título y descripción de las colas de Consejos"
+        )
+    elif result.video_type == VideoType.PARKEZ_APPS:
+        header = (
+            "ParkEz · Apps iPhone listo\n"
+            "Entrega: hook + tres apps rotativas + ParkEz fijo en la cuarta imagen\n"
+            "Cinco imágenes con texto y fichas, sin compresión"
         )
     elif result.video_type == VideoType.ADVICE:
         header = (
@@ -2417,6 +2452,7 @@ async def _execute_job(
             VideoType.TOOLS,
             VideoType.GOGRADUATE_TYPE_1,
             VideoType.PARKEZ_ADVICE,
+            VideoType.PARKEZ_APPS,
         }:
             return
         context.user_data["repeat_request"] = {
