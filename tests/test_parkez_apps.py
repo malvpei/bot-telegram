@@ -52,7 +52,10 @@ def test_requested_hooks_and_reference_app_store_cards_are_literal():
     assert "pausas" in APP_BY_KEY["screenzen"].description
     assert "límites" in APP_BY_KEY["screenzen"].description
     assert "gastos" in APP_BY_KEY["fintonic"].description
-    assert "probabilidades" in PARKEZ_APP.description
+    assert PARKEZ_APP.description == (
+        "Te indica donde habra aparcamiento gratuito libre cerca de tu destino, "
+        "evitando calles con el aparcamiento lleno"
+    )
     assert "garantiz" not in PARKEZ_APP.description.lower()
     assert all(app.icon_file for app in (*ROTATING_APPS, PARKEZ_APP))
 
@@ -446,6 +449,11 @@ def test_every_app_has_white_store_card_real_left_icon_and_exact_separate_captio
     assert " ".join(text for _, text, kwargs in header if kwargs["fill"] == (0, 0, 0)) == app.title
     assert " ".join(text for _, text, kwargs in header if kwargs["fill"] == (143, 143, 143)) == app.subtitle
     assert _drawn_words_once(caption) == app.description
+    assert all(Path(kwargs["font"].path).name == "Inter-Medium.ttf" for _, _, kwargs in caption)
+    # Descriptions use one Medium-weight draw per line, not artificial bold.
+    assert len(caption) == len({(xy[1], text) for xy, text, _ in caption})
+    title = [kwargs for _, _, kwargs in header if kwargs["fill"] == (0, 0, 0)]
+    assert all(Path(kwargs["font"].path).name == "Inter-Bold.ttf" for kwargs in title)
     if app.action != "cloud":
         assert any(text == app.action and kwargs["fill"] == (255, 255, 255) for _, text, kwargs in header)
     for (x, y), text, kwargs in calls:
@@ -472,6 +480,10 @@ def test_hook_keeps_requested_words_on_white_boxes_and_red_save_prompt(tmp_path,
     renderer.render_parkez_apps_hook(_background(tmp_path), hook, output)
     words = _drawn_words_once([(xy, text, kwargs) for xy, text, kwargs in calls if kwargs["fill"] == (0, 0, 0)])
     assert words.split() == hook.split()
+    assert all(
+        Path(kwargs["font"].path).name == "Inter-Bold.ttf"
+        for _, _, kwargs in calls if kwargs["fill"] == (0, 0, 0)
+    )
     save = [(xy, text, kwargs) for xy, text, kwargs in calls if text == "(Guarda esto)"]
     assert len(save) == 1
     assert save[0][2]["fill"] == (244, 59, 63)

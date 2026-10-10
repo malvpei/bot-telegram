@@ -102,8 +102,8 @@ PARKEZ_APP = ParkEzApp(
     title="ParkEz",
     subtitle="Encuentra dónde aparcar",
     description=(
-        "Te orienta hacia las calles con más probabilidades de aparcar para "
-        "que sepas por dónde empezar a buscar sitio"
+        "Te indica donde habra aparcamiento gratuito libre cerca de tu destino, "
+        "evitando calles con el aparcamiento lleno"
     ),
     action="Obtener",
     icon_file="parkez.png",
