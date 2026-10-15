@@ -1,5 +1,7 @@
 """Twenty copy variants per student pack, grounded in the tips being rendered."""
 
+GOGRADUATE_DISPLAY_NAME = "gograduate.io"
+
 GOGRADUATE_SOCIAL_COPY_IDS = [f"student-copy-{index:02d}" for index in range(1, 21)]
 
 GOGRADUATE_SOCIAL_TITLES: dict[str, tuple[str, ...]] = {
@@ -23,7 +25,7 @@ GOGRADUATE_SOCIAL_TITLES: dict[str, tuple[str, ...]] = {
         "Prueba otro tipo de ejercicio antes de dar el tema por hecho",
         "Una forma de estudiar con más intención y menos piloto automático",
         "Prepara el siguiente repaso a partir de tus dudas",
-        "GoGraduate y hábitos de estudio que puedes poner en práctica",
+        f"{GOGRADUATE_DISPLAY_NAME} y hábitos de estudio que puedes poner en práctica",
     ),
     "students-02": (
         "Deja de copiar apuntes y empieza a hacerte preguntas",
@@ -45,7 +47,7 @@ GOGRADUATE_SOCIAL_TITLES: dict[str, tuple[str, ...]] = {
         "Detecta tus puntos débiles antes de dar por terminado el tema",
         "La próxima sesión puede empezar por lo que no supiste responder",
         "Tus apuntes pueden convertirse en un entrenamiento de preguntas",
-        "Preguntas, primeros intentos y tu profesor GoGraduate",
+        f"Preguntas, primeros intentos y tu profesor {GOGRADUATE_DISPLAY_NAME}",
     ),
     "students-03": (
         "La hoja en blanco también sirve para estudiar",
@@ -67,7 +69,7 @@ GOGRADUATE_SOCIAL_TITLES: dict[str, tuple[str, ...]] = {
         "¿Lo sabes o necesitas que los apuntes te lo recuerden?",
         "Escribe, comprueba y vuelve a intentarlo otro día",
         "Prepara preguntas para saber qué has retenido",
-        "De la hoja en blanco a tus apuntes con GoGraduate",
+        f"De la hoja en blanco a tus apuntes con {GOGRADUATE_DISPLAY_NAME}",
     ),
     "students-04": (
         "Si cambia la pregunta, ¿sigues sabiendo la respuesta?",
@@ -89,7 +91,7 @@ GOGRADUATE_SOCIAL_TITLES: dict[str, tuple[str, ...]] = {
         "Haz tu intento antes de descubrir la respuesta",
         "Prepara un repaso que te obligue a decidir",
         "De repetir una definición a resolver con ella",
-        "Ejemplos nuevos, respuestas ocultas y GoGraduate",
+        f"Ejemplos nuevos, respuestas ocultas y {GOGRADUATE_DISPLAY_NAME}",
     ),
 }
 
@@ -133,5 +135,6 @@ GOGRADUATE_SOCIAL_INTROS = (
     "Llévate de esta sesión algo que puedas comprobar en la siguiente. "
     "Estos {count_word} consejos unen preguntas, práctica y trabajo con tus apuntes.",
     "Guarda esta imagen para convertir tu próximo repaso en una prueba "
-    "de lo que sabes. Aquí van {count_word} consejos con GoGraduate como tu profesor.",
+    "de lo que sabes. Aquí van {count_word} consejos con "
+    f"{GOGRADUATE_DISPLAY_NAME} como tu profesor.",
 )

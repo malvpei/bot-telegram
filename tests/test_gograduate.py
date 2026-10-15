@@ -1,5 +1,6 @@
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
+import re
 from threading import Lock
 
 import numpy as np
@@ -22,7 +23,13 @@ from app.gograduate import (
 )
 from app.models import Language, SlideRole, VideoRequest, VideoType
 from app.r2_storage import R2Object
-from app.render import VideoRenderer
+from app.render import (
+    ADVICE_DROPRADAR_GREEN,
+    ADVICE_GOGRADUATE_GOLD,
+    VideoRenderer,
+    _ADVICE_DROPRADAR_WORD,
+    _ADVICE_GOGRADUATE_WORD,
+)
 from app.service import VideoCreationService
 from app.state import StateStore
 
@@ -48,6 +55,9 @@ def test_student_designs_fit_and_use_gograduate_icon(pack_id, background, monkey
     assert result.getpixel((0, 0)) == ((247, 247, 245) if illustrated else (229, 229, 229))
     assert len(tips) == count
     assert len(blocks) == count * 2
+    rendered_text = " ".join(line for lines, _, _ in blocks for line in lines)
+    assert "Usa gograduate.io como tu profesor" in rendered_text
+    assert "GoGraduate" not in rendered_text
     if illustrated:
         assert tips == GOGRADUATE_PACKS[pack_id][:3] + (GOGRADUATE_PROMO,)
         assert len({font.size for _, font, _ in blocks[::2]}) == 1
@@ -82,10 +92,45 @@ def test_student_designs_fit_and_use_gograduate_icon(pack_id, background, monkey
     assert tips[-1] == GOGRADUATE_PROMO
     social = gograduate_social_copy(pack_id, background)
     assert social.hook == GOGRADUATE_HOOKS["oxford"]
-    assert "GoGraduate" in social.description
+    assert "gograduate.io" in social.description
+    assert "GoGraduate" not in social.description
     if illustrated:
         assert "cinco" not in social.description.lower()
         assert "quinto" not in social.description.lower()
+
+
+@pytest.mark.parametrize("brand, pattern, color", [
+    ("gograduate.io", _ADVICE_GOGRADUATE_WORD, ADVICE_GOGRADUATE_GOLD),
+    ("GoGraduate", _ADVICE_GOGRADUATE_WORD, ADVICE_GOGRADUATE_GOLD),
+    ("Dropradar", _ADVICE_DROPRADAR_WORD, ADVICE_DROPRADAR_GREEN),
+])
+def test_brand_color_covers_the_complete_domain_and_preserves_legacy_brands(brand, pattern, color):
+    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+    font = renderer._load_advice_font(size=40, weight=400)
+    image = Image.new("RGB", (1000, 100), "white")
+    draw = ImageDraw.Draw(image)
+    text = f"Usa {brand}, antes de estudiar."
+    matches = list(pattern.finditer(text))
+    assert [match.group() for match in matches] == [brand]
+    renderer._draw_advice_text(
+        draw, (10, 10), text, font=font, fill=(83, 83, 92),
+        brand_word=pattern, brand_fill=color,
+    )
+    pixels = np.asarray(image)
+    brand_pixels = (pixels == color).all(axis=2)
+    brand_x = np.where(brand_pixels)[1]
+    start = 10 + draw.textlength("Usa ", font=font)
+    end = 10 + draw.textlength(f"Usa {brand}", font=font)
+    assert brand_x.size > 100
+    assert brand_x.min() >= int(start) - 1
+    assert brand_x.max() <= int(end) + 1
+    assert (pixels[:, :int(start) - 1] == (83, 83, 92)).all(axis=2).any()
+    assert (pixels[:, int(end) + 2:] == (83, 83, 92)).all(axis=2).any()
+    if brand == "gograduate.io":
+        suffix_start = 10 + draw.textlength("Usa gograduate", font=font)
+        assert brand_pixels[:, int(suffix_start) + 2:int(end)].sum() > 20
+    assert _ADVICE_GOGRADUATE_WORD.search("Dropradar") is None
+    assert _ADVICE_DROPRADAR_WORD.search("gograduate.io") is None
 
 
 class StudentR2Storage:
@@ -149,7 +194,8 @@ def test_gograduate_delivers_two_images_and_rotates_without_touching_dropradar(t
         assert GOGRADUATE_PROMO.body in result.preview_text
         assert result.preview_text == result.slides[0].text
         assert result.preview_text in result.script_path.read_text(encoding="utf-8")
-        assert "GoGraduate" in result.social_copy.description
+        assert "gograduate.io" in result.social_copy.description
+        assert "GoGraduate" not in result.social_copy.description
         assert f":{background.value}:" in result.chosen_account
         assert result.social_copy.hook == GOGRADUATE_HOOKS[GOGRADUATE_HOOK_IDS[index % 2]]
         if background == AdviceBackground.ILLUSTRATED:
@@ -226,6 +272,10 @@ def test_twenty_unique_copies_describe_only_the_visible_tips(pack_id, background
     assert len(copies) == len({copy.title for copy in copies}) == len({copy.description for copy in copies}) == 20
     for copy in copies:
         assert all(len(message) <= 4096 for message in copy.messages)
+        assert "gograduate.io" in copy.description
+        assert "GoGraduate" not in " ".join(copy.messages)
+        assert re.search(r"(?<![#\w])gograduate\b(?!\.io\b)", " ".join(copy.messages), re.IGNORECASE) is None
+        assert copy.hashtags == ["#estudiantes", "#estudio", "#examenes", "#gograduate"]
         for tip in gograduate_tips(pack_id, background):
             assert tip.title in copy.description
             assert tip.body in copy.description

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from app.advice_cards import AdviceBackground, AdviceTip
 from app.gograduate_social import (
+    GOGRADUATE_DISPLAY_NAME,
     GOGRADUATE_SOCIAL_COPY_IDS,
     GOGRADUATE_SOCIAL_INTROS,
     GOGRADUATE_SOCIAL_TITLES,
@@ -26,7 +27,7 @@ GOGRADUATE_HOOK_IDS = list(GOGRADUATE_HOOKS)
 GOGRADUATE_BACKGROUNDS = (AdviceBackground.ILLUSTRATED, AdviceBackground.EDITORIAL)
 GOGRADUATE_DESIGN_IDS = [background.value for background in GOGRADUATE_BACKGROUNDS]
 GOGRADUATE_PROMO = AdviceTip(
-    title="Usa GoGraduate como tu profesor",
+    title=f"Usa {GOGRADUATE_DISPLAY_NAME} como tu profesor",
     body=(
         "usa tu propio profesor que aprende de tus errores, te dice y resume la "
         "información más importante y analiza tus apuntes para que el aprobado "
@@ -160,7 +161,7 @@ def gograduate_social_copy(
         title=GOGRADUATE_SOCIAL_TITLES[pack_id][copy_index],
         description=(
             f"{intro}\n\n{points}\n\n"
-            "Guarda estos consejos para tu próximo repaso y prepara tus apuntes con GoGraduate."
+            f"Guarda estos consejos para tu próximo repaso y prepara tus apuntes con {GOGRADUATE_DISPLAY_NAME}."
         ),
         hashtags=["#estudiantes", "#estudio", "#examenes", "#gograduate"],
         hook=GOGRADUATE_HOOKS[hook_id],

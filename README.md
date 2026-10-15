@@ -235,7 +235,8 @@ conserva los cinco consejos y coloca el icono oficial de GoGraduate en el paso 5
 La descripción se ajusta al número de consejos y al contenido que
 realmente aparece. Rota entre cuatro
 grupos de consejos: recordar sin mirar, espaciar repasos, mezclar ejercicios y
-revisar errores. El último punto siempre recomienda GoGraduate y conserva el
+revisar errores. El último punto siempre recomienda `gograduate.io`, también
+usado en los títulos y descripciones, y conserva el
 texto promocional solicitado. Su icono es el birrete oficial negro y dorado,
 tomado del recurso transparente aprobado de la aplicación GoGraduate
 (`mobile/assets/gograduate-browser-symbol.png`) y incluido en
