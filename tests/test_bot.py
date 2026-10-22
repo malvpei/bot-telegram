@@ -23,6 +23,7 @@ from app.bot import (
     TELEGRAM_TEXT_LIMIT,
     TEMPLATE_VIDEO_CREATE,
     TEMPLATE_VIDEO_CREATE_EN,
+    TYPE_STATE,
     _ask_for_another_same_account,
     _clear_wizard_state,
     _create_and_send_batch_generated_video,
@@ -86,9 +87,10 @@ class FakeTelegramBot:
         self.media_group_types: list[tuple[type, ...]] = []
         self.reply_markup = None
 
-    async def send_message(self, *, chat_id: int, text: str, reply_markup=None) -> None:
+    async def send_message(self, *, chat_id: int, text: str, reply_markup=None, **kwargs):
         self.events.append(("message", text))
         self.reply_markup = reply_markup
+        return FakeStatusMessage()
 
     async def send_photo(self, *, chat_id: int, photo) -> None:
         self.events.append(("photo", Path(photo.name).name))
@@ -128,9 +130,15 @@ class FakeReplyMessage:
         self.text = ""
         self.reply_markup = None
 
-    async def reply_text(self, text: str, reply_markup=None) -> None:
+    async def reply_text(self, text: str, reply_markup=None, **kwargs):
         self.text = text
         self.reply_markup = reply_markup
+        return self
+
+    async def edit_text(self, text: str, reply_markup=None, **kwargs):
+        self.text = text
+        self.reply_markup = reply_markup
+        return self
 
 
 class FakeUpdate:
@@ -143,17 +151,21 @@ class FakeUpdate:
 class FakeStatusMessage:
     def __init__(self) -> None:
         self.edits: list[str] = []
+        self.reply_markup = None
 
-    async def edit_text(self, text: str) -> None:
+    async def edit_text(self, text: str, reply_markup=None, **kwargs):
         self.edits.append(text)
+        self.reply_markup = reply_markup
+        return self
 
 
 class FakeTemplateMessage:
     def __init__(self) -> None:
         self.status = FakeStatusMessage()
 
-    async def reply_text(self, text: str):
+    async def reply_text(self, text: str, reply_markup=None, **kwargs):
         self.status.edits.append(text)
+        self.status.reply_markup = reply_markup
         return self.status
 
 
@@ -236,10 +248,10 @@ class FakeRegenerateQuery:
         self.edited_text = ""
         self.reply_markup = None
 
-    async def answer(self) -> None:
+    async def answer(self, **kwargs) -> None:
         self.answered = True
 
-    async def edit_message_text(self, text: str, reply_markup=None) -> None:
+    async def edit_message_text(self, text: str, reply_markup=None, **kwargs) -> None:
         self.edited_text = text
         self.reply_markup = reply_markup
 
@@ -532,16 +544,17 @@ def test_advice_type_4_sends_design_and_clean_r2_image_as_one_album():
 
         messages = [text for event, text in context.bot.events if event == "message"]
         assert "imagen limpia de R2" in messages[1]
-        assert messages[2:] == [
+        assert messages[2:-1] == [
             "Hook Tipo 4",
             "Título Tipo 4",
             "Descripción Tipo 4 #dropshipping",
         ]
         assert "Consejos incrustados" not in messages
-        assert context.bot.events[-1] == (
+        assert context.bot.events[-2] == (
             "album",
             "type4_1.jpg,type4_2.jpg",
         )
+        assert context.bot.events[-1] == ("message", "¿Qué quieres crear ahora?")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -894,10 +907,16 @@ def test_manual_type_5_sends_one_title_description_four_texts_and_clean_album():
         assert "Descripcion elegida #tipo5" in messages
         for index in range(1, 5):
             assert f"Texto {index}" in messages
-        assert context.bot.events[-1] == (
+        assert context.bot.events[-2] == (
             "album",
             "type5_1.jpg,type5_2.jpg,type5_3.jpg,type5_4.jpg",
         )
+        assert context.bot.events[-1] == ("message", "¿Qué quieres crear ahora?")
+        assert {"ui:home", "ui:create"} <= {
+            button.callback_data
+            for row in context.bot.reply_markup.inline_keyboard
+            for button in row
+        }
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -982,7 +1001,7 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
         asyncio.run(_execute_job(update, context, request))
 
         messages = [text for event, text in context.bot.events if event == "message"]
-        assert len(messages) == 5
+        assert len(messages) == 6
         assert "tools" in messages[1].lower()
         assert "5" in messages[1]
         assert messages[2] == CAR_TOOLS_HOOK
@@ -994,7 +1013,7 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
             f"Texto incrustado {index}" not in messages
             for index in range(1, 5)
         )
-        assert context.bot.events[-4:-1] == [
+        assert context.bot.events[-5:-2] == [
             ("message", CAR_TOOLS_HOOK),
             ("message", "Título Tools"),
             (
@@ -1002,13 +1021,18 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
                 "Descripción para conductores #coches #conduccion",
             ),
         ]
-        assert context.bot.events[-1] == (
+        assert context.bot.events[-2] == (
             "album",
             "car_tools_1.jpg,car_tools_2.jpg,car_tools_3.jpg,"
             "car_tools_4.jpg,car_tools_5.jpg",
         )
+        assert messages[-1] == "¿Qué quieres crear ahora?"
         assert "repeat_request" not in context.user_data
-        assert context.bot.reply_markup is None
+        assert {"ui:home", "ui:createp"} <= {
+            button.callback_data
+            for row in context.bot.reply_markup.inline_keyboard
+            for button in row
+        }
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1386,6 +1410,22 @@ def test_repeat_prompt_has_accept_and_cancel_buttons():
     ]
 
 
+def test_owner_repeat_prompt_explains_shared_account_removal():
+    context = FakeContext()
+
+    asyncio.run(_ask_for_another_same_account(context, 123, "alpha", owner_can_remove=True))
+
+    buttons = context.bot.reply_markup.inline_keyboard[0]
+    assert [button.text for button in buttons] == ["Aceptar", "Eliminar cuenta", "Cancelar"]
+    assert buttons[1].callback_data == REGENERATE_SKIP_ACCOUNT
+    assert "lista compartida de cuentas" in context.bot.events[-1][1]
+    assert {"ui:home", "ui:create"} <= {
+        button.callback_data
+        for row in context.bot.reply_markup.inline_keyboard
+        for button in row
+    }
+
+
 def test_parkez_accept_requests_another_photo_from_the_same_account():
     async def allow(update):
         return True
@@ -1642,16 +1682,15 @@ def test_non_owner_skip_does_not_mutate_shared_accounts_or_pool(tmp_path):
     assert "pool compartido no se modifica" in update.callback_query.edited_text
 
 
-def test_main_menu_has_template_video_button():
+def test_main_menu_offers_three_brands_and_tools():
     markup = _main_menu_markup()
-
-    es_button = markup.inline_keyboard[0][0]
-    en_button = markup.inline_keyboard[0][1]
-
-    assert es_button.text == "Crear video R2 ES"
-    assert es_button.callback_data == TEMPLATE_VIDEO_CREATE
-    assert en_button.text == "Create R2 video EN"
-    assert en_button.callback_data == TEMPLATE_VIDEO_CREATE_EN
+    buttons = [button for row in markup.inline_keyboard for button in row]
+    assert [button.callback_data for button in buttons] == [
+        "ui:create", "ui:createp", "ui:g", "ui:tools", "ui:help",
+    ]
+    assert "Dropradar" in buttons[0].text
+    assert "ParkEz" in buttons[1].text
+    assert "gograduate.io" in buttons[2].text
 
 
 def test_create_command_offers_template_video_without_accounts():
@@ -1669,16 +1708,14 @@ def test_create_command_offers_template_video_without_accounts():
         state = asyncio.run(create_command(update, context))
 
     assert state == GENDER_STATE
-    buttons = update.effective_message.reply_markup.inline_keyboard
-    assert len(buttons) == 2
-    assert buttons[0][0].text == "Video herramientas R2 ES"
-    assert buttons[0][0].callback_data == TEMPLATE_VIDEO_CREATE
-    assert buttons[0][1].text == "Video tools R2 EN"
-    assert buttons[0][1].callback_data == TEMPLATE_VIDEO_CREATE_EN
-    assert buttons[1][0].text == "Tipo 4 - Consejos"
-    assert buttons[1][0].callback_data == "wizard:type:advice"
-    assert buttons[1][1].text == "Tipo 5 - Negocios"
-    assert buttons[1][1].callback_data == "wizard:type:5"
+    buttons = {
+        button.callback_data
+        for row in update.effective_message.reply_markup.inline_keyboard
+        for button in row
+    }
+    assert {TEMPLATE_VIDEO_CREATE, TEMPLATE_VIDEO_CREATE_EN, "wizard:type:advice", "wizard:type:5"} <= buttons
+    assert all(f"wizard:type:{value}" not in buttons for value in ("1", "2", "3"))
+    assert "ui:home" in buttons
 
 
 def test_create_command_hides_women_and_ai_options():
@@ -1698,13 +1735,18 @@ def test_create_command_hides_women_and_ai_options():
     ):
         state = asyncio.run(create_command(update, context))
 
-    assert state == GENDER_STATE
+    assert state == TYPE_STATE
     buttons = [
         button
         for row in update.effective_message.reply_markup.inline_keyboard
         for button in row
     ]
-    assert any(button.callback_data == "wizard:gender:male" for button in buttons)
+    assert {f"wizard:type:{value}" for value in ("1", "2", "3", "advice", "5")} <= {
+        button.callback_data for button in buttons
+    }
+    assert context.user_data["accounts_snapshot"] == ["alpha"]
+    assert context.user_data["video_gender"] == VideoGender.MALE.value
+    assert all(button.callback_data != "wizard:gender:male" for button in buttons)
     assert all(button.callback_data != "wizard:gender:female" for button in buttons)
     assert all(button.callback_data != "wizard:type:4" for button in buttons)
 
@@ -1722,10 +1764,9 @@ def test_wizard_gender_offers_advice_without_ai_story():
 
     assert state != ConversationHandler.END
     buttons = query.reply_markup.inline_keyboard
-    assert buttons[1][0].text == "Tipo 4 - Consejos"
-    assert buttons[1][0].callback_data == "wizard:type:advice"
-    assert buttons[1][1].text == "Tipo 5 - Negocios"
-    assert buttons[1][1].callback_data == "wizard:type:5"
+    choices = {button.callback_data: button.text for row in buttons for button in row}
+    assert "Consejos" in choices["wizard:type:advice"]
+    assert "Negocios" in choices["wizard:type:5"]
     assert all(
         button.callback_data != "wizard:type:4"
         for row in buttons
@@ -1740,7 +1781,7 @@ def test_gograduate_command_opens_its_submenu_and_clears_previous_wizard():
     with patch("app.bot._ensure_allowed", AsyncMock(return_value=True)):
         state = asyncio.run(gograduate_command(update, context))
     assert state == GOGRADUATE_STATE
-    assert context.user_data == {}
+    assert context.user_data == {"creation_brand": "gograduate"}
     buttons = update.effective_message.reply_markup.inline_keyboard
     assert buttons[0][0].callback_data == "gograduate:type:1"
     assert "Tipo 1" in buttons[0][0].text
@@ -1801,7 +1842,8 @@ def test_gograduate_sends_hook_title_description_and_both_images_without_account
         )))
     texts = [call.args[2] for call in send.call_args_list]
     assert texts[0].startswith("GoGraduate · Tipo 1 listo")
-    assert texts[1:] == result.social_copy.messages
+    assert texts[1:-1] == result.social_copy.messages
+    assert texts[-1] == "¿Qué quieres crear ahora?"
     assert texts[1] == GOGRADUATE_HOOKS[hook_id]
     album.assert_awaited_once()
     assert album.call_args.args[2] == result.slides
@@ -1830,16 +1872,14 @@ def test_createp_offers_woman_man_tools_mode3_advice_and_iphone_apps():
 
     assert state == GENDER_STATE
     buttons = update.effective_message.reply_markup.inline_keyboard
-    assert [[button.text for button in row] for row in buttons] == [
-        ["Mujer", "Hombre"],
-        ["Tools", "mode3"],
-        ["Consejos", "Apps iPhone"],
+    choices = [[button for button in row if not button.callback_data.startswith("ui:")] for row in buttons]
+    choices = [row for row in choices if row]
+    assert [button.callback_data for row in choices for button in row] == [
+        "parkez:gender:female", "parkez:gender:male", "parkez:tools",
+        "parkez:mode3", "parkez:advice", "parkez:apps",
     ]
-    assert [[button.callback_data for button in row] for row in buttons] == [
-        ["parkez:gender:female", "parkez:gender:male"],
-        ["parkez:tools", "parkez:mode3"],
-        ["parkez:advice", "parkez:apps"],
-    ]
+    assert all(button.text for row in choices for button in row)
+    assert any(button.callback_data == "ui:home" for row in buttons for button in row)
     assert "repeat_request" not in context.user_data
 
 
@@ -1907,7 +1947,8 @@ def test_parkez_apps_sends_copy_and_five_original_pngs_without_account_controls(
     texts = [call.args[2] for call in send.call_args_list]
     assert "ParkEz" in texts[0]
     assert "Apps" in texts[0]
-    assert texts[1:] == result.social_copy.messages
+    assert texts[1:-1] == result.social_copy.messages
+    assert texts[-1] == "¿Qué quieres crear ahora?"
     assert "repeat_request" not in context.user_data
     assert album.call_args.args[2] == slides
     assert album.call_args.kwargs["video_type"] == VideoType.PARKEZ_APPS
@@ -1948,7 +1989,8 @@ def test_parkez_advice_sends_independent_copy_and_two_uncompressed_images_withou
         asyncio.run(_execute_job(update, context, VideoRequest(chat_id=123, user_id=456, video_type=VideoType.PARKEZ_ADVICE, language=Language.ES, account_inputs=[])))
     texts = [call.args[2] for call in send.call_args_list]
     assert texts[0].startswith("ParkEz · Consejos listo")
-    assert texts[1:] == result.social_copy.messages
+    assert texts[1:-1] == result.social_copy.messages
+    assert texts[-1] == "¿Qué quieres crear ahora?"
     assert "repeat_request" not in context.user_data
     assert album.call_args.kwargs["video_type"] == VideoType.PARKEZ_ADVICE
     assert album.call_args.kwargs["separate_slide_text"] is False
@@ -2062,7 +2104,7 @@ def test_wizard_type_asks_how_to_deliver_slide_text():
 
     assert state == DELIVERY_STATE
     assert context.user_data["video_type"] == "1"
-    assert "texto dentro de cada imagen o separado" in query.edited_text
+    assert "Dentro de las imágenes o en mensajes separados" in query.edited_text
     buttons = query.reply_markup.inline_keyboard[0]
     assert [button.text for button in buttons] == ["Texto en imagen", "Texto separado"]
     assert [button.callback_data for button in buttons] == [
@@ -2259,7 +2301,13 @@ def test_template_video_sends_queue_restart_warning():
                 "message",
                 "Descripcion #dropshipping #ecommerce #shopify #dropradar #capcut",
             ),
+            ("message", "¿Qué quieres crear ahora?"),
         ]
+        assert {"ui:home", "ui:create"} <= {
+            button.callback_data
+            for row in context.bot.reply_markup.inline_keyboard
+            for button in row
+        }
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -2269,6 +2317,7 @@ def test_clear_wizard_state_keeps_repeat_request():
     context.user_data.update(
         {
             "accounts_snapshot": ["alpha", "beta"],
+            "creation_brand": "dropradar",
             "video_type": "1",
             "repeat_request": {"chosen_account": "alpha"},
         }

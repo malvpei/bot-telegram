@@ -4,18 +4,21 @@ import asyncio
 import logging
 from contextlib import ExitStack
 from datetime import datetime, timedelta
+from functools import wraps
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from telegram import (
+    BotCommand,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     InputMediaDocument,
+    MenuButtonCommands,
     Update,
 )
-from telegram.error import NetworkError, RetryAfter, TelegramError
+from telegram.error import BadRequest, NetworkError, RetryAfter, TelegramError
 from telegram.ext import (
     Application,
     ApplicationBuilder,
@@ -45,6 +48,11 @@ from app.batches import (
     schedule_time_to_datetime_time,
 )
 from app.config import get_settings
+from app.bot_ui import (
+    BOT_COMMANDS, HELP_TEXT, HOME_TEXT, TOOLS_TEXT, completion_keyboard,
+    dropradar_keyboard, gograduate_keyboard, home_keyboard,
+    parkez_keyboard, tools_keyboard, with_navigation,
+)
 from app.models import (
     Language,
     SlideRole,
@@ -88,6 +96,102 @@ ACCOUNT_AUDIT_DETAIL_LIMIT = 12
 BATCH_JOB_NAME_PREFIX = "scheduled-batch:"
 
 
+def _authorized_callback(callback):
+    """Old and new buttons must still respect revoked/private-chat access."""
+    @wraps(callback)
+    async def guarded(update, context):
+        if not await _ensure_allowed(update):
+            if update.callback_query is not None:
+                await update.callback_query.answer()
+            return ConversationHandler.END
+        data = str(update.callback_query.data or "")
+        brand = context.user_data.get("creation_brand")
+        expected_brand = next((
+            value for prefix, value in (("parkez:", "parkez"), ("gograduate:", "gograduate"), ("wizard:", "dropradar"))
+            if data.startswith(prefix)
+        ), None)
+        selected_type = context.user_data.get("video_type")
+        expected_types = next((
+            values for prefix, values in (
+                ("wizard:advicelang:", {VideoType.ADVICE.value}),
+                ("wizard:type5lang:", {VideoType.TYPE_5.value}),
+                ("wizard:storylang:", {VideoType.TYPE_4.value}),
+                ("wizard:lang:", {"1", "2", "3"}),
+                ("wizard:delivery:", {"1", "2", "3"}),
+                ("wizard:lowercase:", {"1", "2", "3"}),
+            ) if data.startswith(prefix)
+        ), None)
+        if (
+            (brand is not None and expected_brand is not None and brand != expected_brand)
+            or (expected_types is not None and selected_type not in expected_types)
+        ):
+            await update.callback_query.answer()
+            return await _recover_stale_menu(update, context)
+        return await callback(update, context)
+    return guarded
+
+
+def _build_wizard_handler() -> ConversationHandler:
+    def button(callback, pattern):
+        return CallbackQueryHandler(_authorized_callback(callback), pattern=pattern)
+
+    return ConversationHandler(
+        entry_points=[
+            CommandHandler("start", start),
+            CommandHandler("menu", start),
+            CommandHandler("help", help_command),
+            CommandHandler("cancel", wizard_cancel),
+            CommandHandler("create", create_command),
+            CommandHandler("createp", createp_command),
+            CommandHandler("g", gograduate_command),
+            CommandHandler("wizard", create_command),
+            CommandHandler("story_carousel", story_carousel_command),
+            CallbackQueryHandler(navigation_callback, pattern=r"^ui:"),
+        ],
+        states={
+            GOGRADUATE_STATE: [button(gograduate_type_1, r"^gograduate:type:1$")],
+            GENDER_STATE: [
+                button(template_video_button, TEMPLATE_VIDEO_CALLBACK_PATTERN),
+                button(parkez_gender, r"^parkez:gender:(?:female|male)$"),
+                button(parkez_tools, r"^parkez:tools$"),
+                button(parkez_mode3, r"^parkez:mode3$"),
+                button(parkez_advice, r"^parkez:advice$"),
+                button(parkez_apps, r"^parkez:apps$"),
+                button(wizard_type, r"^wizard:type:(?:5|advice)$"),
+                button(wizard_gender, r"^wizard:gender:male$"),
+            ],
+            TYPE_STATE: [
+                button(template_video_button, TEMPLATE_VIDEO_CALLBACK_PATTERN),
+                button(wizard_type, r"^wizard:type:(?:1|2|3|5|advice)$"),
+            ],
+            DELIVERY_STATE: [
+                button(template_video_button, TEMPLATE_VIDEO_CALLBACK_PATTERN),
+                button(wizard_delivery, r"^wizard:delivery:"),
+            ],
+            LANGUAGE_STATE: [
+                button(template_video_button, TEMPLATE_VIDEO_CALLBACK_PATTERN),
+                button(wizard_story_language, r"^wizard:storylang:"),
+                button(wizard_advice_language, r"^wizard:advicelang:"),
+                button(wizard_type_5_language, r"^wizard:type5lang:"),
+                button(wizard_language, r"^wizard:lang:"),
+            ],
+            LOWERCASE_STATE: [
+                button(template_video_button, TEMPLATE_VIDEO_CALLBACK_PATTERN),
+                button(wizard_lowercase, r"^wizard:lowercase:"),
+            ],
+            STORY_PHOTO_STATE: [
+                MessageHandler(filters.PHOTO | filters.Document.IMAGE, wizard_story_photo),
+            ],
+        },
+        fallbacks=[
+            CommandHandler("cancel", wizard_cancel),
+            CallbackQueryHandler(navigation_callback, pattern=r"^ui:"),
+            CallbackQueryHandler(stale_callback),
+        ],
+        allow_reentry=True,
+    )
+
+
 def run_bot() -> None:
     settings = get_settings()
     if not settings.telegram_bot_token:
@@ -125,68 +229,7 @@ def run_bot() -> None:
     )
     application.bot_data["service"] = service
 
-    wizard_handler = ConversationHandler(
-        entry_points=[
-            CommandHandler("create", create_command),
-            CommandHandler("createp", createp_command),
-            CommandHandler("g", gograduate_command),
-            CommandHandler("wizard", create_command),
-            CommandHandler("story_carousel", story_carousel_command),
-        ],
-        states={
-            GOGRADUATE_STATE: [
-                CallbackQueryHandler(gograduate_type_1, pattern=r"^gograduate:type:1$"),
-            ],
-            GENDER_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(parkez_gender, pattern=r"^parkez:gender:(?:female|male)$"),
-                CallbackQueryHandler(parkez_tools, pattern=r"^parkez:tools$"),
-                CallbackQueryHandler(parkez_mode3, pattern=r"^parkez:mode3$"),
-                CallbackQueryHandler(parkez_advice, pattern=r"^parkez:advice$"),
-                CallbackQueryHandler(parkez_apps, pattern=r"^parkez:apps$"),
-                CallbackQueryHandler(wizard_type, pattern=r"^wizard:type:(?:5|advice)$"),
-                CallbackQueryHandler(wizard_gender, pattern=r"^wizard:gender:male$"),
-            ],
-            TYPE_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(
-                    wizard_type,
-                    pattern=r"^wizard:type:(?:1|2|3|5|advice)$",
-                ),
-            ],
-            DELIVERY_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(wizard_delivery, pattern=r"^wizard:delivery:"),
-            ],
-            LANGUAGE_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(
-                    wizard_story_language,
-                    pattern=r"^wizard:storylang:",
-                ),
-                CallbackQueryHandler(
-                    wizard_advice_language,
-                    pattern=r"^wizard:advicelang:",
-                ),
-                CallbackQueryHandler(
-                    wizard_type_5_language,
-                    pattern=r"^wizard:type5lang:",
-                ),
-                CallbackQueryHandler(wizard_language, pattern=r"^wizard:lang:"),
-            ],
-            LOWERCASE_STATE: [
-                CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                CallbackQueryHandler(wizard_lowercase, pattern=r"^wizard:lowercase:"),
-            ],
-            STORY_PHOTO_STATE: [
-                MessageHandler(filters.PHOTO | filters.Document.IMAGE, wizard_story_photo),
-            ],
-        },
-        fallbacks=[CommandHandler("cancel", wizard_cancel)],
-    )
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
+    wizard_handler = _build_wizard_handler()
     application.add_handler(CommandHandler("my_id", my_id_command))
     application.add_handler(CommandHandler("users", users_command))
     application.add_handler(CommandHandler("add_user", add_user_command))
@@ -215,8 +258,9 @@ def run_bot() -> None:
     application.add_handler(CommandHandler("programar", schedule_command))
     application.add_handler(CommandHandler("batch_reset", batch_reset_command))
     application.add_handler(wizard_handler)
-    application.add_handler(CallbackQueryHandler(template_video_button, pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN))
-    application.add_handler(CallbackQueryHandler(regenerate_choice, pattern=r"^regen:"))
+    application.add_handler(CallbackQueryHandler(_authorized_callback(template_video_button), pattern=TEMPLATE_VIDEO_CALLBACK_PATTERN))
+    application.add_handler(CallbackQueryHandler(_authorized_callback(regenerate_choice), pattern=r"^regen:(?:accept|skip_account|cancel)$"))
+    application.add_handler(CallbackQueryHandler(stale_callback))
     application.add_error_handler(error_handler)
 
     application.run_polling(drop_pending_updates=True)
@@ -224,6 +268,11 @@ def run_bot() -> None:
 
 async def _post_init(application: Application) -> None:
     application.bot_data["batch_lock"] = asyncio.Lock()
+    try:
+        await application.bot.set_my_commands([BotCommand(command, description) for command, description in BOT_COMMANDS])
+        await application.bot.set_chat_menu_button(menu_button=MenuButtonCommands())
+    except TelegramError:
+        LOGGER.exception("Could not register the Telegram navigation menu")
     try:
         _replace_scheduled_batch_jobs(application)
         _queue_missed_scheduled_batch(application)
@@ -806,8 +855,8 @@ def _load_batch_timezone(timezone_name: str) -> ZoneInfo:
         ) from error
 
 
-def _format_batch_schedule_status(store: StateStore) -> str:
-    schedule = _migrate_legacy_batch_schedule(store)
+def _format_batch_schedule_status(store: StateStore, *, read_only: bool = False) -> str:
+    schedule = store.read_batch_schedule() if read_only else _migrate_legacy_batch_schedule(store)
     phase = store.get_batch_rotation_phase(
         cycle_length=BATCH_ROTATION_CYCLE_LENGTH
     )
@@ -849,39 +898,140 @@ async def _edit_batch_status(status_message, text: str) -> None:
         LOGGER.exception("Could not update batch status message")
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not await _ensure_allowed(update):
-        return
+async def _show_ui(update, context, text: str, reply_markup=None) -> None:
+    """Reuse the current menu instead of filling the chat with selection steps."""
+    query = getattr(update, "callback_query", None)
+    if query is not None:
+        try:
+            await query.edit_message_text(text, reply_markup=reply_markup)
+        except BadRequest as error:
+            if "message is not modified" not in str(error).lower():
+                raise
+    elif update.effective_message is not None:
+        await update.effective_message.reply_text(text, reply_markup=reply_markup)
 
-    message = (
-        "Este bot genera videos verticales desde las cuentas de Instagram que "
-        "hayas dejado en accounts.txt o accounts_women.txt.\n\n"
-        "Comandos:\n"
-        "/my_id - ver tu ID de Telegram\n"
-        "/users, /add_user ID, /remove_user ID - accesos (propietario)\n"
-        "/memory - ver si la memoria persiste tras redeploy\n"
-        "/sync - descargar la biblioteca local de cuentas de hombres\n"
-        "/sync_women - descargar la biblioteca local de cuentas de mujeres\n"
-        "/download_pool - precalentar el pool rapido de fotos de hombres\n"
-        "/download_pool_women - precalentar el pool rapido de fotos de mujeres\n"
-        "/pool - ver stock del pool\n"
-        "/audit_accounts - detectar cuentas gastadas/no aptas de hombres\n"
-        "/audit_accounts_women - detectar cuentas gastadas/no aptas de mujeres\n"
-        "/template_video - coger un video de R2 y aplicar la plantilla fija\n"
-        "/batch [cantidad] - crear ahora un lote rotativo (5 por defecto)\n"
-        "/schedule 5 08:00 17:00 - programar lotes diarios\n"
-        "/schedule off - desactivar la programacion\n"
-        "/create — crear contenido con fotos de hombres\n"
-        "/createp — crear carruseles de ParkEz: Mujer, Hombre, Tools, mode3, Consejos y Apps iPhone\n"
-        "/g — crear contenido de GoGraduate para estudiantes\n"
-        "/accounts — ver las cuentas de hombres cargadas\n"
-        "/accounts_women — ver las cuentas de mujeres cargadas\n"
-        "/cancel — cancelar el wizard actual"
-    )
-    await update.effective_message.reply_text(
-        message,
-        reply_markup=_main_menu_markup(),
-    )
+
+async def navigation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not await _ensure_allowed(update):
+        await update.callback_query.answer()
+        return ConversationHandler.END
+    query = update.callback_query
+    await query.answer()
+    route = query.data or ""
+    if route in {"ui:home", "ui:cancel"}:
+        _clear_wizard_state(context)
+        context.user_data.pop("repeat_request", None)
+        text = HOME_TEXT if route == "ui:home" else "Selección cancelada.\n\n" + HOME_TEXT
+        await _show_ui(update, context, text, home_keyboard())
+        return ConversationHandler.END
+    if route in {"ui:create", "ui:createp", "ui:g"}:
+        command = {"ui:create": create_command, "ui:createp": createp_command, "ui:g": gograduate_command}[route]
+        return await command(update, context)
+    if route == "ui:tools":
+        await _show_ui(update, context, TOOLS_TEXT, tools_keyboard())
+        return ConversationHandler.END
+    if route == "ui:help":
+        await _show_ui(update, context, HELP_TEXT, with_navigation(None, back="ui:tools"))
+        return ConversationHandler.END
+    if route.startswith("ui:back:"):
+        has_accounts = bool(context.user_data.get("accounts_snapshot"))
+        video_type = context.user_data.get("video_type")
+        valid_back = {
+            "ui:back:type": isinstance(context.user_data.get("accounts_by_gender"), dict),
+            "ui:back:delivery": has_accounts and video_type in {"1", "2", "3"},
+            "ui:back:language": (
+                (has_accounts and video_type in {"1", "2", "3"})
+                or video_type in {VideoType.ADVICE.value, VideoType.TYPE_5.value, VideoType.TYPE_4.value}
+            ),
+        }
+        if not valid_back.get(route):
+            return await _recover_stale_menu(update, context)
+    if route == "ui:back:type":
+        accounts = context.user_data.get("accounts_snapshot") or []
+        for key in ("video_type", "language", "separate_slide_text", "story_source", "reference_image_path"):
+            context.user_data.pop(key, None)
+        await _show_ui(update, context, "Dropradar · Elige un formato", dropradar_keyboard(bool(accounts)))
+        return TYPE_STATE if accounts else GENDER_STATE
+    if route == "ui:back:delivery":
+        context.user_data.pop("language", None)
+        context.user_data.pop("separate_slide_text", None)
+        if context.user_data.get("video_type") not in {"1", "2", "3"}:
+            await _show_ui(update, context, "Elige primero un formato.", dropradar_keyboard(bool(context.user_data.get("accounts_snapshot"))))
+            return TYPE_STATE if context.user_data.get("accounts_snapshot") else GENDER_STATE
+        await _show_ui(update, context, "Texto · ¿Cómo lo quieres recibir?", _delivery_keyboard())
+        return DELIVERY_STATE
+    if route == "ui:back:language":
+        context.user_data.pop("language", None)
+        video_type = context.user_data.get("video_type")
+        if video_type == VideoType.ADVICE.value:
+            markup = _advice_language_keyboard()
+        elif video_type == VideoType.TYPE_5.value:
+            markup = _type_5_language_keyboard()
+        elif video_type == VideoType.TYPE_4.value:
+            markup = _story_language_keyboard()
+        elif video_type in {"1", "2", "3"}:
+            markup = _standard_language_keyboard()
+        else:
+            return await create_command(update, context)
+        await _show_ui(update, context, "Idioma · Elige el idioma del contenido", markup)
+        return LANGUAGE_STATE
+    if route in {"ui:pool", "ui:memory", "ui:accounts", "ui:schedule"}:
+        try:
+            if route == "ui:schedule":
+                if not await _ensure_admin(update):
+                    return ConversationHandler.END
+                text = _format_batch_schedule_status(_batch_store(), read_only=True)
+            elif route == "ui:accounts":
+                accounts = _load_accounts_by_gender(get_settings())
+                text = "Cuentas disponibles\n\n" + "\n".join(
+                    f"{_gender_label_plural(gender).capitalize()}: {len(entries)} cuentas"
+                    for gender, entries in accounts.items()
+                ) + "\n\nPara verlas: /accounts o /accounts_women."
+            elif route == "ui:pool":
+                service = context.application.bot_data["service"]
+                summary = await asyncio.to_thread(service.pool_status)
+                accounts = _load_accounts_by_gender(get_settings())
+                summary["by_gender"] = {gender.value: _type_1_pool_status_for_accounts(summary, entries) for gender, entries in accounts.items() if entries}
+                text = _format_pool_status(summary)
+            else:
+                snapshot = _telegram_state_store().memory_snapshot(recent_limit=5, user_id=update.effective_user.id)
+                text = (
+                    "Memoria del bot\n\n"
+                    f"Fotos registradas como usadas: {snapshot.get('used_media_count', 0)}\n"
+                    f"Trabajos guardados: {snapshot.get('jobs_count', 0)}\n\n"
+                    "La memoria y las colas se conservan; no se ha reiniciado nada.\n"
+                    "Usa /memory para ver el diagnóstico completo del almacenamiento."
+                )
+        except Exception:
+            LOGGER.exception("Could not read the requested UI status")
+            text = "No pude consultar este estado ahora. Puedes reintentarlo desde Herramientas."
+        await _show_ui(update, context, _fit_telegram_text(text), with_navigation(None, back="ui:tools"))
+        return ConversationHandler.END
+    return await _recover_stale_menu(update, context)
+
+
+async def _recover_stale_menu(update, context) -> int:
+    _clear_wizard_state(context)
+    context.user_data.pop("repeat_request", None)
+    await _show_ui(update, context, "Este menú ya no está activo. Elige una marca para continuar.\n\n" + HOME_TEXT, home_keyboard())
+    return ConversationHandler.END
+
+
+async def stale_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not await _ensure_allowed(update):
+        await update.callback_query.answer()
+        return ConversationHandler.END
+    await update.callback_query.answer()
+    return await _recover_stale_menu(update, context)
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    if not await _ensure_allowed(update):
+        return ConversationHandler.END
+    _clear_wizard_state(context)
+    context.user_data.pop("repeat_request", None)
+    await _show_ui(update, context, HOME_TEXT, home_keyboard())
+    return ConversationHandler.END
 
 
 async def my_id_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -959,68 +1109,11 @@ async def remove_user_command(
     await update.effective_message.reply_text(f"Usuario {user_id} eliminado.")
 
 
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not await _ensure_allowed(update):
-        return
-
-    message = (
-        "Flujo:\n"
-        "1. /create\n"
-        "2. elige el tipo de contenido\n"
-        "3. elige Tipo 1, Tipo 2, Tipo 3, Tipo 4 o Tipo 5\n"
-        "4. elige si quieres texto incrustado en la imagen o separado\n"
-        "5. elige Español o English\n"
-        "6. elige si quieres textos normales o todo en minúscula\n"
-        "7. el bot usa el pool si hay stock o busca dinamicamente si falta\n\n"
-        "Tipos:\n"
-        "1 = historia de 7 imágenes (slide 6 = tip3_dropradar.jpg, febrero)\n"
-        "2 = 4 consejos + hook (slide 3 = tip3_dropradar.jpg, tip3)\n"
-        "3 = hook + herramientas para empezar dropshipping en 2026\n"
-        "4 = cuatro consejos rotativos sobre fondo negro, blanco o ilustrado\n"
-        "5 = comparación de negocios con tres fotos R2 aleatorias y cierre fijo\n"
-        "\nParkEz:\n"
-        "1. /createp\n"
-        "2. elige Mujer, Hombre, Tools, mode3, Consejos o Apps iPhone\n"
-        "3. Mujer y Hombre entregan tres fotos del banco correspondiente y un cierre "
-        "fijo de ParkEz, con los cuatro textos separados\n"
-        "4. Tools entrega cuatro diseños con texto incrustado y una quinta "
-        "imagen de la cola R2 cartools, dentro del bucket configurado\n"
-        "5. mode3 usa fotos del pool de Dropradar, el cierre de Hombre y textos "
-        "sobre carnet, velocidad, radares y aparcamiento; rota 15 títulos y descripciones\n"
-        "6. Consejos entrega un recopilatorio de cuatro apps con su icono y "
-        "explicación, una foto R2 y hook, título y descripción separados\n"
-        "7. Apps iPhone entrega cinco fotos de videos/apps/ con fichas blancas: "
-        "hook, dos apps, ParkEz y una tercera app; rotan apps, fondos y textos\n"
-        "8. en Mujer, Hombre o mode3 puedes pedir otra foto distinta de la misma cuenta\n\n"
-        "GoGraduate:\n"
-        "1. /g\n"
-        "2. elige Tipo 1: cuatro tarjetas o cinco filas de consejos para estudiantes, con "
-        "el icono de GoGraduate, una foto limpia de R2 y textos separados que rotan\n\n"
-        "Las cuentas de hombres se leen de accounts.txt. Las de mujeres se "
-        "leen de accounts_women.txt para el flujo /createp (una por línea).\n\n"
-        "/create usa primero el pool local si hay fotos aptas. "
-        "Si no hay stock, busca dinamicamente en las cuentas y guarda "
-        "las fotos validas sobrantes para acelerar los siguientes videos. "
-        "/download_pool y /download_pool_women quedan como precalentamiento opcional.\n\n"
-        "Usa /audit_accounts o /audit_accounts_women para ver que cuentas "
-        "estan gastadas, sin cache local o sin suficientes fotos aptas.\n\n"
-        "Usa /reset_fotos confirmar para desbloquear todas las fotos ya usadas "
-        "sin borrar el pool, las cachés ni el historial de jobs. Solo puede "
-        "hacerlo el propietario.\n\n"
-        "Usa /template_video [prefijo-r2] para coger un MP4 de R2 y "
-        "aplicarle la plantilla fija de herramientas. El MP4 final sale sin audio.\n\n"
-        "Usa /batch para crear el lote rotativo ahora. Por ejemplo, "
-        "/schedule 5 08:00 17:00 prepara cinco piezas todos los dias con "
-        "antelacion para esas horas (Europe/Madrid por defecto). La IA rota "
-        "con la misma frecuencia en espanol e ingles; el video de mujer queda "
-        "fuera del lote.\n\n"
-        "Usa /memory despues de un redeploy para comprobar que fotos usadas, "
-        "jobs y cuentas recientes no vuelven a cero."
-    )
-    await update.effective_message.reply_text(
-        message,
-        reply_markup=_main_menu_markup(),
-    )
+        return ConversationHandler.END
+    await _show_ui(update, context, HELP_TEXT, with_navigation(None))
+    return ConversationHandler.END
 
 
 async def accounts_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1254,6 +1347,8 @@ async def template_video_button(
     query = update.callback_query
     await query.answer()
     language = _template_video_language_from_callback(query.data or "")
+    _clear_wizard_state(context)
+    context.user_data.pop("repeat_request", None)
     await _execute_template_video(update, context, None, language)
     return ConversationHandler.END
 
@@ -1303,6 +1398,7 @@ async def _execute_template_video(
         await status_message.edit_text(f"Telegram rechazó el video.\n\n{error}")
         return
     await status_message.edit_text("Listo. Plantilla aplicada, video y textos enviados.")
+    await _send_message(context, chat.id, "¿Qué quieres crear ahora?", reply_markup=completion_keyboard(VideoType.TYPE_3))
 
 
 async def memory_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1471,7 +1567,8 @@ async def story_carousel_command(
         context.user_data["language"] = requested_language.value
         await update.effective_message.reply_text(
             "Mandame la foto de referencia y creo el carrusel IA estilo comic "
-            f"en {requested_language.value.upper()}."
+            f"en {requested_language.value.upper()}.",
+            reply_markup=with_navigation(None, back="ui:back:language"),
         )
         return STORY_PHOTO_STATE
     await update.effective_message.reply_text(
@@ -1484,84 +1581,33 @@ async def story_carousel_command(
 async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not await _ensure_allowed(update):
         return ConversationHandler.END
-
-    settings = get_settings()
-    accounts_by_gender = _load_accounts_by_gender(settings)
+    _clear_wizard_state(context)
+    context.user_data.pop("repeat_request", None)
+    context.user_data["creation_brand"] = "dropradar"
+    accounts_by_gender = _load_accounts_by_gender(get_settings())
     context.user_data["accounts_by_gender"] = {
-        gender.value: accounts
-        for gender, accounts in accounts_by_gender.items()
+        gender.value: accounts for gender, accounts in accounts_by_gender.items()
     }
-
-    if not accounts_by_gender[VideoGender.MALE]:
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "Video herramientas R2 ES",
-                        callback_data=TEMPLATE_VIDEO_CREATE,
-                    ),
-                    InlineKeyboardButton(
-                        "Video tools R2 EN",
-                        callback_data=TEMPLATE_VIDEO_CREATE_EN,
-                    ),
-                ],
-                [
-                    InlineKeyboardButton(
-                        "Tipo 4 - Consejos",
-                        callback_data="wizard:type:advice",
-                    ),
-                    InlineKeyboardButton(
-                        "Tipo 5 - Negocios",
-                        callback_data="wizard:type:5",
-                    ),
-                ],
-            ]
+    accounts = accounts_by_gender.get(VideoGender.MALE) or []
+    if accounts:
+        context.user_data["video_gender"] = VideoGender.MALE.value
+        context.user_data["accounts_snapshot"] = list(accounts)
+        text = (
+            "Dropradar · Elige un formato\n\n"
+            "1 · Historia de 7 imágenes\n2 · Hook y cuatro consejos\n"
+            "3 · Herramientas de dropshipping\n4 · Lámina de consejos y foto\n"
+            "5 · Comparación de negocios\n\n"
+            "Los videos R2 usan una plantilla sobre un MP4."
         )
-        await update.effective_message.reply_text(
-            (
-                "Que quieres crear?\n\n"
-                "No encontre cuentas cargadas, asi que puedes crear el video "
-                "de herramientas R2, el Tipo 4 o el Tipo 5."
-            ),
-            reply_markup=keyboard,
+    else:
+        text = (
+            "Dropradar · Elige un formato\n\n"
+            "Sin cuentas de fotos disponibles: puedes crear consejos, "
+            "comparaciones de negocios o videos R2.\n"
+            "Los tipos 1, 2 y 3 aparecerán al cargar cuentas con /accounts."
         )
-        return GENDER_STATE
-
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "Video herramientas R2 ES",
-                    callback_data=TEMPLATE_VIDEO_CREATE,
-                ),
-                InlineKeyboardButton(
-                    "Video tools R2 EN",
-                    callback_data=TEMPLATE_VIDEO_CREATE_EN,
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    f"Hombres ({len(accounts_by_gender[VideoGender.MALE])})",
-                    callback_data="wizard:gender:male",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "Tipo 4 - Consejos",
-                    callback_data="wizard:type:advice",
-                ),
-                InlineKeyboardButton(
-                    "Tipo 5 - Negocios",
-                    callback_data="wizard:type:5",
-                ),
-            ],
-        ]
-    )
-    await update.effective_message.reply_text(
-        "Que quieres crear?",
-        reply_markup=keyboard,
-    )
-    return GENDER_STATE
+    await _show_ui(update, context, text, dropradar_keyboard(bool(accounts)))
+    return TYPE_STATE if accounts else GENDER_STATE
 
 
 async def gograduate_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1569,13 +1615,13 @@ async def gograduate_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return ConversationHandler.END
     _clear_wizard_state(context)
     context.user_data.pop("repeat_request", None)
-    keyboard = InlineKeyboardMarkup([[
-        InlineKeyboardButton(
-            "Tipo 1 · Consejos para estudiantes", callback_data="gograduate:type:1",
-        ),
-    ]])
-    await update.effective_message.reply_text(
-        "GoGraduate · ¿Qué contenido quieres crear?", reply_markup=keyboard,
+    context.user_data["creation_brand"] = "gograduate"
+    await _show_ui(
+        update, context,
+        "gograduate.io · Consejos de estudio\n\n"
+        "Una lámina de consejos y una foto, con hook, título y descripción "
+        "por separado. Los diseños y textos rotan automáticamente.",
+        gograduate_keyboard(),
     )
     return GOGRADUATE_STATE
 
@@ -1602,42 +1648,21 @@ async def gograduate_type_1(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     if not await _ensure_allowed(update):
         return ConversationHandler.END
-
     _clear_wizard_state(context)
     context.user_data.pop("repeat_request", None)
+    context.user_data["creation_brand"] = "parkez"
     accounts_by_gender = _load_accounts_by_gender(get_settings())
     context.user_data["accounts_by_gender"] = {
-        gender.value: accounts
-        for gender, accounts in accounts_by_gender.items()
+        gender.value: accounts for gender, accounts in accounts_by_gender.items()
     }
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "Mujer",
-                    callback_data="parkez:gender:female",
-                ),
-                InlineKeyboardButton(
-                    "Hombre",
-                    callback_data="parkez:gender:male",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    "Tools",
-                    callback_data="parkez:tools",
-                ),
-                InlineKeyboardButton("mode3", callback_data="parkez:mode3"),
-            ],
-            [
-                InlineKeyboardButton("Consejos", callback_data="parkez:advice"),
-                InlineKeyboardButton("Apps iPhone", callback_data="parkez:apps"),
-            ],
-        ]
-    )
-    await update.effective_message.reply_text(
-        "¿Qué carrusel quieres crear?",
-        reply_markup=keyboard,
+    await _show_ui(
+        update, context,
+        "ParkEz · Elige un formato\n\n"
+        "Mujer / Hombre · Fotos con cierre de ParkEz\n"
+        "Tools · Apps para conducir\nmode3 · Trucos para nuevos conductores\n"
+        "Consejos · Recopilatorio de apps\nApps iPhone · Hook y fichas de apps\n\n"
+        "Cada formato incluye sus títulos y descripciones.",
+        parkez_keyboard(),
     )
     return GENDER_STATE
 
@@ -1771,58 +1796,16 @@ async def _create_parkez_photo_carousel(
 
 
 async def wizard_gender(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    # Compatibility for buttons sent before direct-format navigation existed.
     query = update.callback_query
     await query.answer()
-    raw_gender = query.data.rsplit(":", maxsplit=1)[-1]
-    try:
-        gender = VideoGender(raw_gender)
-    except ValueError:
-        await query.edit_message_text("Opción no reconocida. Lanza /create otra vez.")
-        return ConversationHandler.END
-
-    accounts_by_gender = context.user_data.get("accounts_by_gender")
-    if not isinstance(accounts_by_gender, dict):
-        await query.edit_message_text(
-            "Perdí las cuentas cargadas. Lanza /create otra vez."
-        )
-        return ConversationHandler.END
-
-    accounts = list(accounts_by_gender.get(gender.value) or [])
+    accounts_by_gender = context.user_data.get("accounts_by_gender") or {}
+    accounts = list(accounts_by_gender.get(VideoGender.MALE.value) or [])
     if not accounts:
-        path = _accounts_path_for_gender(get_settings(), gender)
-        await query.edit_message_text(
-            f"No hay cuentas de {_gender_label_plural(gender)} en {path}. "
-            "Añade enlaces, guarda el archivo y lanza /create otra vez."
-        )
-        return ConversationHandler.END
-
-    context.user_data["video_gender"] = gender.value
+        return await create_command(update, context)
+    context.user_data["video_gender"] = VideoGender.MALE.value
     context.user_data["accounts_snapshot"] = accounts
-
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("Tipo 1", callback_data="wizard:type:1"),
-                InlineKeyboardButton("Tipo 2", callback_data="wizard:type:2"),
-                InlineKeyboardButton("Tipo 3", callback_data="wizard:type:3"),
-            ],
-            [
-                InlineKeyboardButton(
-                    "Tipo 4 - Consejos",
-                    callback_data="wizard:type:advice",
-                ),
-                InlineKeyboardButton(
-                    "Tipo 5 - Negocios",
-                    callback_data="wizard:type:5",
-                ),
-            ],
-        ]
-    )
-    await query.edit_message_text(
-        f"Tengo {len(accounts)} cuentas de {_gender_label_plural(gender)} cargadas. "
-        "¿Qué tipo de video quieres generar?",
-        reply_markup=keyboard,
-    )
+    await _show_ui(update, context, "Dropradar · Elige un formato", dropradar_keyboard(True))
     return TYPE_STATE
 
 
@@ -1861,22 +1844,9 @@ async def wizard_type(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         )
         return LANGUAGE_STATE
 
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "Texto en imagen",
-                    callback_data="wizard:delivery:embedded",
-                ),
-                InlineKeyboardButton(
-                    "Texto separado",
-                    callback_data="wizard:delivery:separate",
-                ),
-            ]
-        ]
-    )
+    keyboard = _delivery_keyboard()
     await query.edit_message_text(
-        "Perfecto. ¿Quieres el texto dentro de cada imagen o separado como mensaje?",
+        "1/3 · Texto\n\n¿Dentro de las imágenes o en mensajes separados?",
         reply_markup=keyboard,
     )
     return DELIVERY_STATE
@@ -1892,16 +1862,9 @@ async def wizard_delivery(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     context.user_data["separate_slide_text"] = raw_delivery == "separate"
 
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton("Español", callback_data="wizard:lang:es"),
-                InlineKeyboardButton("English", callback_data="wizard:lang:en"),
-            ]
-        ]
-    )
+    keyboard = _standard_language_keyboard()
     await query.edit_message_text(
-        "Ahora elige el idioma del texto.",
+        "2/3 · Idioma\n\nElige el idioma del contenido.",
         reply_markup=keyboard,
     )
     return LANGUAGE_STATE
@@ -1918,16 +1881,16 @@ async def wizard_language(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return ConversationHandler.END
     context.user_data["language"] = raw_lang
 
-    keyboard = InlineKeyboardMarkup(
+    keyboard = with_navigation(InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton("Normal", callback_data="wizard:lowercase:no"),
                 InlineKeyboardButton("Todo minúscula", callback_data="wizard:lowercase:yes"),
             ]
         ]
-    )
+    ), back="ui:back:language")
     await query.edit_message_text(
-        "¿Quieres mantener mayúsculas normales o mandar todos los textos y títulos en minúscula?",
+        "3/3 · Estilo del texto\n\nMantén el formato normal o usa todo en minúscula.",
         reply_markup=keyboard,
     )
     return LOWERCASE_STATE
@@ -1950,7 +1913,8 @@ async def wizard_story_language(
     if context.user_data.get("story_source") == "upload":
         await query.edit_message_text(
             "Mandame la foto de referencia y creo el carrusel IA estilo comic "
-            f"en {language.value.upper()}."
+            f"en {language.value.upper()}.",
+            reply_markup=with_navigation(None, back="ui:back:language"),
         )
         return STORY_PHOTO_STATE
 
@@ -2168,8 +2132,11 @@ async def wizard_story_photo(
 
 
 async def wizard_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data.clear()
-    await update.effective_message.reply_text("Cancelado.")
+    if not await _ensure_allowed(update):
+        return ConversationHandler.END
+    _clear_wizard_state(context)
+    context.user_data.pop("repeat_request", None)
+    await _show_ui(update, context, "Selección cancelada.\n\n" + HOME_TEXT, home_keyboard())
     return ConversationHandler.END
 
 
@@ -2179,9 +2146,12 @@ async def regenerate_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     query = update.callback_query
     await query.answer()
 
+    if query.data not in {REGENERATE_ACCEPT, REGENERATE_SKIP_ACCOUNT, REGENERATE_CANCEL}:
+        await _recover_stale_menu(update, context)
+        return
     if query.data == REGENERATE_CANCEL:
         context.user_data.pop("repeat_request", None)
-        await query.edit_message_text("Perfecto, lo dejo aquí.")
+        await query.edit_message_text("Perfecto, lo dejo aquí.", reply_markup=home_keyboard())
         return
 
     repeat_request = context.user_data.get("repeat_request")
@@ -2346,7 +2316,10 @@ async def _execute_job(
         result = await asyncio.to_thread(service.create_video, request)
     except Exception as error:
         LOGGER.exception("Video generation failed")
-        await status_message.edit_text(f"No pude generar el video.\n\n{error}")
+        await status_message.edit_text(
+            f"No pude generar el video.\n\n{error}",
+            reply_markup=completion_keyboard(request.video_type),
+        )
         return
 
     if result.video_type == VideoType.GOGRADUATE_TYPE_1:
@@ -2445,6 +2418,7 @@ async def _execute_job(
             video_type=result.video_type,
             separate_slide_text=result.separate_slide_text,
         )
+        await status_message.edit_text("✅ Listo. Imágenes y textos enviados.")
         if result.video_type in {
             VideoType.TYPE_4,
             VideoType.TYPE_5,
@@ -2454,6 +2428,7 @@ async def _execute_job(
             VideoType.PARKEZ_ADVICE,
             VideoType.PARKEZ_APPS,
         }:
+            await _send_message(context, chat.id, "¿Qué quieres crear ahora?", reply_markup=completion_keyboard(result.video_type))
             return
         context.user_data["repeat_request"] = {
             "chosen_account": result.chosen_account,
@@ -2464,7 +2439,10 @@ async def _execute_job(
             "lowercase_text": request.lowercase_text,
             "separate_slide_text": request.separate_slide_text,
         }
-        await _ask_for_another_same_account(context, chat.id, result.chosen_account)
+        await _ask_for_another_same_account(
+            context, chat.id, result.chosen_account, request.video_type,
+            owner_can_remove=_is_owner(update),
+        )
         if result.pool_low_stock:
             await _send_message(
                 context,
@@ -2516,7 +2494,10 @@ async def _execute_extra_image(
             "lowercase_text": request.lowercase_text,
             "separate_slide_text": request.separate_slide_text,
         }
-        await _ask_for_another_same_account(context, chat.id, media.source_account)
+        await _ask_for_another_same_account(
+            context, chat.id, media.source_account, request.video_type,
+            owner_can_remove=_is_owner(update),
+        )
     except TelegramError as error:
         LOGGER.exception("Telegram refused the extra image")
         await _send_message(
@@ -2699,14 +2680,21 @@ def _separate_slide_text_messages(
     return [text]
 
 
-async def _ask_for_another_same_account(context, chat_id: int, account: str) -> None:
+async def _ask_for_another_same_account(
+    context, chat_id: int, account: str, video_type: VideoType = VideoType.TYPE_1,
+    *, owner_can_remove: bool = False,
+) -> None:
     keyboard = InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton("Aceptar", callback_data=REGENERATE_ACCEPT),
-                InlineKeyboardButton("Pasar cuenta", callback_data=REGENERATE_SKIP_ACCOUNT),
+                InlineKeyboardButton(
+                    "Eliminar cuenta" if owner_can_remove else "Pasar cuenta",
+                    callback_data=REGENERATE_SKIP_ACCOUNT,
+                ),
                 InlineKeyboardButton("Cancelar", callback_data=REGENERATE_CANCEL),
-            ]
+            ],
+            list(completion_keyboard(video_type).inline_keyboard[0]),
         ]
     )
     await _send_message(
@@ -2715,26 +2703,28 @@ async def _ask_for_another_same_account(context, chat_id: int, account: str) -> 
         text=(
             f"¿Quieres otra imagen distinta de @{account} por si "
             "alguna no te convence?"
+            + ("\n\nEliminar cuenta la quita de la lista compartida de cuentas." if owner_can_remove else "")
         ),
         reply_markup=keyboard,
     )
 
 
 def _main_menu_markup() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "Crear video R2 ES",
-                    callback_data=TEMPLATE_VIDEO_CREATE,
-                ),
-                InlineKeyboardButton(
-                    "Create R2 video EN",
-                    callback_data=TEMPLATE_VIDEO_CREATE_EN,
-                ),
-            ],
-        ]
-    )
+    return home_keyboard()
+
+
+def _delivery_keyboard() -> InlineKeyboardMarkup:
+    return with_navigation(InlineKeyboardMarkup([[
+        InlineKeyboardButton("Texto en imagen", callback_data="wizard:delivery:embedded"),
+        InlineKeyboardButton("Texto separado", callback_data="wizard:delivery:separate"),
+    ]]), back="ui:back:type")
+
+
+def _standard_language_keyboard() -> InlineKeyboardMarkup:
+    return with_navigation(InlineKeyboardMarkup([[
+        InlineKeyboardButton("Español", callback_data="wizard:lang:es"),
+        InlineKeyboardButton("English", callback_data="wizard:lang:en"),
+    ]]), back="ui:back:delivery")
 
 
 def _template_video_language_from_callback(callback_data: str) -> Language:
@@ -2757,7 +2747,7 @@ def _parse_template_video_command_args(args) -> tuple[Language, str | None]:
 
 
 def _story_language_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
+    return with_navigation(InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
@@ -2770,11 +2760,11 @@ def _story_language_keyboard() -> InlineKeyboardMarkup:
                 ),
             ]
         ]
-    )
+    ), back="ui:back:type")
 
 
 def _advice_language_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
+    return with_navigation(InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
@@ -2787,11 +2777,11 @@ def _advice_language_keyboard() -> InlineKeyboardMarkup:
                 ),
             ]
         ]
-    )
+    ), back="ui:back:type")
 
 
 def _type_5_language_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
+    return with_navigation(InlineKeyboardMarkup(
         [
             [
                 InlineKeyboardButton(
@@ -2804,7 +2794,7 @@ def _type_5_language_keyboard() -> InlineKeyboardMarkup:
                 ),
             ]
         ]
-    )
+    ), back="ui:back:type")
 
 
 def _story_language_from_args(args) -> Language | None:
@@ -2823,6 +2813,7 @@ def _prepare_story_carousel_state(
     *,
     source: str = "upload",
 ) -> None:
+    context.user_data["creation_brand"] = "dropradar"
     context.user_data["video_type"] = VideoType.TYPE_4.value
     context.user_data["video_gender"] = VideoGender.MALE.value
     context.user_data["accounts_snapshot"] = []
@@ -2860,6 +2851,7 @@ async def _download_story_reference_photo(
 
 
 def _clear_wizard_state(context: ContextTypes.DEFAULT_TYPE) -> None:
+    context.user_data.pop("creation_brand", None)
     context.user_data.pop("accounts_by_gender", None)
     context.user_data.pop("accounts_snapshot", None)
     context.user_data.pop("video_gender", None)

@@ -188,7 +188,8 @@ el bot.
 ### Comandos
 
 ```text
-/start        — intro
+/start        — abre el panel de marcas
+/menu         — vuelve a Inicio desde cualquier selección
 /help         — flujo y notas
 /accounts     — lista las cuentas cargadas
 /sync         — descarga una vez la biblioteca local por cuenta
@@ -198,8 +199,33 @@ el bot.
 /createp      — crea un carrusel ParkEz para Mujer, Hombre, Tools, mode3, Consejos o Apps iPhone
 /g            — abre el menú de GoGraduate (Tipo 1: consejos para estudiantes)
 /wizard       — alias de /create
-/cancel       — cancela el wizard en curso
+/cancel       — cancela la selección actual (no interrumpe una generación iniciada)
 ```
+
+### Navegación por botones
+
+Tras actualizar y reiniciar el bot, `/start` y `/menu` muestran un panel breve
+con accesos a **Dropradar**, **ParkEz** y **gograduate.io**, además de Ayuda y
+Estado y herramientas. No hace falta memorizar comandos para crear contenido.
+El menú nativo de Telegram se configura al arrancar con los comandos habituales.
+
+Los formatos tienen nombres descriptivos; Dropradar muestra directamente sus
+tipos sin el paso adicional de elegir Hombres. Si faltan cuentas, siguen
+disponibles los consejos, las comparaciones y los videos R2. Las selecciones
+de texto, idioma y estilo incluyen indicadores de paso y botones Atrás,
+Inicio y Cancelar. Las pantallas se actualizan en el mismo mensaje.
+
+Al terminar una entrega se puede crear otra pieza de la misma marca o volver
+a Inicio. Las fotos de una misma cuenta conservan sus controles anteriores;
+solo el propietario ve «Eliminar cuenta», acompañado del aviso de que modifica
+la lista compartida. Para los demás usuarios se mantiene «Pasar cuenta».
+
+Estado y herramientas permite consultar fotos, memoria y cuentas. La consulta
+de programación conserva el acceso exclusivo del propietario y no activa,
+desactiva ni migra horarios. Los comandos avanzados siguen funcionando.
+Cambiar de marca o cancelar descarta solo la selección, no las colas ni el
+historial. Los botones antiguos de otra marca o formato vuelven a Inicio y
+los accesos se comprueban de nuevo antes de ejecutar una acción.
 
 El **Tipo 4** genera una imagen vertical de consejos y no necesita cuentas de
 Instagram. Rota entre sus cinco diseños y cuatro guiones en español e inglés;
