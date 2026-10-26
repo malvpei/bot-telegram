@@ -306,7 +306,7 @@ def test_car_tools_reference_wraps_and_uses_regular_text_weight():
     }
 
 
-def test_car_tools_adds_a_subtle_inner_stroke_only_to_tools(monkeypatch):
+def test_car_tools_and_type_3_share_the_subtle_white_inner_stroke(monkeypatch):
     renderer = VideoRenderer(
         replace(
             get_settings(),
@@ -344,7 +344,7 @@ def test_car_tools_adds_a_subtle_inner_stroke_only_to_tools(monkeypatch):
         ),
     )
 
-    assert captured_inner_strokes == [1, 1, 0, 0]
+    assert captured_inner_strokes == [1, 1, 1, 1]
 
 
 def test_car_tools_r2_slide_is_clean_and_covers_the_canvas(tmp_path):

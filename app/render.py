@@ -174,10 +174,10 @@ CAR_TOOLS_OVERLAY_ROLES = {
     SlideRole.CAR_TOOL_GOOGLE_MAPS,
 }
 TYPE_3_TEXT_STROKE_WIDTH = 4
-TYPE_3_TITLE_FONT_SIZE = 66
+CAR_TOOLS_TITLE_FONT_SIZE = 74
+TYPE_3_TITLE_FONT_SIZE = CAR_TOOLS_TITLE_FONT_SIZE
 TYPE_3_BODY_FONT_SIZE = 58
 TYPE_3_TOOL_VERTICAL_NUDGE_RATIO = 0.015
-CAR_TOOLS_TITLE_FONT_SIZE = 74
 CAR_TOOLS_TEXT_BOLD = False
 CAR_TOOLS_TEXT_INNER_STROKE_WIDTH = 1
 CAR_TOOLS_TITLE_CENTER_RATIO = 0.263
@@ -3326,11 +3326,7 @@ class VideoRenderer:
         )
         max_text_width = width - edge_margin * 2
         stroke_width = max(2, _scale_x(TYPE_3_TEXT_STROKE_WIDTH, width))
-        inner_stroke_width = (
-            max(1, _scale_x(CAR_TOOLS_TEXT_INNER_STROKE_WIDTH, width))
-            if is_car_tools
-            else 0
-        )
+        inner_stroke_width = max(1, _scale_x(CAR_TOOLS_TEXT_INNER_STROKE_WIDTH, width))
         body_line_gap = _scale_y(
             CAR_TOOLS_BODY_LINE_GAPS.get(slide.role, 11) if is_car_tools else 8,
             height,
@@ -3341,10 +3337,7 @@ class VideoRenderer:
         )
 
         if is_car_tools:
-            title_font = self._load_font(
-                size=title_font_size,
-                bold=CAR_TOOLS_TEXT_BOLD,
-            )
+            title_font = self._load_type_3_tool_font(title_font_size, CAR_TOOLS_TEXT_BOLD)
             body_lines = list(CAR_TOOLS_BODY_LINES[slide.role])
             body_font = self._fit_prebroken_lines(
                 body_lines,
@@ -3355,10 +3348,7 @@ class VideoRenderer:
                 min_size=max(12, _scale_x(36, width)),
                 bold=CAR_TOOLS_TEXT_BOLD,
                 stroke_width=stroke_width,
-                font_loader=lambda size, _bold: self._load_font(
-                    size=size,
-                    bold=CAR_TOOLS_TEXT_BOLD,
-                ),
+                font_loader=self._load_type_3_tool_font,
             )
         else:
             title_font = self._fit_single_line_text(
@@ -3367,10 +3357,13 @@ class VideoRenderer:
                 max_width=max_text_width,
                 base_size=title_font_size,
                 min_size=title_font_size,
-                bold=True,
+                bold=CAR_TOOLS_TEXT_BOLD,
                 stroke_width=stroke_width,
+                font_loader=self._load_type_3_tool_font,
             )
-            body_font = self._load_overlay_font(TYPE_3_BODY_FONT_SIZE, True)
+            body_font = self._load_type_3_tool_font(
+                _scale_x(TYPE_3_BODY_FONT_SIZE, width), CAR_TOOLS_TEXT_BOLD,
+            )
             body_lines = self._type_3_body_lines(
                 subtitle,
                 cta,
@@ -3438,6 +3431,10 @@ class VideoRenderer:
         )
         self._draw_type_3_icon(image, slide.role, slide.text, width, icon_top, icon_box_size)
 
+    def _load_type_3_tool_font(self, size: int, bold: bool) -> ImageFont.ImageFont:
+        """Keep Dropradar Type 3 and ParkEz Tools on the same regular face."""
+        return self._load_font(size=size, bold=CAR_TOOLS_TEXT_BOLD)
+
     def _fit_single_line_text(
         self,
         text: str,
@@ -3448,10 +3445,14 @@ class VideoRenderer:
         min_size: int,
         bold: bool,
         stroke_width: int,
+        font_loader: Callable[[int, bool], ImageFont.ImageFont] | None = None,
     ) -> ImageFont.ImageFont:
+        load_font = font_loader or (
+            lambda font_size, is_bold: self._load_font(size=font_size, bold=is_bold)
+        )
         size = base_size
         while size >= min_size:
-            font = self._load_font(size=size, bold=bold)
+            font = load_font(size, bold)
             line_width, _ = self._text_size(
                 draw,
                 text,
@@ -3461,7 +3462,7 @@ class VideoRenderer:
             if line_width <= max_width:
                 return font
             size -= 2
-        return self._load_font(size=min_size, bold=bold)
+        return load_font(min_size, bold)
 
     def _fit_prebroken_lines(
         self,
