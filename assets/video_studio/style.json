@@ -1,0 +1,33 @@
+{
+  "id": "dropradar-cinema-3d",
+  "version": "1.0.0",
+  "name": "Dropradar · Cine 3D",
+  "description": "Animación 3D cinematográfica de película familiar, expresiva y coherente con el anuncio de referencia.",
+  "visual": {
+    "medium": "cinematic expressive 3D family animation",
+    "lighting": "Soft motivated lighting, coherent shadows, integrated characters and environment, warm skin tones and controlled highlights.",
+    "camera": "A single coherent shot per generation, natural camera motion, consistent scale and perspective. Use motivated editing between shots.",
+    "palette": ["#111827", "#EC8A75", "#E8C997", "#455E7A"],
+    "negative_prompt": "green-screen edges, pasted subject, background replacement, detached limbs, extra fingers, duplicated people, deformed face, drifting identity, floating laptop, reversed screen, unreadable generated typography, logos over the scene, brand end card, abrupt unmotivated camera jump"
+  },
+  "characters": {
+    "protagonist": {
+      "name": "Chico",
+      "age": 23,
+      "description": "Adult man, 23 years old, brown hair, black hoodie. Preserve the approved face, hairstyle, body proportions and clothes across every shot.",
+      "voice_role": "son"
+    },
+    "mother": {
+      "name": "Madre",
+      "description": "Adult mother with reddish-brown hair and a coral jacket. Preserve the approved face, hairstyle, body proportions and clothes across every shot.",
+      "voice_role": "mother"
+    }
+  },
+  "output": {"width": 1080, "height": 1920, "fps": 24, "aspect_ratio": "9:16", "video_codec": "h264", "audio_codec": "aac", "audio_sample_rate": 48000, "min_duration": 8, "max_duration": 40},
+  "captions": {"font_size": 80, "color": "#FFFFFF", "outline": 0, "shadow": 0, "max_lines": 2, "side_margin": 88, "bottom_margin": 300, "max_characters_per_line": 24},
+  "screen": {"required": true, "duration": 1.0, "max_duration": 1.5, "method": "real_capture_composited_inside_computer", "preserve_exact_design": true, "generated_ui_allowed": false},
+  "voice": {"provider": "elevenlabs", "language": "es-ES", "model_id": "eleven_multilingual_v2", "roles": ["narrator", "son", "mother"], "fixed_voice_per_role": true, "speed": 1.0, "stability": 0.6, "similarity_boost": 0.8, "style": 0.15, "use_speaker_boost": true, "speech_start_padding": 0.35, "speech_end_padding": 0.45, "estimated_words_per_second": 2.7},
+  "editing": {"cut_at_word_boundaries": true, "allow_speech_truncation": false, "allow_artificial_voice_speedup": false, "allow_static_freeze_extension": false, "allow_automatic_loops": false, "natural_ending": true, "brand_end_card": false, "superimposed_brand": false, "native_generated_audio": "muted_when_using_elevenlabs", "dialogue_visible_requires_lipsync_review": true},
+  "content": {"spoken_brand_forbidden": ["Dropradar"], "fictional_success_only": true, "invented_real_revenue_forbidden": true, "guaranteed_income_forbidden": true},
+  "quality": {"technical_checks_required": true, "creative_review_required": true, "zero_errors_guaranteed": false, "minimum_source_width": 720, "minimum_source_height": 1280, "max_audio_peak_dbfs": -0.1, "black_frame_warning_seconds": 0.12, "silence_warning_seconds": 0.4, "review_categories": ["identity", "hands", "screen", "subtitles", "audio", "continuity"]}
+}

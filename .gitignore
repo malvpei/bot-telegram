@@ -11,3 +11,7 @@ data/state/*.json
 data/state/instagram_session/
 data/state/.state.lock
 
+# Local video studio: generated media, private keys and per-user production state.
+data/video_studio/
+.env.local
+

@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f6f5f0">
+  <title>Dropradar · Estudio de vídeo</title>
+  <link rel="stylesheet" href="/static/studio.css">
+  <script src="/static/studio.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Ir al contenido</a>
+  <div class="app-shell">
+    <aside class="sidebar" aria-label="Navegación principal">
+      <a class="brand" href="#studio" aria-label="Dropradar Estudio"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>dropradar<small>ESTUDIO</small></span></a>
+      <div class="workspace-label">ESPACIO CREATIVO</div>
+      <nav class="main-nav">
+        <button class="nav-item active" data-view="studio"><span aria-hidden="true">◫</span> Estudio</button>
+        <button class="nav-item" data-view="style"><span aria-hidden="true">◈</span> Estilo y personajes</button>
+        <button class="nav-item" data-view="voices"><span aria-hidden="true">≋</span> Voces</button>
+        <button class="nav-item" data-view="library"><span aria-hidden="true">▧</span> Biblioteca</button>
+        <button class="nav-item" data-view="connections"><span aria-hidden="true">⌘</span> Conexiones</button>
+      </nav>
+      <div class="sidebar-bottom"><span class="local-dot"></span><div>Estudio local<small>Tu trabajo se guarda en este Mac</small></div></div>
+    </aside>
+
+    <div class="main-shell">
+      <header class="topbar"><div class="breadcrumb">Dropradar <span>/</span> <strong id="view-label">Estudio</strong></div><div class="topbar-right"><span class="connection-summary" id="connection-summary">Cargando conexiones…</span><span class="avatar" aria-label="Espacio Dropradar">D</span></div></header>
+      <main id="main">
+        <div id="load-error" class="notice error" hidden></div>
+        <section id="view-studio" class="view">
+          <div class="page-heading"><div><div class="eyebrow">DE LA IDEA AL ÚLTIMO FOTOGRAMA</div><h1>Tu próxima historia.</h1><p>Un estilo definido. Voces fijas. Cada plano revisado.</p></div><button class="button primary" data-action="new-job"><span aria-hidden="true">＋</span> Crear vídeo</button></div>
+          <div class="workflow" aria-label="Proceso de producción"><span><b>01</b> Idea</span><i></i><span><b>02</b> Plan</span><i></i><span><b>03</b> Voz</span><i></i><span><b>04</b> Escenas</span><i></i><span><b>05</b> Montaje</span><i></i><span><b>06</b> Revisión</span></div>
+          <div class="stats"><div><span>Piezas del estudio</span><strong id="stat-jobs">—</strong></div><div><span>Pendientes de revisión</span><strong id="stat-review">—</strong></div><div><span>Recursos disponibles</span><strong id="stat-library">—</strong></div><div><span>Voces asignadas</span><strong id="stat-voices">—</strong></div></div>
+          <div class="studio-grid"><section class="projects-area"><div class="section-heading"><h2>En producción</h2><button class="text-button" id="refresh-button">Actualizar <span aria-hidden="true">↻</span></button></div><div id="jobs-list" class="jobs-list"><div class="empty-state"><span class="empty-symbol" aria-hidden="true">◫</span><h3>Preparando tu estudio</h3><p>Cargando las referencias y los trabajos guardados.</p></div></div></section><aside class="style-summary"><div class="section-heading"><h2>Identidad de la serie</h2><span class="tiny-label">PERFIL FIJO</span></div><div id="style-preview" class="style-preview"><div class="preview-placeholder">DR<span>Tu universo visual</span></div></div><div class="style-summary-body"><h3>Historias que se reconocen.</h3><p>Animación 3D expresiva, luz cinematográfica y los mismos personajes en cada pieza.</p><div class="tag-list"><span>Vertical 9:16</span><span>Español de España</span><span>Subtítulos blancos</span></div><button class="text-button" data-view="style">Ver guía de estilo <span aria-hidden="true">↗</span></button></div></aside></div>
+          <div class="quality-banner"><span class="quality-mark" aria-hidden="true">✓</span><div><strong>La revisión forma parte de la producción.</strong><p>Se comprueba el archivo y se revisan la continuidad, las voces, la pantalla y los subtítulos antes de aprobarlo.</p></div></div>
+        </section>
+
+        <section id="view-style" class="view" hidden><div class="page-heading"><div><div class="eyebrow">UNA IDENTIDAD QUE SE MANTIENE</div><h1>Estilo y personajes.</h1><p>La referencia común para generar, montar y revisar cada historia.</p></div><span class="badge neutral" id="style-version">Perfil de Dropradar</span></div><div id="character-grid" class="character-grid"></div><div class="rules-grid" id="style-rules"></div><div class="notice"><strong>Continuidad, plano a plano.</strong> La revisión visual sigue siendo necesaria: las comprobaciones del archivo no detectan por sí solas todos los cambios de cara, manos o movimiento.</div></section>
+
+        <section id="view-voices" class="view" hidden><div class="page-heading"><div><div class="eyebrow">EL REPARTO SONORO</div><h1>Una voz para cada personaje.</h1><p>Elige una vez y conserva la misma voz en las siguientes piezas.</p></div><button class="button secondary" id="load-voices">Actualizar voces</button></div><div id="voices-notice" class="notice"></div><form id="cast-form"><div id="voice-cards" class="voice-cards"></div><div class="form-footer"><p>Las muestras son las disponibles en tu cuenta de ElevenLabs.</p><button class="button primary" type="submit">Guardar reparto</button></div></form></section>
+
+        <section id="view-library" class="view" hidden><div class="page-heading"><div><div class="eyebrow">REUTILIZAR LO QUE YA FUNCIONA</div><h1>Biblioteca.</h1><p>Referencias, escenas y composiciones reales guardadas para tus vídeos.</p></div><span class="badge neutral" id="library-count">— recursos</span></div><div class="filter-row" role="group" aria-label="Filtrar biblioteca"><button class="filter active" data-library-filter="all">Todo</button><button class="filter" data-library-filter="video">Vídeos</button><button class="filter" data-library-filter="image">Imágenes</button><button class="filter" data-library-filter="audio">Audio</button></div><div id="library-grid" class="library-grid"></div></section>
+
+        <section id="view-connections" class="view" hidden><div class="page-heading"><div><div class="eyebrow">LAS HERRAMIENTAS DEL ESTUDIO</div><h1>Conexiones.</h1><p>Voces y generación de escenas, con el acceso guardado en tu equipo.</p></div></div><div id="connection-cards" class="connection-cards"></div><div class="notice"><strong>Acceso privado.</strong> Introduce las claves únicamente en estos campos locales. El estudio no las devuelve al navegador ni las incluye en los vídeos.</div></section>
+      </main>
+      <footer class="page-footer"><span>Dropradar · Estudio de vídeo</span><span>El siguiente vídeo empieza con una buena idea.</span></footer>
+    </div>
+  </div>
+
+  <dialog id="new-job-dialog" class="editor-dialog"><form id="new-job-form"><header class="dialog-heading"><div><div class="eyebrow">NUEVA PIEZA</div><h2>Cuenta una sola idea.</h2></div><button class="icon-button" type="button" data-close-dialog aria-label="Cerrar">×</button></header><div class="dialog-body"><label>Título<input name="title" required maxlength="100" placeholder="Una oportunidad cambia la historia"></label><label>Qué ocurre en el vídeo<textarea name="concept" required rows="3" maxlength="2000" placeholder="Describe la situación, la acción y lo que queremos mostrar de la aplicación."></textarea></label><div class="form-grid"><label>Formato<select name="format"><option value="hook">Gancho breve</option><option value="demo" selected>Demostración</option><option value="story">Minihistoria</option></select></label><label>Duración deseada<select name="duration"><option value="8">8 segundos</option><option value="12">12 segundos</option><option value="15" selected>15 segundos</option><option value="20">20 segundos</option><option value="25">25 segundos</option><option value="30">30 segundos</option><option value="40">40 segundos</option></select></label></div><label>Referencia visual<select name="reference_asset_id" id="reference-select"><option value="">Selecciona una escena de la biblioteca</option></select><small>Una escena completa fija el aspecto del personaje, el entorno y la iluminación.</small></label><label>Locución<textarea name="script" rows="3" maxlength="1500" placeholder="El texto exacto que quieres escuchar. La duración final respetará las frases completas."></textarea><small>La voz se genera antes del montaje para ajustar los planos a lo que se dice.</small></label><div class="form-grid"><label>Voz<select name="voice_role"><option value="narrator">Narrador</option><option value="son">Chico</option><option value="mother">Madre</option></select></label><label>Generador<select name="model"><option value="seedance_fast">Seedance · planos sin voz</option><option value="h3_turbo">MiniMax · escenas completas</option></select></label></div><label class="budget-field">Límite para vídeo e imágenes<div class="input-suffix"><input name="budget_usd" type="number" min="0" max="50" step="0.10" value="2.00" required><span>USD</span></div><small>La voz consume los créditos de tu plan de ElevenLabs. Crear el plan no inicia una generación de pago.</small></label><div id="new-job-error" class="notice error" hidden></div></div><footer class="dialog-footer"><button class="button secondary" type="button" data-close-dialog>Cancelar</button><button class="button primary" type="submit">Crear plan <span aria-hidden="true">→</span></button></footer></form></dialog>
+
+  <dialog id="job-dialog" class="job-dialog"><header class="dialog-heading"><div><div class="eyebrow" id="job-eyebrow">PIEZA DEL ESTUDIO</div><h2 id="job-title">Vídeo</h2></div><button class="icon-button" data-close-dialog aria-label="Cerrar">×</button></header><div id="job-detail" class="dialog-body"></div></dialog>
+  <dialog id="asset-dialog" class="asset-dialog"><header class="dialog-heading"><div><div class="eyebrow">BIBLIOTECA</div><h2 id="asset-title">Recurso</h2></div><button class="icon-button" data-close-dialog aria-label="Cerrar">×</button></header><div id="asset-detail" class="dialog-body"></div></dialog>
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+</body>
+</html>
