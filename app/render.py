@@ -461,18 +461,18 @@ class VideoRenderer:
         image = self._parkez_apps_background(background)
         width, height = image.size
         draw = ImageDraw.Draw(image)
-        font, lines = self._fit_text(
+        font, lines = self._fit_hook_two_lines(
             hook,
             draw,
             max_width=round(width * 0.84),
             max_height=round(height * 0.20),
             base_size=max(10, round(width * 0.060)),
             min_size=max(8, round(width * 0.038)),
-            bold=False,
             stroke_width=0,
-            line_gap=max(2, round(width * 0.015)),
             font_loader=self._load_parkez_apps_description_font,
         )
+        if len(lines) != 2:
+            raise ValueError("El hook de Apps iPhone debe caber en dos líneas.")
         padding_x = max(2, round(width * 0.021))
         padding_y = max(2, round(width * 0.013))
         line_gap = -max(1, round(width * 0.012))
@@ -524,7 +524,11 @@ class VideoRenderer:
         card_left = (width - card_width) // 2
         card_top = round(height * 0.345)
         card_right, card_bottom = card_left + card_width, card_top + card_height
-        draw.rectangle((card_left, card_top, card_right, card_bottom), fill=(255, 255, 255))
+        draw.rounded_rectangle(
+            (card_left, card_top, card_right, card_bottom),
+            radius=max(2, round(width * 0.028)),
+            fill=(255, 255, 255),
+        )
 
         icon_size = round(width * 0.235)
         icon_left = card_left + round(width * 0.022)

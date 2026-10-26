@@ -494,9 +494,12 @@ def _drawn_words_once(calls):
     )
 
 
+@pytest.mark.parametrize("width,height", [(1080, 1920), (360, 640)])
 @pytest.mark.parametrize("app", (*ROTATING_APPS, PARKEZ_APP), ids=lambda app: app.key)
-def test_every_app_has_white_store_card_real_left_icon_and_exact_separate_caption(tmp_path, monkeypatch, app):
-    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+def test_every_app_has_rounded_white_store_card_real_left_icon_and_exact_separate_caption(
+    tmp_path, monkeypatch, app, width, height,
+):
+    renderer = VideoRenderer(replace(get_settings(), width=width, height=height))
     calls = []
     draw_text = ImageDraw.ImageDraw.text
 
@@ -509,19 +512,43 @@ def test_every_app_has_white_store_card_real_left_icon_and_exact_separate_captio
     assert renderer.render_parkez_apps_slide(_background(tmp_path), app, output) == output
     with Image.open(output) as result:
         assert result.format == "PNG"
-        assert result.size == (1080, 1920)
-        assert result.getpixel((0, 0)) == result.getpixel((1079, 1919)) == (30, 70, 120)
-        card_top = round(1920 * 0.345)
-        card_bottom = card_top + round(1080 * 0.285)
-        assert result.getpixel((109, card_top + 1)) == (255, 255, 255)
-        left_icon = result.crop((132, card_top + 27, 384, card_bottom - 27))
+        assert result.size == (width, height)
+        assert result.getpixel((0, 0)) == result.getpixel((width - 1, height - 1)) == (30, 70, 120)
+        card_width = round(width * 0.80)
+        card_left = (width - card_width) // 2
+        card_right = card_left + card_width
+        card_top = round(height * 0.345)
+        card_height = round(width * 0.285)
+        card_bottom = card_top + card_height
+        # Rounded cards expose the original photo at every corner, while
+        # retaining an opaque white surface behind the app information.
+        for corner in (
+            (card_left + 1, card_top + 1),
+            (card_right - 1, card_top + 1),
+            (card_left + 1, card_bottom - 1),
+            (card_right - 1, card_bottom - 1),
+        ):
+            assert result.getpixel(corner) == (30, 70, 120)
+        assert result.getpixel((width // 2, card_top + 1)) == (255, 255, 255)
+        icon_size = round(width * 0.235)
+        icon_left = card_left + round(width * 0.022)
+        icon_top = card_top + (card_height - icon_size) // 2
+        icon_right = icon_left + icon_size
+        assert card_left < icon_left < icon_right < card_right
+        assert card_top < icon_top < icon_top + icon_size < card_bottom
+        left_icon = result.crop((icon_left, icon_top, icon_right, icon_top + icon_size))
         assert len(set(left_icon.get_flattened_data())) > 40
         assert renderer._parkez_apps_icon_path(app).is_file()
         button_blue = sum(
             pixel == (0, 147, 244)
-            for pixel in result.crop((422, card_bottom - 96, 900, card_bottom - 12)).get_flattened_data()
+            for pixel in result.crop((
+                icon_right + round(width * 0.035),
+                card_bottom - round(card_height * 0.30),
+                card_right - round(width * 0.018),
+                card_bottom - round(card_height * 0.09),
+            )).get_flattened_data()
         )
-        assert button_blue > (200 if app.action == "cloud" else 3000)
+        assert button_blue > round((200 if app.action == "cloud" else 3000) * (width / 1080) ** 2)
     header = [(xy, text, kwargs) for xy, text, kwargs in calls if xy[1] < card_bottom]
     caption = [(xy, text, kwargs) for xy, text, kwargs in calls if xy[1] >= card_bottom]
     assert " ".join(text for _, text, kwargs in header if kwargs["fill"] == (0, 0, 0)) == app.title
@@ -535,17 +562,22 @@ def test_every_app_has_white_store_card_real_left_icon_and_exact_separate_captio
     if app.action != "cloud":
         assert any(text == app.action and kwargs["fill"] == (255, 255, 255) for _, text, kwargs in header)
     for (x, y), text, kwargs in calls:
-        bbox = ImageDraw.Draw(Image.new("RGB", (1080, 1920))).textbbox((x, y), text, font=kwargs.get("font"))
-        assert 0 <= bbox[0] <= bbox[2] < 1080
-        assert 0 <= bbox[1] <= bbox[3] < 1920
+        bbox = ImageDraw.Draw(Image.new("RGB", (width, height))).textbbox((x, y), text, font=kwargs.get("font"))
+        assert 0 <= bbox[0] <= bbox[2] < width
+        assert 0 <= bbox[1] <= bbox[3] < height
         if y < card_bottom:
-            assert x > 384
+            assert bbox[0] > icon_right
+            assert bbox[2] < card_right
+            assert bbox[1] > card_top
             assert bbox[3] < card_bottom
 
 
+@pytest.mark.parametrize("width,height", [(1080, 1920), (720, 1280), (360, 640), (180, 320)])
 @pytest.mark.parametrize("hook", PARKEZ_APPS_HOOKS)
-def test_hook_keeps_requested_words_on_white_boxes_and_red_save_prompt(tmp_path, monkeypatch, hook):
-    renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
+def test_hook_uses_exactly_two_lines_keeps_requested_words_and_red_save_prompt(
+    tmp_path, monkeypatch, hook, width, height,
+):
+    renderer = VideoRenderer(replace(get_settings(), width=width, height=height))
     calls = []
     draw_text = ImageDraw.ImageDraw.text
 
@@ -557,6 +589,8 @@ def test_hook_keeps_requested_words_on_white_boxes_and_red_save_prompt(tmp_path,
     output = tmp_path / "hook.png"
     renderer.render_parkez_apps_hook(_background(tmp_path), hook, output)
     hook_calls = [(xy, text, kwargs) for xy, text, kwargs in calls if kwargs["fill"] == (0, 0, 0)]
+    assert len(hook_calls) == 2
+    assert len({xy[1] for xy, _, _ in hook_calls}) == 2
     words = _drawn_words_once(hook_calls)
     assert words.split() == hook.split()
     assert all(
@@ -570,12 +604,16 @@ def test_hook_keeps_requested_words_on_white_boxes_and_red_save_prompt(tmp_path,
     assert Path(save[0][2]["font"].path).name == "Inter-Medium.ttf"
     with Image.open(output) as result:
         assert result.format == "PNG"
-        assert result.size == (1080, 1920)
+        assert result.size == (width, height)
         assert result.getpixel((0, 0)) == (30, 70, 120)
     for (x, y), text, kwargs in calls:
-        bbox = ImageDraw.Draw(Image.new("RGB", (1080, 1920))).textbbox((x, y), text, font=kwargs.get("font"))
-        assert 0 <= bbox[0] <= bbox[2] < 1080
-        assert 0 <= bbox[1] <= bbox[3] < 1920
+        bbox = ImageDraw.Draw(Image.new("RGB", (width, height))).textbbox((x, y), text, font=kwargs.get("font"))
+        assert 0 <= bbox[0] <= bbox[2] < width
+        assert 0 <= bbox[1] <= bbox[3] < height
+        if kwargs["fill"] == (0, 0, 0):
+            padding_x = max(2, round(width * 0.021))
+            assert padding_x <= bbox[0]
+            assert bbox[2] < width - padding_x
 
 
 def test_missing_icon_does_not_silently_render_a_generic_icon(tmp_path):
