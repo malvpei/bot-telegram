@@ -19,7 +19,8 @@ HELP_TEXT = (
     "1. Elige Dropradar, ParkEz o gograduate.io en Inicio.\n"
     "2. Escoge el formato y las opciones que aparezcan.\n"
     "3. Recibe el contenido y usa Crear otro para seguir.\n\n"
-    "Dropradar: historias, consejos y herramientas de dropshipping. También "
+    "Dropradar: historias, consejos y herramientas de dropshipping. Historia IA "
+    "crea seis escenas desde una foto y termina con la original. También "
     "incluye videos R2 con plantilla, en español o inglés.\n"
     "ParkEz: carruseles de fotos, apps y consejos de conducción.\n"
     "gograduate.io: consejos para estudiantes.\n\n"
@@ -58,6 +59,7 @@ BOT_COMMANDS: tuple[tuple[str, str], ...] = (
     ("start", "Abrir el menú de marcas"),
     ("menu", "Volver a Inicio"),
     ("create", "Crear contenido de Dropradar"),
+    ("story_carousel", "Crear una historia IA desde tu foto"),
     ("createp", "Crear contenido de ParkEz"),
     ("g", "Crear contenido de gograduate.io"),
     ("pool", "Consultar las fotos disponibles"),
@@ -121,6 +123,7 @@ def dropradar_keyboard(has_accounts: bool) -> InlineKeyboardMarkup:
         [
             [InlineKeyboardButton("Tipo 4 · Consejos", callback_data="wizard:type:advice")],
             [InlineKeyboardButton("Tipo 5 · Negocios", callback_data="wizard:type:5")],
+            [InlineKeyboardButton("✨ Historia IA · Desde una foto", callback_data="wizard:type:4")],
             [
                 InlineKeyboardButton("🎬 Video R2 · Español", callback_data="template_video:create:es"),
                 InlineKeyboardButton("🎬 Video R2 · English", callback_data="template_video:create:en"),

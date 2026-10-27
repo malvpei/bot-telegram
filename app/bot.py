@@ -157,12 +157,12 @@ def _build_wizard_handler() -> ConversationHandler:
                 button(parkez_mode3, r"^parkez:mode3$"),
                 button(parkez_advice, r"^parkez:advice$"),
                 button(parkez_apps, r"^parkez:apps$"),
-                button(wizard_type, r"^wizard:type:(?:5|advice)$"),
+                button(wizard_type, r"^wizard:type:(?:4|5|advice)$"),
                 button(wizard_gender, r"^wizard:gender:male$"),
             ],
             TYPE_STATE: [
                 button(template_video_button, TEMPLATE_VIDEO_CALLBACK_PATTERN),
-                button(wizard_type, r"^wizard:type:(?:1|2|3|5|advice)$"),
+                button(wizard_type, r"^wizard:type:(?:1|2|3|4|5|advice)$"),
             ],
             DELIVERY_STATE: [
                 button(template_video_button, TEMPLATE_VIDEO_CALLBACK_PATTERN),
@@ -1597,13 +1597,16 @@ async def create_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             "1 · Historia de 7 imágenes\n2 · Hook y cuatro consejos\n"
             "3 · Herramientas de dropshipping\n4 · Lámina de consejos y foto\n"
             "5 · Comparación de negocios\n\n"
+            "Historia IA · 6 escenas creadas desde una foto del banco y la original de cierre.\n"
+            "Para usar tu propia foto: /story_carousel.\n\n"
             "Los videos R2 usan una plantilla sobre un MP4."
         )
     else:
         text = (
             "Dropradar · Elige un formato\n\n"
             "Sin cuentas de fotos disponibles: puedes crear consejos, "
-            "comparaciones de negocios o videos R2.\n"
+            "comparaciones de negocios, historias IA o videos R2.\n"
+            "Historia IA usa una foto del banco; para enviar la tuya: /story_carousel.\n"
             "Los tipos 1, 2 y 3 aparecerán al cargar cuentas con /accounts."
         )
     await _show_ui(update, context, text, dropradar_keyboard(bool(accounts)))

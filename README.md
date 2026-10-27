@@ -196,6 +196,7 @@ el bot.
 /download_pool — rellena el pool precargado de fotos aptas
 /pool         — muestra el stock del pool por tipo y cuenta
 /create       — lanza el wizard (tipo → idioma → render)
+/story_carousel [es|en] — crea una historia IA a partir de una foto que envíes
 /createp      — crea un carrusel ParkEz para Mujer, Hombre, Tools, mode3, Consejos o Apps iPhone
 /g            — abre el menú de GoGraduate (Tipo 1: consejos para estudiantes)
 /wizard       — alias de /create
@@ -211,7 +212,7 @@ El menú nativo de Telegram se configura al arrancar con los comandos habituales
 
 Los formatos tienen nombres descriptivos; Dropradar muestra directamente sus
 tipos sin el paso adicional de elegir Hombres. Si faltan cuentas, siguen
-disponibles los consejos, las comparaciones y los videos R2. Las selecciones
+disponibles los consejos, las comparaciones, Historia IA y los videos R2. Las selecciones
 de texto, idioma y estilo incluyen indicadores de paso y botones Atrás,
 Inicio y Cancelar. Las pantallas se actualizan en el mismo mensaje.
 
@@ -244,7 +245,13 @@ Las subidas más recientes salen primero, incluso si ya había una cola guardada
 se reordenan las fotos pendientes por fecha de subida, de más reciente a más
 antigua. Después siguen las anteriores pendientes, sin repetir las ya usadas
 hasta completar el ciclo.
-La Historia IA no aparece como opción dentro de `/create`.
+**Historia IA · Desde una foto** vuelve a estar disponible en `/create`, también
+sin cuentas de Instagram. Al elegir español o inglés, toma la siguiente foto
+del banco R2 y genera seis escenas ilustradas; la foto original cierra el
+carrusel. Para usar una foto propia, elige `/story_carousel [es|en]` y envíala
+cuando el bot la pida. El comando también aparece en el menú nativo de Telegram.
+Este formato utiliza fal.ai y mantiene el modelo configurado en
+`STORY_FAL_MODEL` (`openai/gpt-image-2/edit` por defecto).
 
 El flujo **/g → Tipo 1** genera una imagen PNG de consejos en español y una
 segunda imagen limpia del prefijo `c/` dentro de `R2_BUCKET` (bucket `videos`

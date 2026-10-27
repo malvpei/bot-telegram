@@ -8,7 +8,7 @@ from telegram.error import TelegramError
 from telegram.ext import CallbackQueryHandler, CommandHandler, ConversationHandler
 
 from app import bot
-from app.models import VideoGender, VideoType
+from app.models import Language, VideoGender, VideoType
 
 
 STATES = (
@@ -82,6 +82,12 @@ def _callbacks(markup):
         for row in markup.inline_keyboard
         for button in row
     }
+
+
+def _dispatch_creation_update(handler, update, context):
+    check_result = handler.check_update(update)
+    assert check_result is not None
+    asyncio.run(handler.handle_update(update, context.application, check_result, context))
 
 
 @pytest.fixture
@@ -264,7 +270,9 @@ def test_navigation_rechecks_authorization_before_any_action(route, authorized, 
         (bot.GENDER_STATE, "parkez:mode3"),
         (bot.GENDER_STATE, "parkez:advice"),
         (bot.GENDER_STATE, "parkez:apps"),
+        (bot.GENDER_STATE, "wizard:type:4"),
         (bot.TYPE_STATE, "wizard:type:1"),
+        (bot.TYPE_STATE, "wizard:type:4"),
         (bot.TYPE_STATE, "template_video:create:es"),
         (bot.DELIVERY_STATE, "wizard:delivery:separate"),
         (bot.LANGUAGE_STATE, "wizard:lang:es"),
@@ -348,6 +356,7 @@ def test_stale_creation_button_in_other_brand_recovers_home(authorized, monkeypa
     [
         ("ui:create", "dropradar", "parkez:tools"),
         ("ui:createp", "parkez", "wizard:type:advice"),
+        ("ui:createp", "parkez", "wizard:type:4"),
     ],
 )
 def test_shared_gender_state_rejects_previous_brand_buttons(brand_route, expected_brand, old_data, authorized, monkeypatch):
@@ -407,7 +416,7 @@ def test_shared_steps_reject_buttons_for_another_content_type(selected_type, old
     execute.assert_not_awaited()
 
 
-def test_back_to_type_keeps_loaded_accounts_and_offers_all_five_types(authorized, monkeypatch):
+def test_back_to_type_keeps_loaded_accounts_and_offers_standard_types_and_ai(authorized, monkeypatch):
     update, context = _update(data="ui:back:type")
     context.user_data.update(WIZARD_SELECTION)
     reload_accounts = Mock(side_effect=AssertionError("Back should reuse loaded accounts"))
@@ -419,7 +428,10 @@ def test_back_to_type_keeps_loaded_accounts_and_offers_all_five_types(authorized
     assert context.user_data["accounts_snapshot"] == ["old"]
     assert context.user_data["video_gender"] == "male"
     assert context.user_data["accounts_by_gender"] == WIZARD_SELECTION["accounts_by_gender"]
-    assert {"wizard:type:1", "wizard:type:2", "wizard:type:3", "wizard:type:advice", "wizard:type:5"} <= _callbacks(_last_response(context)["reply_markup"])
+    assert {
+        "wizard:type:1", "wizard:type:2", "wizard:type:3",
+        "wizard:type:4", "wizard:type:advice", "wizard:type:5",
+    } <= _callbacks(_last_response(context)["reply_markup"])
     reload_accounts.assert_not_called()
 
 
@@ -476,6 +488,8 @@ def test_navigation_handles_callback_without_effective_message(authorized):
         (bot.DELIVERY_STATE, "wizard:delivery:separate", bot.LANGUAGE_STATE, "ui:back:delivery"),
         (bot.LANGUAGE_STATE, "wizard:lang:es", bot.LOWERCASE_STATE, "ui:back:language"),
         (bot.TYPE_STATE, "wizard:type:advice", bot.LANGUAGE_STATE, "ui:back:type"),
+        (bot.TYPE_STATE, "wizard:type:4", bot.LANGUAGE_STATE, "ui:back:type"),
+        (bot.GENDER_STATE, "wizard:type:4", bot.LANGUAGE_STATE, "ui:back:type"),
         (bot.TYPE_STATE, "wizard:type:5", bot.LANGUAGE_STATE, "ui:back:type"),
     ],
 )
@@ -494,8 +508,116 @@ def test_creation_steps_keep_back_home_and_cancel_navigation(initial_state, data
     assert {back, "ui:home", "ui:cancel"} <= _callbacks(_last_response(context)["reply_markup"])
 
 
-def test_story_command_with_language_keeps_upload_navigation(authorized):
-    update, context = _update(command="/story_carousel en")
+@pytest.mark.parametrize("has_accounts", [True, False])
+@pytest.mark.parametrize("language", [Language.ES, Language.EN])
+def test_create_restored_ai_story_uses_r2_in_selected_language(
+    has_accounts, language, authorized, monkeypatch,
+):
+    accounts = ["alpha", "beta"] if has_accounts else []
+    monkeypatch.setattr(bot, "_load_accounts_by_gender", lambda settings: {
+        VideoGender.MALE: list(accounts), VideoGender.FEMALE: [],
+    })
+    execute = AsyncMock()
+    monkeypatch.setattr(bot, "_execute_job", execute)
+    update, context = _update(command="/create")
+    context.user_data["unrelated"] = "keep"
+    handler = bot._build_wizard_handler()
+    key = (123, 456)
+
+    _dispatch_creation_update(handler, update, context)
+
+    assert handler._conversations[key] == (bot.TYPE_STATE if has_accounts else bot.GENDER_STATE)
+    assert "wizard:type:4" in _callbacks(_last_response(context)["reply_markup"])
+
+    type_update, _ = _update(data="wizard:type:4", telegram_bot=context.bot)
+    _dispatch_creation_update(handler, type_update, context)
+
+    assert handler._conversations[key] == bot.LANGUAGE_STATE
+    assert context.user_data["video_type"] == VideoType.TYPE_4.value
+    assert context.user_data["story_source"] == "r2"
+    assert {
+        "wizard:storylang:es", "wizard:storylang:en",
+        "ui:back:type", "ui:home", "ui:cancel",
+    } <= _callbacks(_last_response(context)["reply_markup"])
+    execute.assert_not_awaited()
+
+    language_update, _ = _update(
+        data=f"wizard:storylang:{language.value}", telegram_bot=context.bot,
+    )
+    _dispatch_creation_update(handler, language_update, context)
+
+    assert key not in handler._conversations
+    execute.assert_awaited_once()
+    request = execute.await_args.args[2]
+    assert request.video_type == VideoType.TYPE_4
+    assert request.language == language
+    assert request.account_inputs == []
+    assert request.reference_image_path is None
+    assert request.chat_id == 123
+    assert request.user_id == 456
+    assert "siguiente imagen de R2" in _last_response(context)["text"]
+    assert context.user_data == {"unrelated": "keep"}
+
+
+@pytest.mark.parametrize("has_accounts", [True, False])
+def test_restored_ai_story_back_to_formats_preserves_accounts_without_generation(
+    has_accounts, authorized, monkeypatch,
+):
+    accounts = ["alpha", "beta"] if has_accounts else []
+    load_accounts = Mock(return_value={VideoGender.MALE: accounts, VideoGender.FEMALE: []})
+    monkeypatch.setattr(bot, "_load_accounts_by_gender", load_accounts)
+    execute = AsyncMock()
+    monkeypatch.setattr(bot, "_execute_job", execute)
+    update, context = _update(command="/create")
+    handler = bot._build_wizard_handler()
+    key = (123, 456)
+    _dispatch_creation_update(handler, update, context)
+    selected_accounts = dict(context.user_data["accounts_by_gender"])
+
+    type_update, _ = _update(data="wizard:type:4", telegram_bot=context.bot)
+    _dispatch_creation_update(handler, type_update, context)
+    assert handler._conversations[key] == bot.LANGUAGE_STATE
+
+    back_update, _ = _update(data="ui:back:type", telegram_bot=context.bot)
+    _dispatch_creation_update(handler, back_update, context)
+
+    assert handler._conversations[key] == (bot.TYPE_STATE if has_accounts else bot.GENDER_STATE)
+    assert context.user_data["accounts_by_gender"] == selected_accounts
+    assert context.user_data.get("accounts_snapshot", []) == accounts
+    assert not ({"video_type", "language", "story_source", "reference_image_path"} & context.user_data.keys())
+    assert "wizard:type:4" in _callbacks(_last_response(context)["reply_markup"])
+    load_accounts.assert_called_once()
+    execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize("language", [Language.ES, Language.EN])
+def test_story_command_language_selection_keeps_own_photo_source(language, authorized, monkeypatch):
+    execute = AsyncMock()
+    monkeypatch.setattr(bot, "_execute_job", execute)
+    update, context = _update(command="/story_carousel")
+    handler = bot._build_wizard_handler()
+    key = (123, 456)
+    _dispatch_creation_update(handler, update, context)
+
+    assert handler._conversations[key] == bot.LANGUAGE_STATE
+    assert context.user_data["story_source"] == "upload"
+
+    language_update, _ = _update(
+        data=f"wizard:storylang:{language.value}", telegram_bot=context.bot,
+    )
+    _dispatch_creation_update(handler, language_update, context)
+
+    assert handler._conversations[key] == bot.STORY_PHOTO_STATE
+    assert context.user_data["story_source"] == "upload"
+    assert context.user_data["language"] == language.value
+    assert "foto de referencia" in _last_response(context)["text"]
+    assert {"ui:back:language", "ui:home", "ui:cancel"} <= _callbacks(_last_response(context)["reply_markup"])
+    execute.assert_not_awaited()
+
+
+@pytest.mark.parametrize("language", [Language.ES, Language.EN])
+def test_story_command_with_language_keeps_upload_navigation(language, authorized):
+    update, context = _update(command=f"/story_carousel {language.value}")
     handler = bot._build_wizard_handler()
     key = (123, 456)
     check_result = handler.check_update(update)
@@ -505,7 +627,8 @@ def test_story_command_with_language_keeps_upload_navigation(authorized):
 
     assert handler._conversations[key] == bot.STORY_PHOTO_STATE
     assert context.user_data["creation_brand"] == "dropradar"
-    assert context.user_data["language"] == "en"
+    assert context.user_data["language"] == language.value
+    assert context.user_data["story_source"] == "upload"
     assert {"ui:back:language", "ui:home", "ui:cancel"} <= _callbacks(_last_response(context)["reply_markup"])
 
 
@@ -579,8 +702,10 @@ def test_post_init_registers_native_commands_and_restores_schedule(monkeypatch):
     application.bot.set_my_commands.assert_awaited_once()
     call = application.bot.set_my_commands.await_args
     commands = call.args[0] if call.args else call.kwargs["commands"]
-    assert {"start", "create", "createp", "g", "help"} <= {command.command for command in commands}
-    assert len(commands) <= 12
+    assert {"start", "create", "createp", "g", "story_carousel", "help"} <= {
+        command.command for command in commands
+    }
+    assert len(commands) <= 13
     application.bot.set_chat_menu_button.assert_awaited_once()
     assert isinstance(application.bot.set_chat_menu_button.await_args.kwargs["menu_button"], MenuButtonCommands)
     restore.assert_called_once_with(application)

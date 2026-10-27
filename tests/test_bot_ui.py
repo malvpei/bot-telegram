@@ -51,6 +51,7 @@ def test_dropradar_offers_direct_format_choices_without_gender_step():
     assert labels["wizard:type:3"] == "Tipo 3 · Herramientas"
     assert labels["wizard:type:advice"] == "Tipo 4 · Consejos"
     assert labels["wizard:type:5"] == "Tipo 5 · Negocios"
+    assert labels["wizard:type:4"] == "✨ Historia IA · Desde una foto"
     assert "template_video:create:es" in labels
     assert "template_video:create:en" in labels
     assert not any(route.startswith("wizard:gender:") for route in labels)
@@ -60,7 +61,7 @@ def test_dropradar_without_accounts_keeps_formats_that_need_no_instagram():
     routes = set(_routes(dropradar_keyboard(False)))
 
     assert routes == {
-        "wizard:type:advice", "wizard:type:5",
+        "wizard:type:advice", "wizard:type:5", "wizard:type:4",
         "template_video:create:es", "template_video:create:en",
         "ui:home", "ui:cancel",
     }
@@ -127,7 +128,7 @@ def test_all_keyboard_callbacks_fit_telegram_limit_and_have_known_routes():
     known = {
         "ui:create", "ui:createp", "ui:g", "ui:tools", "ui:help", "ui:home", "ui:cancel",
         "ui:pool", "ui:memory", "ui:accounts", "ui:schedule",
-        "wizard:type:1", "wizard:type:2", "wizard:type:3", "wizard:type:advice", "wizard:type:5",
+        "wizard:type:1", "wizard:type:2", "wizard:type:3", "wizard:type:4", "wizard:type:advice", "wizard:type:5",
         "template_video:create:es", "template_video:create:en",
         "parkez:gender:female", "parkez:gender:male", "parkez:tools", "parkez:mode3",
         "parkez:advice", "parkez:apps", "gograduate:type:1",
@@ -150,6 +151,8 @@ def test_copy_and_command_menu_fit_telegram_limits_and_explain_reset_safely():
     assert "/reset_fotos confirmar" in HELP_TEXT
     assert "Solo puede hacerlo el propietario" in HELP_TEXT
     assert "sin compresión" in HELP_TEXT
+    assert "Historia IA" in HELP_TEXT
+    assert ("story_carousel", "Crear una historia IA desde tu foto") in BOT_COMMANDS
     assert 1 <= len(BOT_COMMANDS) <= 100
     assert len({command for command, _ in BOT_COMMANDS}) == len(BOT_COMMANDS)
     for command, description in BOT_COMMANDS:

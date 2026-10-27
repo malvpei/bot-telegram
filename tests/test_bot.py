@@ -1713,12 +1713,15 @@ def test_create_command_offers_template_video_without_accounts():
         for row in update.effective_message.reply_markup.inline_keyboard
         for button in row
     }
-    assert {TEMPLATE_VIDEO_CREATE, TEMPLATE_VIDEO_CREATE_EN, "wizard:type:advice", "wizard:type:5"} <= buttons
+    assert {
+        TEMPLATE_VIDEO_CREATE, TEMPLATE_VIDEO_CREATE_EN,
+        "wizard:type:4", "wizard:type:advice", "wizard:type:5",
+    } <= buttons
     assert all(f"wizard:type:{value}" not in buttons for value in ("1", "2", "3"))
     assert "ui:home" in buttons
 
 
-def test_create_command_hides_women_and_ai_options():
+def test_create_command_offers_ai_story_without_a_gender_step():
     async def allow(update):
         return True
 
@@ -1741,17 +1744,20 @@ def test_create_command_hides_women_and_ai_options():
         for row in update.effective_message.reply_markup.inline_keyboard
         for button in row
     ]
-    assert {f"wizard:type:{value}" for value in ("1", "2", "3", "advice", "5")} <= {
+    assert {f"wizard:type:{value}" for value in ("1", "2", "3", "4", "advice", "5")} <= {
         button.callback_data for button in buttons
     }
     assert context.user_data["accounts_snapshot"] == ["alpha"]
     assert context.user_data["video_gender"] == VideoGender.MALE.value
     assert all(button.callback_data != "wizard:gender:male" for button in buttons)
     assert all(button.callback_data != "wizard:gender:female" for button in buttons)
-    assert all(button.callback_data != "wizard:type:4" for button in buttons)
+    assert any(
+        button.callback_data == "wizard:type:4" and "Historia IA" in button.text
+        for button in buttons
+    )
 
 
-def test_wizard_gender_offers_advice_without_ai_story():
+def test_wizard_gender_keeps_advice_and_restores_ai_story():
     context = FakeContext()
     context.user_data["accounts_by_gender"] = {
         VideoGender.MALE.value: ["alpha"],
@@ -1767,11 +1773,7 @@ def test_wizard_gender_offers_advice_without_ai_story():
     choices = {button.callback_data: button.text for row in buttons for button in row}
     assert "Consejos" in choices["wizard:type:advice"]
     assert "Negocios" in choices["wizard:type:5"]
-    assert all(
-        button.callback_data != "wizard:type:4"
-        for row in buttons
-        for button in row
-    )
+    assert "Historia IA" in choices["wizard:type:4"]
 
 
 def test_gograduate_command_opens_its_submenu_and_clears_previous_wizard():
