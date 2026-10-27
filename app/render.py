@@ -199,7 +199,9 @@ TYPE_4_TITLE_STROKE_WIDTH = 3
 TYPE_4_TITLE_INNER_STROKE_WIDTH = 1
 TYPE_4_TEXT_STROKE_WIDTH = 4
 TYPE_4_TOOL_NAME_INNER_STROKE_WIDTH = 0
-TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.30
+TYPE_4_STORY_CAPTION_PRIMARY_CENTER = 0.34
+TYPE_4_STORY_CAPTION_FONT_SCALE = 1.16
+TYPE_4_STORY_SUBJECT_TOP_RATIO = 0.39
 TYPE_4_LABEL_FONT_SIZE = 39
 TYPE_4_LABEL_MIN_FONT_SIZE = 27
 TYPE_4_EN_PAYMENTS_LABEL_EXTRA_WIDTH = 48
@@ -4181,7 +4183,7 @@ class VideoRenderer:
                 (
                     (
                         int(width * 0.10),
-                        int(height * 0.34),
+                        int(height * TYPE_4_STORY_SUBJECT_TOP_RATIO),
                         int(width * 0.90),
                         int(height * 0.70),
                     ),
@@ -4520,6 +4522,8 @@ class VideoRenderer:
         width, height = image.size
         layout_source = layout_image or image
         first_line, body = self._split_slide_text(text)
+        is_story = slide is not None and slide.role in TYPE_4_STORY_CAPTION_ROLES
+        font_scale = TYPE_4_STORY_CAPTION_FONT_SCALE if is_story else 1.0
         edge_margin = _scale_x(TEXT_CARD_EDGE_MARGIN, width)
         padding_x = _scale_x(TEXT_CARD_PADDING_X, width)
         padding_y = _scale_y(TEXT_CARD_PADDING_Y, height)
@@ -4527,19 +4531,46 @@ class VideoRenderer:
         connected_line_gap = -_scale_y(TEXT_CARD_LINE_OVERLAP, height)
         block_gap = self._caption_group_gap(slide, height)
         max_text_width = max(1, width - (edge_margin * 2) - (padding_x * 2))
+        story_bottom = None
+        if is_story:
+            regions = list(
+                self._text_avoid_regions(layout_source)
+                if avoid_regions is None
+                else avoid_regions
+            )
+            # Cartoon faces may escape the photo detectors. In that case use
+            # the story's reserved top area instead of the portrait fallback.
+            regions = [
+                (box, weight) for box, weight in regions
+                if weight not in {
+                    TEXT_FALLBACK_HEAD_AVOID_WEIGHT,
+                    TEXT_FALLBACK_BODY_AVOID_WEIGHT,
+                }
+            ]
+            if not any(weight >= TEXT_HEAD_AVOID_WEIGHT for _box, weight in regions):
+                regions.extend(self._fallback_slide_avoid_regions(slide, width, height))
+            avoid_regions = regions
+            story_bottom = self._story_caption_bottom_limit(
+                regions, width, height, width - edge_margin * 2,
+            )
+
+        body_max_height = int(height * 0.40)
+        if story_bottom is not None:
+            min_y, _max_y = self._safe_text_vertical_bounds(height, 0)
+            body_max_height = max(
+                1, min(body_max_height, story_bottom - min_y - padding_y * 2),
+            )
 
         title_font, title_lines = self._fit_caption_title_text(
             first_line,
             draw,
             max_width=max_text_width,
             max_height=int(height * 0.18),
-            base_size=self._scaled_text_size(
-                TEXT_CARD_TITLE_FONT_SIZE,
-                minimum=18,
+            base_size=round(
+                self._scaled_text_size(TEXT_CARD_TITLE_FONT_SIZE, minimum=18) * font_scale
             ),
-            min_size=self._scaled_text_size(
-                TEXT_CARD_TITLE_MIN_FONT_SIZE,
-                minimum=15,
+            min_size=round(
+                self._scaled_text_size(TEXT_CARD_TITLE_MIN_FONT_SIZE, minimum=15) * font_scale
             ),
             bold=False,
             stroke_width=0,
@@ -4548,14 +4579,12 @@ class VideoRenderer:
             body,
             draw,
             max_width=max_text_width,
-            max_height=int(height * 0.40),
-            base_size=self._scaled_text_size(
-                TEXT_CARD_BODY_FONT_SIZE,
-                minimum=17,
+            max_height=body_max_height,
+            base_size=round(
+                self._scaled_text_size(TEXT_CARD_BODY_FONT_SIZE, minimum=17) * font_scale
             ),
-            min_size=self._scaled_text_size(
-                TEXT_CARD_BODY_MIN_FONT_SIZE,
-                minimum=14,
+            min_size=round(
+                self._scaled_text_size(TEXT_CARD_BODY_MIN_FONT_SIZE, minimum=14) * font_scale
             ),
             bold=False,
             stroke_width=0,
@@ -4570,17 +4599,33 @@ class VideoRenderer:
         if not groups:
             return
 
-        group_heights = [
-            self._pill_lines_height(
-                lines,
-                font,
-                draw,
-                padding_y=group_padding_y,
-                line_gap=line_gap,
-            )
-            for lines, font, line_gap, _connected, group_padding_y in groups
-        ]
-        total_height = sum(group_heights) + block_gap * max(0, len(groups) - 1)
+        while True:
+            group_heights = [
+                self._pill_lines_height(
+                    lines,
+                    font,
+                    draw,
+                    padding_y=group_padding_y,
+                    line_gap=line_gap,
+                )
+                for lines, font, line_gap, _connected, group_padding_y in groups
+            ]
+            total_height = sum(group_heights) + block_gap * max(0, len(groups) - 1)
+            if story_bottom is None or total_height <= story_bottom - min_y:
+                break
+            # Preserve the margin even if a generated character sits unusually
+            # high. The normal story layout keeps the larger font above.
+            fitted_groups = []
+            for lines, font, line_gap, connected, group_padding_y in groups:
+                size = getattr(font, "size", 1) - 1
+                if size < 1:
+                    raise ValueError("Historia IA: no hay espacio para el texto sobre el protagonista.")
+                font = self._load_font(size=size, bold=False)
+                lines = self._wrap_text_balanced(
+                    " ".join(lines), font, max_text_width, draw, stroke_width=0,
+                )
+                fitted_groups.append((lines, font, line_gap, connected, group_padding_y))
+            groups = fitted_groups
         title_min_box_width = self._caption_title_min_box_width(slide, width)
         block_width = min(
             width - (edge_margin * 2),
@@ -4598,6 +4643,11 @@ class VideoRenderer:
                 in enumerate(groups)
             ),
         )
+        max_start_y = self._fixed_screen_max_start_y(
+            slide, total_height, canvas_height=height,
+        )
+        if story_bottom is not None:
+            max_start_y = story_bottom - total_height
         start_y = self._safe_text_start_y(
             layout_source,
             block_width=block_width,
@@ -4611,11 +4661,7 @@ class VideoRenderer:
                 width,
                 height,
             ),
-            max_start_y=self._fixed_screen_max_start_y(
-                slide,
-                total_height,
-                canvas_height=height,
-            ),
+            max_start_y=max_start_y,
         )
         start_y = self._clamp_fixed_screen_caption_y(
             slide,
@@ -4651,6 +4697,25 @@ class VideoRenderer:
                 )
             if index < len(groups) - 1:
                 y += block_gap
+
+    @staticmethod
+    def _story_caption_bottom_limit(
+        regions: list[tuple[tuple[int, int, int, int], float]],
+        width: int,
+        height: int,
+        block_width: int,
+    ) -> int:
+        """Keep the whole white card above the subject, with visible clearance."""
+        left = (width - block_width) // 2
+        right = left + block_width
+        subject_top = min(
+            (
+                box[1] for box, weight in regions
+                if weight >= TEXT_BODY_AVOID_WEIGHT and box[0] < right and box[2] > left
+            ),
+            default=int(height * TYPE_4_STORY_SUBJECT_TOP_RATIO),
+        )
+        return subject_top - _scale_y(TEXT_AVOID_CLEARANCE_MARGIN, height)
 
     def _caption_preferred_centers(
         self,

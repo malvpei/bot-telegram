@@ -1144,8 +1144,8 @@ def test_type_4_story_caption_prefers_lower_part_of_reserved_top_area():
         media=_candidate(Path("source.jpg")),
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.30
-    assert TYPE_4_STORY_CAPTION_PRIMARY_CENTER == 0.30
+    assert renderer._caption_preferred_centers(slide)[0] == 0.34
+    assert TYPE_4_STORY_CAPTION_PRIMARY_CENTER == 0.34
 
 
 def test_type_4_success_caption_also_uses_reserved_top_area():
@@ -1157,7 +1157,7 @@ def test_type_4_success_caption_also_uses_reserved_top_area():
         media=_candidate(Path("source.jpg")),
     )
 
-    assert renderer._caption_preferred_centers(slide)[0] == 0.30
+    assert renderer._caption_preferred_centers(slide)[0] == 0.34
 
 
 def test_lower_story_caption_still_clears_detected_head_region():

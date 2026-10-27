@@ -474,7 +474,11 @@ carrusel IA usa por defecto `openai/gpt-image-2/edit` a traves de fal.ai. La
 primera escena fija el personaje y el estilo; la segunda fija la habitacion; las
 escenas restantes reutilizan esas referencias y generan hasta
 `STORY_IMAGE_WORKERS=2` imagenes simultaneas. Los textos exactos se componen
-despues para que el modelo no introduzca letras deformadas. Un revisor visual
+despues para que el modelo no introduzca letras deformadas. En las seis escenas,
+el texto sobre fondo blanco se amplía un 16 % y se sitúa más abajo, por encima
+del protagonista y con margen respecto a las caras y cuerpos detectados. Si
+el dibujo no se detecta, se respeta la zona superior reservada del 39 %.
+Un revisor visual
 barato valida cada escena y solo regenera las que no alcancen
 `STORY_REVIEW_MIN_SCORE`: usa OpenAI si existe `OPENAI_API_KEY` y, si no, el
 router visual de fal.ai con la misma `FAL_KEY`.
