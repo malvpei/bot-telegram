@@ -479,8 +479,11 @@ el texto sobre fondo blanco conserva la ampliación del 16 %. Su borde inferior
 se coloca a 58 px del protagonista a resolución 1080×1920 (margen proporcional
 en otras resoluciones), en vez de usar una altura fija para todas las escenas.
 La revisión visual existente localiza la silueta principal, incluido pelo, gorros
-y manos levantadas, y guarda sus coordenadas normalizadas en el PNG. No añade
-una petición de IA. La composición protege toda la trayectoria del acercamiento
+y manos levantadas. Una guía de coordenadas se añade solamente a la copia que
+ve el revisor; nunca a las imágenes entregadas. Un punto interior permite afinar
+localmente el borde del pelo oscuro y recuperar sus mechones finos, sin confundir
+los muebles con el protagonista. Las coordenadas finales se guardan en el PNG.
+Esto reutiliza la misma petición de IA. La composición protege toda la trayectoria del acercamiento
 del vídeo y utiliza la misma posición en las fotos entregadas. Si no hay
 coordenadas válidas del revisor, utiliza la detección local; si tampoco detecta
 el dibujo, respeta la zona superior reservada del 39 %.

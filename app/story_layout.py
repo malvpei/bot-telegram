@@ -30,6 +30,33 @@ def parse_story_subject_box(value: object) -> StorySubjectBox | None:
     return left, top, right, bottom
 
 
+def _native_coordinates(value: object, count: int) -> tuple[float, ...] | None:
+    if not isinstance(value, (list, tuple)) or len(value) != count:
+        return None
+    if any(isinstance(item, bool) or not isinstance(item, Real) for item in value):
+        return None
+    values = tuple(float(item) for item in value)
+    if not all(math.isfinite(item) and item.is_integer() and 0 <= item <= 1000 for item in values):
+        return None
+    return tuple(item / 1000 for item in values)
+
+
+def parse_story_subject_box_2d(value: object) -> StorySubjectBox | None:
+    coordinates = _native_coordinates(value, 4)
+    if coordinates is None:
+        return None
+    top, left, bottom, right = coordinates
+    return parse_story_subject_box((left, top, right, bottom))
+
+
+def parse_story_subject_point_2d(value: object) -> tuple[float, float] | None:
+    coordinates = _native_coordinates(value, 2)
+    if coordinates is None:
+        return None
+    top, left = coordinates
+    return left, top
+
+
 def story_subject_box(image: Image.Image) -> StorySubjectBox | None:
     raw = image.info.get(STORY_SUBJECT_BOX_KEY)
     if not isinstance(raw, str):
@@ -40,7 +67,12 @@ def story_subject_box(image: Image.Image) -> StorySubjectBox | None:
         return None
 
 
-def write_story_subject_box(path: Path, box: StorySubjectBox | None) -> None:
+def write_story_subject_box(
+    path: Path,
+    box: StorySubjectBox | None,
+    *,
+    anchor_point: tuple[float, float] | None = None,
+) -> None:
     """Keep reviewed geometry with its PNG, including selected retry fallbacks."""
     normalized = parse_story_subject_box(box)
     with Image.open(path) as source:
@@ -48,6 +80,10 @@ def write_story_subject_box(path: Path, box: StorySubjectBox | None) -> None:
             return
         source.load()
         image = source.copy()
+        if normalized is not None and anchor_point is not None:
+            from app.story_subject_detection import refine_story_subject_box
+
+            normalized = refine_story_subject_box(image, normalized, anchor_point)
         info = PngImagePlugin.PngInfo()
         for key, value in source.info.items():
             if key != STORY_SUBJECT_BOX_KEY and isinstance(value, str):

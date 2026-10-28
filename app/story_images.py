@@ -17,12 +17,17 @@ from threading import Lock
 from typing import Any, Sequence
 
 import requests
-from PIL import Image, ImageOps, ImageStat
+from PIL import Image, ImageDraw, ImageFont, ImageOps, ImageStat
 
 from app.config import Settings
 from app.models import MediaCandidate, SlideRole
 from app.state import StateStore
-from app.story_layout import parse_story_subject_box, write_story_subject_box
+from app.story_layout import (
+    parse_story_subject_box,
+    parse_story_subject_box_2d,
+    parse_story_subject_point_2d,
+    write_story_subject_box,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -144,6 +149,7 @@ class StoryImageReview:
     issues: tuple[str, ...]
     retry_instruction: str
     subject_box: tuple[float, float, float, float] | None = None
+    subject_anchor_point: tuple[float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -747,6 +753,9 @@ class StoryCarouselImageGenerator:
                     write_story_subject_box(
                         attempt_path,
                         review.subject_box if review is not None else None,
+                        anchor_point=(
+                            review.subject_anchor_point if review is not None else None
+                        ),
                     )
                     if review is None or review.accepted:
                         output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -1148,7 +1157,9 @@ class StoryCarouselImageGenerator:
                 {
                     "type": "image_url",
                     "image_url": {
-                        "url": self._review_image_data_uri(path),
+                        "url": self._review_image_data_uri(
+                            path, coordinate_guide=index == len(image_paths) - 1,
+                        ),
                         "detail": "high" if index == len(image_paths) - 1 else "low",
                     },
                 }
@@ -1218,7 +1229,10 @@ class StoryCarouselImageGenerator:
                 headers=self._fal_headers(),
                 json={
                     "image_urls": [
-                        self._review_image_data_uri(path) for path in image_paths
+                        self._review_image_data_uri(
+                            path, coordinate_guide=index == len(image_paths) - 1,
+                        )
+                        for index, path in enumerate(image_paths)
                     ],
                     "prompt": self._review_prompt(scene),
                     "system_prompt": (
@@ -1279,15 +1293,22 @@ class StoryCarouselImageGenerator:
                     "maxItems": 4,
                 },
                 "retry_instruction": {"type": "string"},
-                "subject_box": {
+                "subject_box_2d": {
                     "type": ["array", "null"],
-                    "items": {"type": "number", "minimum": 0, "maximum": 1},
+                    "items": {"type": "integer", "minimum": 0, "maximum": 1000},
                     "minItems": 4,
                     "maxItems": 4,
                 },
+                "subject_anchor_point": {
+                    "type": ["array", "null"],
+                    "items": {"type": "integer", "minimum": 0, "maximum": 1000},
+                    "minItems": 2,
+                    "maxItems": 2,
+                },
             },
             "required": [
-                "accepted", "score", "issues", "retry_instruction", "subject_box",
+                "accepted", "score", "issues", "retry_instruction",
+                "subject_box_2d", "subject_anchor_point",
             ],
             "additionalProperties": False,
         }
@@ -1327,7 +1348,14 @@ class StoryCarouselImageGenerator:
             score=score,
             issues=issues,
             retry_instruction=str(parsed.get("retry_instruction") or "").strip(),
-            subject_box=parse_story_subject_box(parsed.get("subject_box")),
+            subject_box=(
+                parse_story_subject_box_2d(parsed["subject_box_2d"])
+                if "subject_box_2d" in parsed
+                else parse_story_subject_box(parsed.get("subject_box"))
+            ),
+            subject_anchor_point=parse_story_subject_point_2d(
+                parsed.get("subject_anchor_point"),
+            ),
         )
 
     def _review_prompt(self, scene: StoryScene) -> str:
@@ -1388,27 +1416,60 @@ class StoryCarouselImageGenerator:
             f"{self.settings.story_review_min_score}/10. retry_instruction must be a "
             "short concrete English correction prompt for the image generator. "
             "Also locate the main foreground protagonist in the FINAL candidate "
-            "image only, never in the original or continuity references. Return "
-            "subject_box as [left, top, right, bottom], normalized to 0..1 across "
-            "the candidate's full width and height (origin is its top-left). "
+            "image only, never in the original or continuity references. "
+            "The final candidate contains a TEMPORARY cyan horizontal coordinate "
+            "guide added only to this review copy. Its numeric labels mark native "
+            "y coordinates from 0 to 1000 in steps of 50 across the same full "
+            "image geometry; use the visible labels to locate the subject and "
+            "interior anchor point accurately. Ignore these cyan lines and their "
+            "numeric labels completely when grading image quality, style, fake "
+            "text or caption-safe space. They are not part of the generated "
+            "illustration and will never appear in the delivered image. "
+            "Use Gemini's native object-detection coordinate format: "
+            "subject_box_2d is [ymin, xmin, ymax, xmax], integers normalized "
+            "to 0..1000 across the candidate's FULL width and height, with the "
+            "origin at its top-left. Do not swap x/y or use 0..1 fractions. "
             "Enclose the complete visible protagonist, including the very top of "
             "his hair or hat, raised hands, and clothing; do not locate only the "
             "face. Exclude background people, furniture, plants, laptop, car and "
-            "other scenery. Use tight visible bounds without extra padding, so "
-            "an external caption can leave a consistent gap above his highest "
-            "point. This is required even for a rejected candidate. Return null "
-            "only when the protagonist cannot be located reliably. "
+            "other scenery. Ignore any existing caption, white text background, "
+            "overlay, or blank padding when locating the protagonist; do not "
+            "include those in the subject's bounds. Use tight visible bounds "
+            "without extra padding. Also return subject_anchor_point as [y, x], "
+            "integers normalized to the same 0..1000 full-image coordinates. "
+            "Place this point safely INSIDE the protagonist's highest visible "
+            "part, away from its outline: normally inside the filled hair or "
+            "hat near the top of his head. If a raised hand is above the head, "
+            "put the point inside that hand instead. Never choose a point on "
+            "the background, caption, face below the hair, or an empty area. "
+            "An external compositor uses this interior point to measure the "
+            "exact top silhouette locally and leave a consistent caption gap. "
+            "Both geometry fields are required even for a rejected candidate; "
+            "use null only when they cannot be located reliably. "
             "Return one JSON object with exactly: accepted (boolean), score "
             "(integer 0-10), issues (array of at most four short strings), "
-            "retry_instruction (string), and subject_box (four normalized numbers "
-            "or null)."
+            "retry_instruction (string), subject_box_2d (four integers 0..1000 "
+            "or null), and subject_anchor_point (two integers 0..1000 or null)."
         )
 
     @staticmethod
-    def _review_image_data_uri(image_path: Path) -> str:
+    def _review_image_data_uri(
+        image_path: Path,
+        *,
+        coordinate_guide: bool = False,
+    ) -> str:
         with Image.open(image_path) as source:
             image = ImageOps.exif_transpose(source).convert("RGB")
         image.thumbnail((640, 960), Image.Resampling.LANCZOS)
+        if coordinate_guide:
+            draw = ImageDraw.Draw(image)
+            font = ImageFont.load_default(size=18)
+            for value in range(0, 1000, 50):
+                y = round(image.height * value / 1000)
+                draw.line((0, y, image.width - 1, y), fill=(0, 220, 255), width=1)
+                label_top = max(0, min(image.height - 20, y - 10))
+                draw.rectangle((0, label_top, 42, label_top + 20), fill="white")
+                draw.text((2, label_top), str(value), font=font, fill=(0, 70, 100))
         buffer = BytesIO()
         image.save(buffer, format="JPEG", quality=84, optimize=True)
         encoded = base64.b64encode(buffer.getvalue()).decode("ascii")

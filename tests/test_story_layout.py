@@ -7,6 +7,8 @@ from PIL import Image, PngImagePlugin
 
 from app.story_layout import (
     parse_story_subject_box,
+    parse_story_subject_box_2d,
+    parse_story_subject_point_2d,
     story_subject_box,
     write_story_subject_box,
 )
@@ -18,6 +20,34 @@ from app.story_layout import (
 ))
 def test_subject_box_uses_normalized_bounds(value):
     assert parse_story_subject_box(value) == (0.2, 0.35, 0.9, 1.0)
+
+
+def test_native_vision_geometry_converts_yx_to_normalized_xy():
+    assert parse_story_subject_box_2d([350, 200, 1000, 900]) == (0.2, 0.35, 0.9, 1.0)
+    assert parse_story_subject_point_2d([475, 650]) == (0.65, 0.475)
+    # Integer-valued JSON floats are still precise native coordinates.
+    assert parse_story_subject_box_2d([350.0, 200.0, 1000.0, 900.0]) == (0.2, 0.35, 0.9, 1.0)
+    assert parse_story_subject_point_2d([0, 1000]) == (1.0, 0.0)
+
+
+@pytest.mark.parametrize("value", (
+    None, [], [200, 300, 400], [200, 300, 400, 500, 600],
+    [False, 300, 700, 800], ["200", 300, 700, 800],
+    [-1, 300, 700, 800], [200, 300, 1001, 800],
+    [200.5, 300, 700, 800], [math.nan, 300, 700, 800],
+    [200, math.inf, 700, 800], [700, 300, 200, 800],
+    [200, 800, 700, 300], [200, 300, 200, 800],
+))
+def test_invalid_native_box_is_ignored(value):
+    assert parse_story_subject_box_2d(value) is None
+
+
+@pytest.mark.parametrize("value", (
+    None, [], [200], [200, 300, 400], [False, 300], ["200", 300],
+    [-1, 300], [200, 1001], [200.5, 300], [math.nan, 300], [200, math.inf],
+))
+def test_invalid_native_anchor_point_is_ignored(value):
+    assert parse_story_subject_point_2d(value) is None
 
 
 @pytest.mark.parametrize("value", (

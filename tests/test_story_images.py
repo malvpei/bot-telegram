@@ -317,6 +317,15 @@ def test_semantic_reviewer_uses_strict_json_and_minimum_score(tmp_path, monkeypa
     assert review.score == 7
     assert captured["url"] == "https://api.openai.com/v1/chat/completions"
     assert captured["json"]["response_format"]["type"] == "json_schema"
+    content = captured["json"]["messages"][0]["content"]
+    assert content[1]["image_url"]["url"] == (
+        StoryCarouselImageGenerator._review_image_data_uri(reference)
+    )
+    assert content[2]["image_url"]["url"] == (
+        StoryCarouselImageGenerator._review_image_data_uri(
+            candidate, coordinate_guide=True,
+        )
+    )
 
 
 def test_semantic_reviewer_falls_back_to_existing_fal_key(tmp_path, monkeypatch):
@@ -383,6 +392,52 @@ def test_semantic_reviewer_falls_back_to_existing_fal_key(tmp_path, monkeypatch)
     assert captured["headers"]["Authorization"] == "Key fal-review-key"
     assert captured["json"]["model"] == "google/gemini-2.5-flash"
     assert len(captured["json"]["image_urls"]) == 2
+    assert captured["json"]["image_urls"] == [
+        StoryCarouselImageGenerator._review_image_data_uri(reference),
+        StoryCarouselImageGenerator._review_image_data_uri(
+            candidate, coordinate_guide=True,
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "source_size, expected_size",
+    [((1080, 1920), (540, 960)), ((1200, 800), (640, 427))],
+)
+def test_review_coordinate_guide_preserves_geometry_and_never_changes_source(
+    tmp_path, source_size, expected_size,
+):
+    source = tmp_path / "candidate.png"
+    Image.new("RGB", source_size, (80, 90, 100)).save(source)
+    original_bytes = source.read_bytes()
+    plain_uri = StoryCarouselImageGenerator._review_image_data_uri(source)
+    guide_uri = StoryCarouselImageGenerator._review_image_data_uri(
+        source, coordinate_guide=True,
+    )
+
+    def decode(uri):
+        assert uri.startswith("data:image/jpeg;base64,")
+        return Image.open(BytesIO(base64.b64decode(uri.split(",", 1)[1])))
+
+    with decode(plain_uri) as plain, decode(guide_uri) as guided:
+        assert plain.size == guided.size == expected_size
+        for value in range(0, 1000, 50):
+            y = round(guided.height * value / 1000)
+            x = guided.width // 2
+            red, green, blue = guided.getpixel((x, y))
+            # JPEG softens the one-pixel line, but its cyan color survives.
+            assert green - red > 25
+            assert blue - red > 25
+            assert plain.getpixel((x, y)) == (80, 90, 100)
+        label = guided.crop((0, 0, 42, 20))
+        label_pixels = [
+            label.getpixel((x, y))
+            for y in range(label.height) for x in range(label.width)
+        ]
+        assert any(min(pixel) > 230 for pixel in label_pixels)
+        assert any(pixel[1] > pixel[0] + 20 for pixel in label_pixels)
+
+    assert source.read_bytes() == original_bytes
 
 
 @pytest.mark.parametrize(
@@ -417,7 +472,43 @@ def test_story_review_geometry_is_validated_without_rejecting_image(raw_box, exp
     assert review.subject_box == expected
 
 
-def test_story_review_requests_tight_foreground_bounds_in_final_candidate_only():
+@pytest.mark.parametrize(
+    "native_box, native_point, expected_box, expected_point",
+    [
+        (
+            [403, 247, 1000, 981], [474, 583],
+            (0.247, 0.403, 0.981, 1.0), (0.583, 0.474),
+        ),
+        (None, None, None, None),
+        ([403, 247, 1000], [474], None, None),
+        ([1000, 247, 403, 981], [-1, 583], None, None),
+        ([403, 981, 1000, 247], [474, 1001], None, None),
+        ([403, 247, 1001, 981], "474,583", None, None),
+        ([403, True, 1000, 981], [True, 583], None, None),
+    ],
+)
+def test_story_review_converts_native_gemini_geometry_to_internal_xy(
+    native_box, native_point, expected_box, expected_point,
+):
+    generator = StoryCarouselImageGenerator(get_settings())
+    review = generator._parse_story_review(json.dumps({
+        "accepted": True,
+        "score": 10,
+        "issues": [],
+        "retry_instruction": "",
+        "subject_box_2d": native_box,
+        "subject_anchor_point": native_point,
+        # A supplied native field must take priority even when it is null or
+        # invalid; this old geometry must never silently replace it.
+        "subject_box": [0.1, 0.1, 0.9, 0.9],
+    }))
+
+    assert review.accepted
+    assert review.subject_box == expected_box
+    assert review.subject_anchor_point == expected_point
+
+
+def test_story_review_requests_native_geometry_in_final_candidate_only():
     generator = StoryCarouselImageGenerator(get_settings())
     prompt = generator._review_prompt(STORY_SCENES[5])
     schema = generator._review_json_schema()
@@ -426,10 +517,58 @@ def test_story_review_requests_tight_foreground_bounds_in_final_candidate_only()
     assert "hair or hat, raised hands" in prompt
     assert "Exclude background people" in prompt
     assert "without extra padding" in prompt
-    assert "subject_box" in schema["required"]
-    assert schema["properties"]["subject_box"]["type"] == ["array", "null"]
-    assert schema["properties"]["subject_box"]["minItems"] == 4
-    assert schema["properties"]["subject_box"]["maxItems"] == 4
+    assert "[ymin, xmin, ymax, xmax]" in prompt
+    assert "subject_anchor_point as [y, x]" in prompt
+    assert "INSIDE the protagonist's highest visible" in prompt
+    assert "Ignore any existing caption" in prompt
+    assert "blank padding" in prompt
+    assert "0..1000" in prompt
+    assert "TEMPORARY cyan horizontal coordinate guide" in prompt
+    assert "will never appear in the delivered image" in prompt
+    for key, length in (("subject_box_2d", 4), ("subject_anchor_point", 2)):
+        assert key in schema["required"]
+        field = schema["properties"][key]
+        assert field["type"] == ["array", "null"]
+        assert field["minItems"] == field["maxItems"] == length
+        assert field["items"] == {
+            "type": "integer", "minimum": 0, "maximum": 1000,
+        }
+    assert "subject_box" not in schema["properties"]
+
+
+def test_story_quality_gate_passes_accepted_interior_anchor_to_local_refinement(
+    tmp_path, monkeypatch,
+):
+    generator = StoryCarouselImageGenerator(replace(
+        get_settings(), story_image_max_attempts=1,
+    ))
+    reference = tmp_path / "reference.jpg"
+    _save_valid_story_image(reference)
+    output = tmp_path / "accepted.png"
+    box = (0.4, 0.403, 0.98, 1.0)
+    point = (0.583, 0.474)
+    received = []
+
+    def fake_generate(inputs, scene, attempt_path, **kwargs):
+        _save_valid_story_image(attempt_path)
+
+    def record_geometry(path, subject_box, *, anchor_point=None):
+        assert path.exists()
+        received.append((subject_box, anchor_point))
+
+    monkeypatch.setattr(generator, "_generate_scene", fake_generate)
+    monkeypatch.setattr(
+        generator, "_review_generated_scene",
+        lambda *args: StoryImageReview(True, 10, (), "", box, point),
+    )
+    monkeypatch.setattr("app.story_images.write_story_subject_box", record_geometry)
+
+    generator._generate_scene_with_quality_gate(
+        reference, [reference], STORY_SCENES[0], output,
+    )
+
+    assert output.exists()
+    assert received == [(box, point)]
 
 
 def test_story_geometry_stays_with_its_scene_during_parallel_generation(
