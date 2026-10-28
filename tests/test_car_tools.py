@@ -55,6 +55,10 @@ EXPECTED_CAR_TOOLS_TEXTS = {
         "Buena opccion para viajes largos, y para encontrar cines, "
         "restaurantes ect"
     ),
+    SlideRole.CAR_TOOL_MIDGT: (
+        "5. miDGT\n"
+        "Lleva tu carnet en el móvil y consulta tus puntos"
+    ),
     SlideRole.CAR_TOOL_R2: "",
 }
 
@@ -76,6 +80,10 @@ EXPECTED_CAR_TOOLS_BODY_LINES = {
         "para encontrar cines, restaurantes",
         "ect",
     ),
+    SlideRole.CAR_TOOL_MIDGT: (
+        "Lleva tu carnet en el móvil y",
+        "consulta tus puntos",
+    ),
 }
 
 EXPECTED_CAR_TOOLS_ICON_FILES = {
@@ -83,6 +91,7 @@ EXPECTED_CAR_TOOLS_ICON_FILES = {
     SlideRole.CAR_TOOL_PARKEZ: "parkez.png",
     SlideRole.CAR_TOOL_WAZE: "waze.png",
     SlideRole.CAR_TOOL_GOOGLE_MAPS: "google_maps.png",
+    SlideRole.CAR_TOOL_MIDGT: "midgt.png",
 }
 
 EXPECTED_CAR_TOOLS_BACKGROUND_FILES = (
@@ -133,6 +142,7 @@ def test_car_tools_copy_preserves_the_supplied_text_exactly():
         SlideRole.CAR_TOOL_PARKEZ,
         SlideRole.CAR_TOOL_WAZE,
         SlideRole.CAR_TOOL_GOOGLE_MAPS,
+        SlideRole.CAR_TOOL_MIDGT,
         SlideRole.CAR_TOOL_R2,
     ]
     assert CAR_TOOLS_SLIDE_TEXTS == EXPECTED_CAR_TOOLS_TEXTS
@@ -163,7 +173,7 @@ def test_car_tools_has_15_varied_social_copies_with_driving_hashtags():
             hashtag.startswith("#") and " " not in hashtag
             for hashtag in copy.hashtags
         )
-        for app_name in ("RadarBot", "ParkEz", "Waze", "Google Maps"):
+        for app_name in ("RadarBot", "ParkEz", "Waze", "Google Maps", "miDGT"):
             assert app_name in copy.description
         delivered_description_lengths.append(len(copy.messages[2]))
 
@@ -224,6 +234,7 @@ def test_car_tools_renderer_resolves_each_role_icon_from_cartools_directory(
         SlideRole.CAR_TOOL_PARKEZ: (20, 220, 40, 255),
         SlideRole.CAR_TOOL_WAZE: (20, 60, 230, 255),
         SlideRole.CAR_TOOL_GOOGLE_MAPS: (225, 210, 20, 255),
+        SlideRole.CAR_TOOL_MIDGT: (25, 170, 220, 255),
     }
     for role, color in icon_colors.items():
         Image.new("RGBA", (96, 96), color).save(
@@ -272,7 +283,7 @@ def test_car_tools_reference_wraps_and_uses_regular_text_weight():
     expected_lines = EXPECTED_CAR_TOOLS_BODY_LINES
 
     assert CAR_TOOLS_BODY_LINES == EXPECTED_CAR_TOOLS_BODY_LINES
-    assert [len(lines) for lines in CAR_TOOLS_BODY_LINES.values()] == [2, 2, 2, 3]
+    assert [len(lines) for lines in CAR_TOOLS_BODY_LINES.values()] == [2, 2, 2, 3, 2]
     assert CAR_TOOLS_TEXT_BOLD is False
     assert CAR_TOOLS_TEXT_INNER_STROKE_WIDTH == 1
 
@@ -297,12 +308,14 @@ def test_car_tools_reference_wraps_and_uses_regular_text_weight():
         SlideRole.CAR_TOOL_PARKEZ: 0.323,
         SlideRole.CAR_TOOL_WAZE: 0.315,
         SlideRole.CAR_TOOL_GOOGLE_MAPS: 0.324,
+        SlideRole.CAR_TOOL_MIDGT: 0.315,
     }
     assert CAR_TOOLS_BODY_LINE_GAPS == {
         SlideRole.CAR_TOOL_RADARBOT: 11,
         SlideRole.CAR_TOOL_PARKEZ: 22,
         SlideRole.CAR_TOOL_WAZE: 11,
         SlideRole.CAR_TOOL_GOOGLE_MAPS: 9,
+        SlideRole.CAR_TOOL_MIDGT: 11,
     }
 
 
@@ -361,7 +374,7 @@ def test_car_tools_r2_slide_is_clean_and_covers_the_canvas(tmp_path):
         )
     )
     slide = SlidePlan(
-        index=5,
+        index=6,
         role=SlideRole.CAR_TOOL_R2,
         text="",
         media=_candidate(source_path, "r2-cartools:example.png"),

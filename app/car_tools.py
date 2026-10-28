@@ -42,6 +42,7 @@ CAR_TOOLS_ICON_FILES: dict[SlideRole, str] = {
     SlideRole.CAR_TOOL_PARKEZ: "parkez.png",
     SlideRole.CAR_TOOL_WAZE: "waze.png",
     SlideRole.CAR_TOOL_GOOGLE_MAPS: "google_maps.png",
+    SlideRole.CAR_TOOL_MIDGT: "midgt.png",
 }
 
 
@@ -64,6 +65,10 @@ CAR_TOOLS_SLIDE_TEXTS: dict[SlideRole, str] = {
         "4. Google maps\n"
         "Buena opccion para viajes largos, y para encontrar cines, "
         "restaurantes ect"
+    ),
+    SlideRole.CAR_TOOL_MIDGT: (
+        "5. miDGT\n"
+        "Lleva tu carnet en el móvil y consulta tus puntos"
     ),
     SlideRole.CAR_TOOL_R2: "",
 }
@@ -89,9 +94,13 @@ CAR_TOOLS_BODY_LINES: dict[SlideRole, tuple[str, ...]] = {
         "para encontrar cines, restaurantes",
         "ect",
     ),
+    SlideRole.CAR_TOOL_MIDGT: (
+        "Lleva tu carnet en el móvil y",
+        "consulta tus puntos",
+    ),
 }
 
 
 def car_tools_slide_texts() -> dict[SlideRole, str]:
-    """Return the fixed five-slide copy in carousel order."""
+    """Return the fixed six-slide copy in carousel order."""
     return {role: CAR_TOOLS_SLIDE_TEXTS[role] for role in CAR_TOOLS_ROLES}

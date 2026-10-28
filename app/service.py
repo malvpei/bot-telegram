@@ -1548,7 +1548,7 @@ class VideoCreationService:
         suffix = Path(selected.key).suffix.lower()
         if suffix not in R2_IMAGE_EXTENSIONS:
             suffix = ".jpg"
-        local_path = job_dir / "cartools_inputs" / f"source_05{suffix}"
+        local_path = job_dir / "cartools_inputs" / f"source_{len(CAR_TOOLS_ROLES):02d}{suffix}"
         downloaded = self.r2_storage.download(selected.key, local_path)
         try:
             with Image.open(downloaded) as image:

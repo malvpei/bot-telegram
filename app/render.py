@@ -126,6 +126,7 @@ TYPE_3_ROLE_TOOL_OPTIONS: dict[SlideRole, tuple[str, ...]] = {
     SlideRole.CAR_TOOL_PARKEZ: ("parkez",),
     SlideRole.CAR_TOOL_WAZE: ("waze",),
     SlideRole.CAR_TOOL_GOOGLE_MAPS: ("google_maps",),
+    SlideRole.CAR_TOOL_MIDGT: ("midgt",),
 }
 TYPE_3_ICON_ALIASES: dict[str, tuple[str, ...]] = {
     "shopify": ("shopify",),
@@ -142,6 +143,7 @@ TYPE_3_ICON_ALIASES: dict[str, tuple[str, ...]] = {
     "parkez": ("parkez",),
     "waze": ("waze",),
     "google_maps": ("google_maps", "google maps"),
+    "midgt": ("midgt",),
 }
 TYPE_3_ICON_VISUAL_SCALE: dict[str, float] = {
     "canva": 0.94,
@@ -152,6 +154,7 @@ TYPE_3_ICON_VISUAL_SCALE: dict[str, float] = {
     "radarbot": 0.94,
     "waze": 0.92,
     "google_maps": 0.98,
+    "midgt": 0.94,
 }
 TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
     "shopify": 0.441,
@@ -167,6 +170,7 @@ TYPE_3_ICON_TOP_RATIO: dict[str, float] = {
     "parkez": 0.430,
     "waze": 0.430,
     "google_maps": 0.438,
+    "midgt": 0.429,
 }
 TYPE_3_STYLE_VIDEO_TYPES = {VideoType.TYPE_3, VideoType.TOOLS}
 CAR_TOOLS_OVERLAY_ROLES = {
@@ -174,6 +178,7 @@ CAR_TOOLS_OVERLAY_ROLES = {
     SlideRole.CAR_TOOL_PARKEZ,
     SlideRole.CAR_TOOL_WAZE,
     SlideRole.CAR_TOOL_GOOGLE_MAPS,
+    SlideRole.CAR_TOOL_MIDGT,
 }
 TYPE_3_TEXT_STROKE_WIDTH = 4
 CAR_TOOLS_TITLE_FONT_SIZE = 74
@@ -189,12 +194,14 @@ CAR_TOOLS_BODY_TOP_RATIOS: dict[SlideRole, float] = {
     SlideRole.CAR_TOOL_PARKEZ: 0.323,
     SlideRole.CAR_TOOL_WAZE: 0.315,
     SlideRole.CAR_TOOL_GOOGLE_MAPS: 0.324,
+    SlideRole.CAR_TOOL_MIDGT: 0.315,
 }
 CAR_TOOLS_BODY_LINE_GAPS: dict[SlideRole, int] = {
     SlideRole.CAR_TOOL_RADARBOT: 11,
     SlideRole.CAR_TOOL_PARKEZ: 22,
     SlideRole.CAR_TOOL_WAZE: 11,
     SlideRole.CAR_TOOL_GOOGLE_MAPS: 9,
+    SlideRole.CAR_TOOL_MIDGT: 11,
 }
 TYPE_4_TARGET_SECONDS = 7.5
 TYPE_4_TITLE_STROKE_WIDTH = 3

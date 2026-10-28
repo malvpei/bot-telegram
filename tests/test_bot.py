@@ -933,9 +933,9 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
                 SlidePlan(
                     index=index,
                     role=role,
-                    text=(f"Texto incrustado {index}" if index < 5 else ""),
+                    text=(f"Texto incrustado {index}" if role != SlideRole.CAR_TOOL_R2 else ""),
                     media=MediaCandidate(
-                        source_account=("r2_cartools" if index == 5 else "cartools"),
+                        source_account=("r2_cartools" if role == SlideRole.CAR_TOOL_R2 else "cartools"),
                         source_id=f"car-tools:{index}",
                         local_path=image_path,
                         permalink="",
@@ -944,7 +944,7 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
                         height=16,
                         created_at="",
                     ),
-                    fixed_asset=index < 5,
+                    fixed_asset=role != SlideRole.CAR_TOOL_R2,
                 )
             )
 
@@ -1003,7 +1003,7 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
         messages = [text for event, text in context.bot.events if event == "message"]
         assert len(messages) == 6
         assert "tools" in messages[1].lower()
-        assert "5" in messages[1]
+        assert "6 imágenes (5 con texto incrustado + 1 limpia de R2)" in messages[1]
         assert messages[2] == CAR_TOOLS_HOOK
         assert messages[3] == "Título Tools"
         assert messages[4] == (
@@ -1011,7 +1011,7 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
         )
         assert all(
             f"Texto incrustado {index}" not in messages
-            for index in range(1, 5)
+            for index in range(1, 6)
         )
         assert context.bot.events[-5:-2] == [
             ("message", CAR_TOOLS_HOOK),
@@ -1024,7 +1024,7 @@ def test_car_tools_sends_hook_title_description_then_album_without_slide_copy():
         assert context.bot.events[-2] == (
             "album",
             "car_tools_1.jpg,car_tools_2.jpg,car_tools_3.jpg,"
-            "car_tools_4.jpg,car_tools_5.jpg",
+            "car_tools_4.jpg,car_tools_5.jpg,car_tools_6.jpg",
         )
         assert messages[-1] == "¿Qué quieres crear ahora?"
         assert "repeat_request" not in context.user_data

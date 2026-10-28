@@ -1675,7 +1675,7 @@ async def parkez_tools(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     await query.answer()
     context.user_data.pop("repeat_request", None)
     await query.edit_message_text(
-        "Preparando Tools: cuatro diseños con texto y la siguiente imagen de R2."
+        "Preparando Tools: cinco diseños con texto y la siguiente imagen de R2."
     )
     request = VideoRequest(
         chat_id=update.effective_chat.id,
@@ -2301,7 +2301,7 @@ async def _execute_job(
         )
     elif request.video_type == VideoType.TOOLS:
         status_text = (
-            "Estoy creando cuatro diseños de herramientas para el coche y "
+            "Estoy creando cinco diseños de herramientas para el coche y "
             "añadiendo la siguiente imagen de R2."
         )
     else:
@@ -2388,7 +2388,7 @@ async def _execute_job(
     elif result.video_type == VideoType.TOOLS:
         header = (
             "Carrusel Tools listo\n"
-            "Entrega: 5 imágenes (4 con texto incrustado + 1 limpia de R2)"
+            "Entrega: 6 imágenes (5 con texto incrustado + 1 limpia de R2)"
         )
     else:
         header = (

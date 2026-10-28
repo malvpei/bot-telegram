@@ -89,6 +89,7 @@ cartools/
   iconos/parkez.png      — icono de ParkEz para `/createp` Tools
   iconos/waze.png        — icono de Waze para `/createp` Tools
   iconos/google_maps.png — icono de Google Maps para `/createp` Tools
+  iconos/midgt.png       — icono de miDGT para `/createp` Tools
 data/
   downloads/             — cache de imágenes por cuenta
   outputs/users/<telegram_user_id>/<job_id>/ — salidas aisladas por usuario
@@ -118,6 +119,7 @@ cartools/iconos/radarbot.png
 cartools/iconos/parkez.png
 cartools/iconos/waze.png
 cartools/iconos/google_maps.png
+cartools/iconos/midgt.png
 ```
 
 (o indica otra ruta absoluta en `FIXED_IMAGE_PATH`).
@@ -409,20 +411,23 @@ cola de los otros estilos. Las nuevas explicaciones se contrastaron con
 [ScreenZen](https://screenzen.co/), [Fintonic](https://www.fintonic.com/es-ES/alertas/)
 y [ParkEz en App Store](https://apps.apple.com/dk/app/parkez/id6799709478).
 
-La opción **Tools** de `/createp` crea cuatro slides dedicados a RadarBot,
-ParkEz, Waze y Google Maps. Cada uno lleva su icono y su texto incrustado sobre
-el mismo fondo. Tools solo usa los 13 fondos seleccionados en
+La opción **Tools** de `/createp` crea cinco slides dedicados a RadarBot,
+ParkEz, Waze, Google Maps y miDGT, en ese orden. Cada uno lleva su icono y su texto
+incrustado sobre el mismo fondo. Tools solo usa los 13 fondos seleccionados en
 `app/car_tools.py`, manteniendo el orden elegido y una rotación propia que no
-modifica la del Tipo 3 normal. Las cuatro slides mantienen ese fondo y el
+modifica la del Tipo 3 normal. Las cinco slides mantienen ese fondo y el
 siguiente carrusel Tools avanza al siguiente de su rotación. El carrusel se
-completa con una quinta imagen limpia obtenida del
+completa con una sexta imagen limpia obtenida del
 prefijo R2 configurado por `R2_CARTOOLS_IMAGE_PREFIX` (`cartools` por defecto,
 sin incluir el nombre de `R2_BUCKET`).
 Antes del álbum, el bot envía tres mensajes separados: la frase «Apps que son
 literalmente obligatorias si tiene coche», un título y una descripción con
-hashtags. Hay 15 parejas de título y descripción relacionadas con las cuatro
+hashtags. Hay 15 parejas de título y descripción relacionadas con las cinco
 apps; recorren una cola propia antes de volver a empezar.
-Esta quinta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,
+miDGT utiliza el logo facilitado en `cartools/iconos/midgt.png` y explica cómo
+llevar el carnet en el móvil y consultar los puntos, funciones contrastadas con
+la [DGT](https://www.dgt.es/nuestros-servicios/permisos-de-conducir/tus-puntos-y-tus-permisos/informacion-de-tus-permisos/).
+Esta sexta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,
 sin eliminarlos del bucket y solo avanza cuando el carrusel termina de renderizar.
 Cuando R2 incorpora imágenes que no estaban en el estado guardado, Tools mueve
 todo ese bloque nuevo al principio. Después de consumirlo, la cola reinicia una

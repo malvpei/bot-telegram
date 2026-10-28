@@ -32,6 +32,7 @@ from app.models import (
 )
 from app.r2_storage import R2Object
 from app.parkez_mode3 import build_parkez_mode3_script
+from app.publication_copy import publication_context
 from app.render import VideoRenderer
 from app.service import TYPE_5_DROPRADAR_FIXED_IMAGE_NAME, VideoCreationService
 from app.state import StateStore
@@ -1494,11 +1495,16 @@ def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
     assert result.social_copy.messages[0] == CAR_TOOLS_HOOK
     assert len(result.social_copy.messages) == 3
     assert [slide.role for slide in result.slides] == list(CAR_TOOLS_ROLES)
-    assert renderer.render_slide_still_sources[:4] == [backgrounds[1].local_path] * 4
-    assert renderer.render_slide_still_calls == [VideoType.TOOLS] * 5
-    assert all(renderer.render_slide_still_texts[:4])
+    assert renderer.render_slide_still_sources[:5] == [backgrounds[1].local_path] * 5
+    assert renderer.render_slide_still_calls == [VideoType.TOOLS] * 6
+    assert all(renderer.render_slide_still_texts[:5])
     assert renderer.render_slide_still_texts[-1] == ""
-    assert all(slide.fixed_asset for slide in result.slides[:4])
+    assert all(slide.fixed_asset for slide in result.slides[:5])
+    assert result.slides[4].role == SlideRole.CAR_TOOL_MIDGT
+    assert result.slides[4].text == "5. miDGT\nLleva tu carnet en el móvil y consulta tus puntos"
+    assert "miDGT" in result.preview_text
+    assert "miDGT" in result.social_copy.description
+    assert "miDGT" in publication_context(result)["entities"]
     assert result.slides[-1].fixed_asset is False
     assert result.slides[-1].role == SlideRole.CAR_TOOL_R2
     assert result.slides[-1].text == ""
@@ -1506,7 +1512,7 @@ def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
     assert result.slides[-1].media.source_id == (
         "r2-cartools:videos/cartools/closing.jpg"
     )
-    assert result.slides[-1].media.local_path.name == "slide_05.png"
+    assert result.slides[-1].media.local_path.name == "slide_06.png"
     assert storage.listed_image_prefixes == ["videos/cartools/"]
     assert service.state.peek_next_cartools_background_id(
         list(allowed_background_names)
@@ -1541,13 +1547,13 @@ def test_car_tools_plan_uses_only_allowlist_and_its_own_rotation(
     assert service.state.peek_next_cartools_social_copy_id(
         list(CAR_TOOLS_SOCIAL_COPY_IDS)
     ) == (CAR_TOOLS_SOCIAL_COPY_IDS[2], False)
-    assert renderer.render_slide_still_sources[5:9] == [
+    assert renderer.render_slide_still_sources[6:11] == [
         backgrounds[3].local_path
-    ] * 4
+    ] * 5
     assert all(
         source not in {backgrounds[0].local_path, backgrounds[2].local_path}
-        for source in renderer.render_slide_still_sources[:4]
-        + renderer.render_slide_still_sources[5:9]
+        for source in renderer.render_slide_still_sources[:5]
+        + renderer.render_slide_still_sources[6:11]
     )
     assert service.state.peek_next_cartools_background_id(
         list(allowed_background_names)

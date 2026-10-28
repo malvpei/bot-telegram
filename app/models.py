@@ -69,6 +69,7 @@ class SlideRole(str, Enum):
     CAR_TOOL_PARKEZ = "car_tool_parkez"
     CAR_TOOL_WAZE = "car_tool_waze"
     CAR_TOOL_GOOGLE_MAPS = "car_tool_google_maps"
+    CAR_TOOL_MIDGT = "car_tool_midgt"
     CAR_TOOL_R2 = "car_tool_r2"
 
 
@@ -130,6 +131,7 @@ CAR_TOOLS_ROLES: tuple[SlideRole, ...] = (
     SlideRole.CAR_TOOL_PARKEZ,
     SlideRole.CAR_TOOL_WAZE,
     SlideRole.CAR_TOOL_GOOGLE_MAPS,
+    SlideRole.CAR_TOOL_MIDGT,
     SlideRole.CAR_TOOL_R2,
 )
 
