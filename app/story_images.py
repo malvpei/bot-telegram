@@ -22,6 +22,7 @@ from PIL import Image, ImageOps, ImageStat
 from app.config import Settings
 from app.models import MediaCandidate, SlideRole
 from app.state import StateStore
+from app.story_layout import parse_story_subject_box, write_story_subject_box
 
 
 LOGGER = logging.getLogger(__name__)
@@ -142,6 +143,7 @@ class StoryImageReview:
     score: int
     issues: tuple[str, ...]
     retry_instruction: str
+    subject_box: tuple[float, float, float, float] | None = None
 
 
 @dataclass(frozen=True)
@@ -740,6 +742,12 @@ class StoryCarouselImageGenerator:
                         attempt_path,
                         scene,
                     )
+                    # Keep geometry with its own image, including the best
+                    # reviewed fallback when a later attempt is rejected.
+                    write_story_subject_box(
+                        attempt_path,
+                        review.subject_box if review is not None else None,
+                    )
                     if review is None or review.accepted:
                         output_path.parent.mkdir(parents=True, exist_ok=True)
                         if best_candidate_path.exists():
@@ -1271,8 +1279,16 @@ class StoryCarouselImageGenerator:
                     "maxItems": 4,
                 },
                 "retry_instruction": {"type": "string"},
+                "subject_box": {
+                    "type": ["array", "null"],
+                    "items": {"type": "number", "minimum": 0, "maximum": 1},
+                    "minItems": 4,
+                    "maxItems": 4,
+                },
             },
-            "required": ["accepted", "score", "issues", "retry_instruction"],
+            "required": [
+                "accepted", "score", "issues", "retry_instruction", "subject_box",
+            ],
             "additionalProperties": False,
         }
 
@@ -1311,6 +1327,7 @@ class StoryCarouselImageGenerator:
             score=score,
             issues=issues,
             retry_instruction=str(parsed.get("retry_instruction") or "").strip(),
+            subject_box=parse_story_subject_box(parsed.get("subject_box")),
         )
 
     def _review_prompt(self, scene: StoryScene) -> str:
@@ -1370,9 +1387,21 @@ class StoryCarouselImageGenerator:
             "Set accepted=true only for a clean publishable result scoring at least "
             f"{self.settings.story_review_min_score}/10. retry_instruction must be a "
             "short concrete English correction prompt for the image generator. "
+            "Also locate the main foreground protagonist in the FINAL candidate "
+            "image only, never in the original or continuity references. Return "
+            "subject_box as [left, top, right, bottom], normalized to 0..1 across "
+            "the candidate's full width and height (origin is its top-left). "
+            "Enclose the complete visible protagonist, including the very top of "
+            "his hair or hat, raised hands, and clothing; do not locate only the "
+            "face. Exclude background people, furniture, plants, laptop, car and "
+            "other scenery. Use tight visible bounds without extra padding, so "
+            "an external caption can leave a consistent gap above his highest "
+            "point. This is required even for a rejected candidate. Return null "
+            "only when the protagonist cannot be located reliably. "
             "Return one JSON object with exactly: accepted (boolean), score "
-            "(integer 0-10), issues (array of at most four short strings), and "
-            "retry_instruction (string)."
+            "(integer 0-10), issues (array of at most four short strings), "
+            "retry_instruction (string), and subject_box (four normalized numbers "
+            "or null)."
         )
 
     @staticmethod

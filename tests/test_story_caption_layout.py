@@ -18,6 +18,7 @@ from app.render import (
     VideoRenderer,
 )
 from app.texts import ScriptGenerator
+from app.story_layout import write_story_subject_box
 
 
 @pytest.fixture(params=(Language.ES, Language.EN), ids=("es", "en"))
@@ -91,7 +92,7 @@ def test_real_story_copy_is_larger_lower_and_clear_of_the_protagonist(
 ):
     width, height = renderer.settings.width, renderer.settings.height
     text = story_texts[role]
-    subject_top = round(height * (0.54 if detection == "detected" else 0.39))
+    subject_top = round(height * 0.54) if detection == "detected" else int(height * 0.39)
     regions = [((round(width * 0.18), subject_top, round(width * 0.82), round(height * 0.90)), TEXT_HEAD_AVOID_WEIGHT)]
     if detection == "missing":
         monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
@@ -127,7 +128,7 @@ def test_real_story_copy_is_larger_lower_and_clear_of_the_protagonist(
     assert 0 <= box[1] < box[3] < height
     clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * height / 1920))
     # Pillow includes the final boundary pixel in its rounded rectangles.
-    assert box[3] <= subject_top - clearance + 1
+    assert box[3] == subject_top - clearance + 1
     assert story_blocks[0]["start_y"] < subject_top
 
 
@@ -148,7 +149,7 @@ def test_story_card_leaves_margin_from_the_highest_detected_subject_part(rendere
     box = overlay.getbbox()
     assert box is not None
     clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * height / 1920))
-    assert box[3] <= subject_top - clearance + 1
+    assert box[3] == subject_top - clearance + 1
 
 
 def test_long_story_copy_stays_above_a_high_protagonist(renderer, monkeypatch):
@@ -168,7 +169,101 @@ def test_long_story_copy_stays_above_a_high_protagonist(renderer, monkeypatch):
     box = overlay.getbbox()
     assert box is not None
     clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * height / 1920))
-    assert box[3] <= subject_top - clearance + 1
+    assert box[3] == subject_top - clearance + 1
+
+
+@pytest.mark.parametrize("subject_top_ratio", (0.28, 0.43, 0.63))
+@pytest.mark.parametrize("text", (
+    "Después de un año y medio...",
+    "Los meses siguientes fueron peores: probé 3 productos, no vendí ninguno "
+    "y estuve a punto de dejarlo para siempre.",
+), ids=("short", "long"))
+def test_story_clearance_follows_subject_height_instead_of_fixed_text_center(
+    renderer, subject_top_ratio, text, monkeypatch,
+):
+    width, height = renderer.settings.width, renderer.settings.height
+    subject_top = round(height * subject_top_ratio)
+    regions = [((round(width * 0.25), subject_top, round(width * 0.86), height), TEXT_HEAD_AVOID_WEIGHT)]
+
+    overlay, blocks = _render_caption(
+        renderer, SlideRole.STORY_DEEP_FAILURE, text, monkeypatch, regions=regions,
+    )
+
+    box = overlay.getbbox()
+    assert box is not None
+    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * height / 1920))
+    assert box[3] == subject_top - clearance + 1
+    assert " ".join(blocks[0]["lines"]).split() == text.split()
+
+
+def test_reviewed_subject_geometry_overrides_photo_detector_false_positives(renderer, monkeypatch):
+    source = Image.new("RGB", (864, 1536), (205, 215, 225))
+    source.info["story_subject_box"] = "[0.25, 0.4375, 0.875, 0.9375]"
+    slide = _slide(SlideRole.STORY_MCDONALD, "Mi primera historia.")
+
+    def unexpected_photo_detection(image):
+        pytest.fail("Reviewed cartoon geometry should not be replaced by photo detections")
+
+    monkeypatch.setattr(renderer, "_text_avoid_regions", unexpected_photo_detection)
+
+    regions = renderer._slide_text_avoid_regions(slide, source)
+
+    assert len(regions) == 1
+    box, weight = regions[0]
+    assert box == (216, 672, 756, 1440)
+    assert weight >= TEXT_HEAD_AVOID_WEIGHT
+
+
+def test_missing_reviewed_geometry_keeps_detection_for_story_and_other_formats(renderer, monkeypatch):
+    source = Image.new("RGB", (864, 1536), (205, 215, 225))
+    detected = [((40, 600, 750, 1500), TEXT_HEAD_AVOID_WEIGHT)]
+    calls = []
+
+    def photo_detection(image):
+        calls.append(image)
+        return detected
+
+    monkeypatch.setattr(renderer, "_text_avoid_regions", photo_detection)
+    story = _slide(SlideRole.STORY_MCDONALD, "Una historia.")
+    assert renderer._slide_text_avoid_regions(story, source) == detected
+    source.info["story_subject_box"] = "[0.25, 0.4375, 0.875, 0.9375]"
+    ordinary = _slide(SlideRole.TIP1, "Otro formato.")
+    assert renderer._slide_text_avoid_regions(ordinary, source) == detected
+    assert len(calls) == 2
+
+
+def test_still_and_video_keep_caption_clear_during_the_complete_camera_move(renderer, tmp_path, monkeypatch):
+    source = Image.new("RGB", (864, 1536), (205, 215, 225))
+    path = tmp_path / "reviewed-scene.png"
+    source.save(path)
+    write_story_subject_box(path, (0.25, 0.4375, 0.875, 0.9375))
+    slide = _slide(SlideRole.STORY_SUCCESS_COMIC, "Después de un año y medio...")
+    slide.media.local_path = path
+
+    def unexpected_photo_detection(image):
+        pytest.fail("The saved review geometry must survive image loading")
+
+    monkeypatch.setattr(renderer, "_text_avoid_regions", unexpected_photo_detection)
+    still = renderer.render_slide_still(slide, VideoType.TYPE_4)
+    loaded = renderer._load_source_image(path)
+    cache_key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, still.size)
+    overlay = renderer._text_overlay_cache[cache_key]
+    box = overlay.getbbox()
+    assert box is not None
+    width, height = still.size
+    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * height / 1920))
+    swept_tops = []
+    for progress in (0.0, 0.5, 1.0):
+        scale = max(width / 864, height / 1536) * (1.0 + 0.06 * progress)
+        offset_y = int(max(0, int(1536 * scale) - height) * 0.5)
+        subject_top = int(672 * scale) - offset_y
+        swept_tops.append(subject_top)
+        assert box[3] <= subject_top - clearance + 1
+        frame = renderer._render_slide_frame(slide, loaded, progress, VideoType.TYPE_4)
+        assert renderer._text_overlay_cache[cache_key].getbbox() == box
+        if progress == 1.0:
+            assert still.tobytes() == Image.fromarray(frame).tobytes()
+    assert box[3] == min(swept_tops) - clearance + 1
 
 
 @pytest.mark.parametrize("role", (SlideRole.OCTOBER, SlideRole.TIP1, SlideRole.PARKEZ_PROMO, SlideRole.STORY_ORIGINAL_REFERENCE))

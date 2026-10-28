@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 import shutil
 import subprocess
@@ -25,6 +26,7 @@ from app.face_detection import build_face_detector
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoType
 from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
 from app.parkez_advice import PARKEZ_ADVICE_ICON_FILES, PARKEZ_ADVICE_ICON_RELATIVE_PATH
+from app.story_layout import story_subject_box
 
 if TYPE_CHECKING:
     from app.parkez_apps import ParkEzApp
@@ -446,7 +448,7 @@ class VideoRenderer:
                 self._draw_text(canvas, slide, video_type)
             return canvas.convert("RGB")
         source_image = self._load_source_image(slide.media.local_path)
-        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2}:
+        if video_type in {VideoType.TYPE_1, VideoType.TYPE_2} or slide.role in TYPE_4_STORY_CAPTION_ROLES:
             self._prepare_slide_text_overlay(slide, source_image, video_type)
         frame = self._render_slide_frame(slide, source_image, 1.0, video_type)
         return Image.fromarray(frame)
@@ -3021,7 +3023,7 @@ class VideoRenderer:
         if cache_key in self._text_overlay_cache:
             return
 
-        source_regions = self._text_avoid_regions(source_image)
+        source_regions = self._slide_text_avoid_regions(slide, source_image)
         avoid_regions = self._project_cover_avoid_regions(
             source_image,
             source_regions,
@@ -3034,6 +3036,25 @@ class VideoRenderer:
             video_type,
             avoid_regions=avoid_regions,
         )
+
+    def _slide_text_avoid_regions(
+        self,
+        slide: SlidePlan,
+        source_image: Image.Image,
+    ) -> list[tuple[tuple[int, int, int, int], float]]:
+        if slide.role in TYPE_4_STORY_CAPTION_ROLES:
+            box = story_subject_box(source_image)
+            if box is not None:
+                # The reviewer locates the whole foreground silhouette, including
+                # hair, hats and raised hands. Photo faces can miss these drawings.
+                left, top, right, bottom = box
+                return [((
+                    math.floor(left * source_image.width),
+                    math.floor(top * source_image.height),
+                    math.ceil(right * source_image.width),
+                    math.ceil(bottom * source_image.height),
+                ), TEXT_HEAD_AVOID_WEIGHT)]
+        return self._text_avoid_regions(source_image)
 
     def _project_cover_avoid_regions(
         self,
@@ -4534,7 +4555,7 @@ class VideoRenderer:
         story_bottom = None
         if is_story:
             regions = list(
-                self._text_avoid_regions(layout_source)
+                self._slide_text_avoid_regions(slide, layout_source)
                 if avoid_regions is None
                 else avoid_regions
             )
@@ -4643,26 +4664,29 @@ class VideoRenderer:
                 in enumerate(groups)
             ),
         )
-        max_start_y = self._fixed_screen_max_start_y(
-            slide, total_height, canvas_height=height,
-        )
         if story_bottom is not None:
-            max_start_y = story_bottom - total_height
-        start_y = self._safe_text_start_y(
-            layout_source,
-            block_width=block_width,
-            block_height=total_height,
-            preferred_centers=self._caption_preferred_centers(slide),
-            expect_person=self._slide_expects_person(slide),
-            avoid_regions=avoid_regions,
-            prefer_chest=prefer_chest,
-            fallback_regions=self._fallback_slide_avoid_regions(
-                slide,
-                width,
-                height,
-            ),
-            max_start_y=max_start_y,
-        )
+            # Anchor the bottom edge to the protagonist. A fixed preferred center
+            # lets shorter captions float upwards even with an accurate head box.
+            _min_y, max_y = self._safe_text_vertical_bounds(height, total_height)
+            start_y = min(story_bottom - total_height, max_y)
+        else:
+            start_y = self._safe_text_start_y(
+                layout_source,
+                block_width=block_width,
+                block_height=total_height,
+                preferred_centers=self._caption_preferred_centers(slide),
+                expect_person=self._slide_expects_person(slide),
+                avoid_regions=avoid_regions,
+                prefer_chest=prefer_chest,
+                fallback_regions=self._fallback_slide_avoid_regions(
+                    slide,
+                    width,
+                    height,
+                ),
+                max_start_y=self._fixed_screen_max_start_y(
+                    slide, total_height, canvas_height=height,
+                ),
+            )
         start_y = self._clamp_fixed_screen_caption_y(
             slide,
             start_y,

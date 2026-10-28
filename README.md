@@ -475,9 +475,15 @@ primera escena fija el personaje y el estilo; la segunda fija la habitacion; las
 escenas restantes reutilizan esas referencias y generan hasta
 `STORY_IMAGE_WORKERS=2` imagenes simultaneas. Los textos exactos se componen
 despues para que el modelo no introduzca letras deformadas. En las seis escenas,
-el texto sobre fondo blanco se amplía un 16 % y se sitúa más abajo, por encima
-del protagonista y con margen respecto a las caras y cuerpos detectados. Si
-el dibujo no se detecta, se respeta la zona superior reservada del 39 %.
+el texto sobre fondo blanco conserva la ampliación del 16 %. Su borde inferior
+se coloca a 58 px del protagonista a resolución 1080×1920 (margen proporcional
+en otras resoluciones), en vez de usar una altura fija para todas las escenas.
+La revisión visual existente localiza la silueta principal, incluido pelo, gorros
+y manos levantadas, y guarda sus coordenadas normalizadas en el PNG. No añade
+una petición de IA. La composición protege toda la trayectoria del acercamiento
+del vídeo y utiliza la misma posición en las fotos entregadas. Si no hay
+coordenadas válidas del revisor, utiliza la detección local; si tampoco detecta
+el dibujo, respeta la zona superior reservada del 39 %.
 Un revisor visual
 barato valida cada escena y solo regenera las que no alcancen
 `STORY_REVIEW_MIN_SCORE`: usa OpenAI si existe `OPENAI_API_KEY` y, si no, el

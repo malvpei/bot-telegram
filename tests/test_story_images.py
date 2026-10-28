@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from io import BytesIO
 from pathlib import Path
@@ -12,6 +13,7 @@ from PIL import Image, ImageDraw
 
 from app.config import get_settings
 from app.state import StateStore
+from app.story_layout import story_subject_box, write_story_subject_box
 from app.story_images import (
     STORY_ENVIRONMENT_VARIANTS,
     STORY_SCENES,
@@ -383,6 +385,118 @@ def test_semantic_reviewer_falls_back_to_existing_fal_key(tmp_path, monkeypatch)
     assert len(captured["json"]["image_urls"]) == 2
 
 
+@pytest.mark.parametrize(
+    "raw_box, expected",
+    [
+        ([0.38, 0.41, 0.91, 1.0], (0.38, 0.41, 0.91, 1.0)),
+        (None, None),
+        ([38, 41, 91, 100], None),
+        ([0.38, 0.41, 0.91], None),
+        ([0.38, 0.41, 0.91, 1.0, 0.5], None),
+        ([0.91, 0.41, 0.38, 1.0], None),
+        ([0.38, 1.0, 0.91, 0.41], None),
+        ([0.38, 0.41, 0.38, 1.0], None),
+        ([0.38, -0.01, 0.91, 1.0], None),
+        ([0.38, 0.41, 0.91, float("nan")], None),
+        ([0.38, 0.41, 0.91, float("inf")], None),
+        ([0.38, "0.41", 0.91, 1.0], None),
+        ("0.38,0.41,0.91,1.0", None),
+    ],
+)
+def test_story_review_geometry_is_validated_without_rejecting_image(raw_box, expected):
+    generator = StoryCarouselImageGenerator(get_settings())
+    review = generator._parse_story_review(json.dumps({
+        "accepted": True,
+        "score": 10,
+        "issues": [],
+        "retry_instruction": "",
+        "subject_box": raw_box,
+    }))
+
+    assert review.accepted
+    assert review.subject_box == expected
+
+
+def test_story_review_requests_tight_foreground_bounds_in_final_candidate_only():
+    generator = StoryCarouselImageGenerator(get_settings())
+    prompt = generator._review_prompt(STORY_SCENES[5])
+    schema = generator._review_json_schema()
+
+    assert "FINAL candidate image only" in prompt
+    assert "hair or hat, raised hands" in prompt
+    assert "Exclude background people" in prompt
+    assert "without extra padding" in prompt
+    assert "subject_box" in schema["required"]
+    assert schema["properties"]["subject_box"]["type"] == ["array", "null"]
+    assert schema["properties"]["subject_box"]["minItems"] == 4
+    assert schema["properties"]["subject_box"]["maxItems"] == 4
+
+
+def test_story_geometry_stays_with_its_scene_during_parallel_generation(
+    tmp_path, monkeypatch,
+):
+    generator = StoryCarouselImageGenerator(replace(
+        get_settings(), story_image_max_attempts=1,
+    ))
+    reference = tmp_path / "reference.jpg"
+    _save_valid_story_image(reference)
+    boxes = {
+        STORY_SCENES[1].role: (0.4, 0.42, 0.9, 1.0),
+        STORY_SCENES[5].role: (0.5, 0.28, 0.98, 1.0),
+    }
+    review_barrier = Barrier(2, timeout=3)
+
+    def fake_generate(inputs, scene, attempt_path, **kwargs):
+        _save_valid_story_image(attempt_path)
+
+    def fake_review(original, continuity, attempt, scene):
+        review_barrier.wait()
+        return StoryImageReview(True, 10, (), "", boxes[scene.role])
+
+    monkeypatch.setattr(generator, "_generate_scene", fake_generate)
+    monkeypatch.setattr(generator, "_review_generated_scene", fake_review)
+    scenes = [STORY_SCENES[1], STORY_SCENES[5]]
+    outputs = [tmp_path / f"{scene.role.value}.png" for scene in scenes]
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = [
+            executor.submit(
+                generator._generate_scene_with_quality_gate,
+                reference, [reference], scene, output,
+            )
+            for scene, output in zip(scenes, outputs, strict=True)
+        ]
+        for future in futures:
+            future.result()
+
+    for scene, output in zip(scenes, outputs, strict=True):
+        with Image.open(output) as image:
+            assert story_subject_box(image) == boxes[scene.role]
+
+
+def test_story_without_review_does_not_trust_provider_geometry(tmp_path, monkeypatch):
+    generator = StoryCarouselImageGenerator(replace(
+        get_settings(), story_image_max_attempts=1, story_review_enabled=False,
+    ))
+    reference = tmp_path / "reference.jpg"
+    _save_valid_story_image(reference)
+    output = tmp_path / "unreviewed.png"
+
+    def fake_generate(inputs, scene, attempt_path, **kwargs):
+        _save_valid_story_image(attempt_path)
+        write_story_subject_box(attempt_path, (0.1, 0.1, 0.9, 0.9))
+
+    monkeypatch.setattr(generator, "_generate_scene", fake_generate)
+    monkeypatch.setattr(generator, "_validate_generated_image", lambda path: None)
+    monkeypatch.setattr(generator, "_review_generated_scene", lambda *args: None)
+
+    generator._generate_scene_with_quality_gate(
+        reference, [reference], STORY_SCENES[0], output,
+    )
+
+    with Image.open(output) as image:
+        assert story_subject_box(image) is None
+
+
 def test_story_scenes_are_generated_with_bounded_parallelism(tmp_path, monkeypatch):
     settings = replace(
         get_settings(),
@@ -742,7 +856,7 @@ def test_quality_gate_retries_only_the_rejected_scene(tmp_path, monkeypatch):
                 issues=("the laptop is folded backwards",),
                 retry_instruction="Fix the laptop geometry and keep one scene.",
             )
-        return StoryImageReview(True, 9, (), "")
+        return StoryImageReview(True, 9, (), "", (0.42, 0.38, 0.93, 1.0))
 
     monkeypatch.setattr(generator, "_generate_scene", fake_generate)
     monkeypatch.setattr(generator, "_review_generated_scene", fake_review)
@@ -757,6 +871,8 @@ def test_quality_gate_retries_only_the_rejected_scene(tmp_path, monkeypatch):
     assert output.exists()
     assert review_calls == 2
     assert feedback == ["", "Fix the laptop geometry and keep one scene."]
+    with Image.open(output) as image:
+        assert story_subject_box(image) == (0.42, 0.38, 0.93, 1.0)
 
 
 def test_quality_gate_refuses_to_deliver_repeated_bad_scene(tmp_path, monkeypatch):
@@ -824,6 +940,7 @@ def test_quality_gate_delivers_best_usable_fallback_instead_of_failing_job(
             score,
             ("minor stylized identity difference",),
             "Match the face a little more closely.",
+            subject_box=(0.4, 0.4 if score == 7 else 0.3, 0.9, 1.0),
         )
 
     monkeypatch.setattr(generator, "_generate_scene", fake_generate)
@@ -838,6 +955,8 @@ def test_quality_gate_delivers_best_usable_fallback_instead_of_failing_job(
 
     assert output.exists()
     assert not list(tmp_path.glob("*.best_candidate.png"))
+    with Image.open(output) as image:
+        assert story_subject_box(image) == (0.4, 0.4, 0.9, 1.0)
 
 
 def test_quality_gate_never_falls_back_to_frontal_worried_laptop_scene(
