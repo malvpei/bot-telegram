@@ -54,6 +54,7 @@ class StateStore:
         self._template_video_queue_path = self.state_dir / "template_video_queue.json"
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
         self._type_5_social_queue_path = self.state_dir / "type5_social_queue.json"
+        self._type_5_business_queue_path = self.state_dir / "type5_business_queue.json"
         self._cartools_background_queue_path = (
             self.state_dir / "cartools_background_queue.json"
         )
@@ -737,6 +738,25 @@ class StateStore:
         return self._get_next_simple_cycle_id(
             self._type_5_social_queue_path,
             copy_ids,
+        )
+
+    def peek_next_type_5_business_pair_id(
+        self,
+        pair_ids: list[str],
+    ) -> tuple[str | None, bool]:
+        """Inspect Type 5's next business pair in the shared language rotation."""
+        return self._peek_simple_cycle_id(self._type_5_business_queue_path, pair_ids)
+
+    def remember_type_5_business_pair_choice(
+        self,
+        selected_id: str,
+        pair_ids: list[str],
+    ) -> bool:
+        """Advance the business rotation only after successful rendering."""
+        return self._remember_simple_cycle_choice(
+            self._type_5_business_queue_path,
+            selected_id,
+            pair_ids,
         )
 
     def peek_next_type_4_image_id(

@@ -86,7 +86,7 @@ from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.state import StateStore
 from app.story_images import StoryCarouselImageGenerator
 from app.texts import ScriptGenerator
-from app.type_5 import type_5_slide_texts, type_5_social_copies
+from app.type_5 import TYPE_5_BUSINESS_PAIRS, type_5_slide_texts, type_5_social_copies
 
 
 LOGGER = logging.getLogger(__name__)
@@ -1596,6 +1596,16 @@ class VideoCreationService:
     def _create_type_5_carousel_locked(self, request: VideoRequest) -> GenerationResult:
         language = Language(request.language)
         slide_texts = type_5_slide_texts(language)
+        business_pairs = {
+            "+".join(role.value for role in pair): pair
+            for pair in TYPE_5_BUSINESS_PAIRS
+        }
+        business_pair_ids = list(business_pairs)
+        selected_business_pair_id, business_queue_restarted = (
+            self.state.peek_next_type_5_business_pair_id(business_pair_ids)
+        )
+        business_roles = business_pairs[str(selected_business_pair_id)]
+        roles = (SlideRole.HOOK, *business_roles, SlideRole.TYPE_5_AI_DROPSHIPPING)
 
         job_id = self._build_job_id()
         job_dir = self._job_output_dir(job_id, request.user_id)
@@ -1610,7 +1620,7 @@ class VideoCreationService:
                 fixed_asset=False,
             )
             for index, (role, slide_media) in enumerate(
-                zip(TYPE_5_ROLES, media, strict=True),
+                zip(roles, media, strict=True),
                 start=1,
             )
         ]
@@ -1627,7 +1637,10 @@ class VideoCreationService:
             job_dir,
             embed_slide_text=False,
         )
-        social_copies = type_5_social_copies(language)
+        self.state.remember_type_5_business_pair_choice(
+            str(selected_business_pair_id), business_pair_ids,
+        )
+        social_copies = type_5_social_copies(language, business_roles)
         social_copy_ids = [f"type5-{index:02d}" for index in range(len(social_copies))]
         selected_social_id, social_queue_restarted = (
             self.state.get_next_type_5_social_copy_id(social_copy_ids)
@@ -1653,13 +1666,15 @@ class VideoCreationService:
                 chat_id=request.chat_id,
             )
         )
+        if business_queue_restarted:
+            LOGGER.info("Type 5 business queue restarted after completing a cycle")
         if social_queue_restarted:
             LOGGER.info("Type 5 social copy queue restarted after completing a cycle")
         self._cleanup_old_outputs()
         return GenerationResult(
             video_path=video_path,
             script_path=script_path,
-            preview_text="\n\n".join(slide_texts[role] for role in TYPE_5_ROLES),
+            preview_text="\n\n".join(slide_texts[role] for role in roles),
             social_copy=social_copy,
             chosen_account=plan.chosen_account,
             video_type=VideoType.TYPE_5,

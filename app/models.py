@@ -57,6 +57,9 @@ class SlideRole(str, Enum):
     STORY_ORIGINAL_REFERENCE = "story_original_reference"
     TYPE_5_TRADING = "type_5_trading"
     TYPE_5_CLIPPING = "type_5_clipping"
+    TYPE_5_AMAZON_FBA = "type_5_amazon_fba"
+    TYPE_5_PRINT_ON_DEMAND = "type_5_print_on_demand"
+    TYPE_5_AFFILIATE_MARKETING = "type_5_affiliate_marketing"
     TYPE_5_AI_DROPSHIPPING = "type_5_ai_dropshipping"
     ADVICE_CARD = "advice_card"
     ADVICE_R2_CLEAN = "advice_r2_clean"
@@ -112,6 +115,14 @@ TYPE_5_ROLES: tuple[SlideRole, ...] = (
     SlideRole.TYPE_5_TRADING,
     SlideRole.TYPE_5_CLIPPING,
     SlideRole.TYPE_5_AI_DROPSHIPPING,
+)
+
+TYPE_5_BUSINESS_ROLES: tuple[SlideRole, ...] = (
+    SlideRole.TYPE_5_TRADING,
+    SlideRole.TYPE_5_CLIPPING,
+    SlideRole.TYPE_5_AMAZON_FBA,
+    SlideRole.TYPE_5_PRINT_ON_DEMAND,
+    SlideRole.TYPE_5_AFFILIATE_MARKETING,
 )
 
 CAR_TOOLS_ROLES: tuple[SlideRole, ...] = (

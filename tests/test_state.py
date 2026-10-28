@@ -490,6 +490,60 @@ def test_type_5_social_copy_rotates_one_pair_and_survives_restart(state_dir):
     assert second_restarted is False
 
 
+def test_type_5_business_pair_only_advances_after_render_commit(state_dir):
+    pair_ids = ["trading-clipping", "amazon-pod", "affiliate-trading"]
+    store = StateStore(state_dir)
+
+    assert store.peek_next_type_5_business_pair_id(pair_ids) == (pair_ids[0], False)
+    restored = StateStore(state_dir)
+    assert restored.peek_next_type_5_business_pair_id(pair_ids) == (pair_ids[0], False)
+    assert restored.remember_type_5_business_pair_choice(pair_ids[0], pair_ids)
+    assert not restored.remember_type_5_business_pair_choice(pair_ids[0], pair_ids)
+    assert StateStore(state_dir).peek_next_type_5_business_pair_id(pair_ids) == (
+        pair_ids[1], False,
+    )
+
+
+def test_type_5_business_pairs_complete_cycle_across_restarts(state_dir):
+    pair_ids = ["trading-clipping", "amazon-pod", "affiliate-trading"]
+
+    for expected in pair_ids:
+        store = StateStore(state_dir)
+        assert store.peek_next_type_5_business_pair_id(pair_ids) == (expected, False)
+        assert store.remember_type_5_business_pair_choice(expected, pair_ids)
+
+    restored = StateStore(state_dir)
+    assert restored.peek_next_type_5_business_pair_id(pair_ids) == (pair_ids[0], True)
+    assert restored.remember_type_5_business_pair_choice(pair_ids[0], pair_ids)
+    assert restored.peek_next_type_5_business_pair_id(pair_ids) == (pair_ids[1], False)
+    assert (state_dir / "type5_business_queue.json").is_file()
+
+
+def test_type_5_business_and_social_rotations_are_independent(state_dir):
+    pair_ids = ["trading-clipping", "amazon-pod"]
+    copy_ids = ["type5-00", "type5-01", "type5-02"]
+    store = StateStore(state_dir)
+
+    assert store.peek_next_type_5_business_pair_id(pair_ids) == (pair_ids[0], False)
+    assert store.get_next_type_5_social_copy_id(copy_ids) == (copy_ids[0], False)
+    assert store.get_next_type_5_social_copy_id(copy_ids) == (copy_ids[1], False)
+    assert store.peek_next_type_5_business_pair_id(pair_ids) == (pair_ids[0], False)
+    assert store.remember_type_5_business_pair_choice(pair_ids[0], pair_ids)
+    assert store.peek_next_type_5_business_pair_id(pair_ids) == (pair_ids[1], False)
+    assert store.get_next_type_5_social_copy_id(copy_ids) == (copy_ids[2], False)
+
+
+def test_type_5_business_rotation_ignores_empty_or_invalid_selections(state_dir):
+    store = StateStore(state_dir)
+    pair_ids = ["trading-clipping", "amazon-pod"]
+
+    assert store.peek_next_type_5_business_pair_id([]) == (None, False)
+    assert not store.remember_type_5_business_pair_choice("missing", pair_ids)
+    assert not store.remember_type_5_business_pair_choice("", pair_ids)
+    assert not store.remember_type_5_business_pair_choice(pair_ids[0], [])
+    assert store.peek_next_type_5_business_pair_id(pair_ids) == (pair_ids[0], False)
+
+
 def test_cartools_image_queue_persists_and_restarts_after_full_cycle(state_dir):
     image_ids = ["etag:first:10", "etag:second:20"]
 

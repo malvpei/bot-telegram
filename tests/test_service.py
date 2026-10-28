@@ -36,6 +36,7 @@ from app.render import VideoRenderer
 from app.service import TYPE_5_DROPRADAR_FIXED_IMAGE_NAME, VideoCreationService
 from app.state import StateStore
 from app.texts import ScriptGenerator
+from app.type_5 import type_5_slide_texts, type_5_social_copies
 
 
 class FakeRenderer:
@@ -1694,6 +1695,8 @@ def test_type_5_uses_three_random_clean_photos_and_rotates_social_copy(monkeypat
 
         assert second.social_copy.title != result.social_copy.title
         assert second.social_copy.description != result.social_copy.description
+        assert second.slides[1].text.startswith("Amazon FBA 3/10 ❌")
+        assert second.slides[2].text.startswith("Print on demand 2/10 ❌")
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
@@ -1891,6 +1894,107 @@ def test_type_5_generates_english_chat_text_and_social_copy():
         assert service.renderer.render_slide_still_texts == ["", "", "", ""]
     finally:
         shutil.rmtree(root, ignore_errors=True)
+
+
+@pytest.mark.parametrize("languages", [
+    (Language.ES,) * 6,
+    (Language.EN,) * 6,
+    (Language.ES, Language.EN) * 3,
+])
+def test_type_5_rotates_five_businesses_across_restarts_and_languages(tmp_path, languages):
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        width=72,
+        height=128,
+    )
+    expected_pairs = [
+        (SlideRole.TYPE_5_TRADING, SlideRole.TYPE_5_CLIPPING),
+        (SlideRole.TYPE_5_AMAZON_FBA, SlideRole.TYPE_5_PRINT_ON_DEMAND),
+        (SlideRole.TYPE_5_AFFILIATE_MARKETING, SlideRole.TYPE_5_TRADING),
+        (SlideRole.TYPE_5_CLIPPING, SlideRole.TYPE_5_AMAZON_FBA),
+        (SlideRole.TYPE_5_PRINT_ON_DEMAND, SlideRole.TYPE_5_AFFILIATE_MARKETING),
+    ]
+    seen_roles = []
+    for index, language in enumerate(languages):
+        # Recreate the service to verify that the next pair survives restarts.
+        service = VideoCreationService.__new__(VideoCreationService)
+        service.settings = settings
+        service.state = StateStore(settings.state_dir)
+        service.renderer = FakeRenderer()
+        service.r2_storage = Type5R2Storage()
+        result = service._create_video_locked(VideoRequest(
+            chat_id=1,
+            user_id=1,
+            video_type=VideoType.TYPE_5,
+            language=language,
+            account_inputs=[],
+        ))
+
+        pair = expected_pairs[index % len(expected_pairs)]
+        roles = [SlideRole.HOOK, *pair, SlideRole.TYPE_5_AI_DROPSHIPPING]
+        assert [slide.role for slide in result.slides] == roles
+        assert len(set(pair)) == 2
+        texts = type_5_slide_texts(language)
+        assert [slide.text for slide in result.slides] == [texts[role] for role in roles]
+        assert result.preview_text == "\n\n".join(texts[role] for role in roles)
+        assert result.social_copy == type_5_social_copies(language, pair)[index]
+        assert result.slides[-1].media.source_id == "fixed:imagen6"
+        assert result.separate_slide_text is True
+        assert service.renderer.render_slide_still_texts == ["", "", "", ""]
+        assert service.renderer.written_plan is not None
+        assert [slide.role for slide in service.renderer.written_plan.slides] == roles
+        if index < len(expected_pairs):
+            seen_roles.extend(pair)
+
+    assert len(set(seen_roles)) == 5
+    assert all(seen_roles.count(role) == 2 for role in set(seen_roles))
+
+
+@pytest.mark.parametrize("failure_stage", ["download", "render"])
+def test_type_5_failure_does_not_consume_business_pair(tmp_path, monkeypatch, failure_stage):
+    settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        width=72,
+        height=128,
+    )
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.renderer = FakeRenderer()
+    service.r2_storage = Type5R2Storage()
+    request = VideoRequest(
+        chat_id=1,
+        user_id=1,
+        video_type=VideoType.TYPE_5,
+        language=Language.EN,
+        account_inputs=[],
+    )
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("generation failed")
+
+    with monkeypatch.context() as failure_patch:
+        if failure_stage == "download":
+            failure_patch.setattr(service.r2_storage, "download", fail)
+        else:
+            failure_patch.setattr(service.renderer, "render_slide_still", fail)
+        with pytest.raises(RuntimeError, match="generation failed"):
+            service._create_video_locked(request)
+
+    service.state = StateStore(settings.state_dir)
+    result = service._create_video_locked(replace(request, language=Language.ES))
+    assert [slide.role for slide in result.slides[1:3]] == [
+        SlideRole.TYPE_5_TRADING, SlideRole.TYPE_5_CLIPPING,
+    ]
+    assert result.social_copy == type_5_social_copies(Language.ES)[0]
 
 
 def test_type_5_requires_three_images_in_its_own_prefix():

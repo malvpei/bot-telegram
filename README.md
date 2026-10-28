@@ -436,10 +436,17 @@ redeploys.
 El **Tipo 5** elige tres imágenes diferentes al azar del prefijo R2
 `tipo4/imagenstipo4` y añade como cuarta imagen el cierre fijo de Dropradar. Las
 cuatro se entregan limpias, sin texto ni iconos, mientras el bot manda por
-separado el hook «Top negocios para jubilar a tus padres 🫡» y las comparaciones
-de Traiding, Clipping y AI + Dropshipping. Cada vídeo recibe un único título y
-una única descripción con hashtags, en mensajes distintos, rotando entre doce
-parejas. Esta rotación de copy se guarda en
+separado el hook «Top negocios para jubilar a tus padres 🫡» y dos comparaciones
+rotativas entre Trading (2/10 ❌), Clipping (4/10 ❌), Amazon FBA (3/10 ❌),
+Print on demand (2/10 ❌) y Marketing de afiliados (6/10 🟡), con AI + Dropshipping
+(10/10 ✅) fijo al final. Cada vídeo incluye dos negocios distintos. La rotación
+avanza dos posiciones por vídeo y completa una vuelta en cinco vídeos, con la
+misma frecuencia para los cinco negocios. Su posición se guarda en
+`DATA_DIR/state/type5_business_queue.json`, compartida para español e inglés,
+y solo avanza tras generar las imágenes correctamente.
+Cada vídeo recibe un único título y una única descripción con hashtags, en
+mensajes distintos, adaptados a los negocios elegidos y al idioma, rotando entre
+doce parejas. Esta rotación de copy se guarda en
 `DATA_DIR/state/type5_social_queue.json`; la selección de imágenes R2 es
 aleatoria y no usa una cola persistente.
 
@@ -595,6 +602,8 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `data/state/script_history.json` — historial acotado de firmas
 - `data/state/jobs_log.json` — histórico de jobs
 - `data/state/type4_image_queue.json` — rotación de las imágenes limpias R2 del Tipo 4 - Consejos
+- `data/state/type5_business_queue.json` — rotación de las parejas de negocios del Tipo 5
+- `data/state/type5_social_queue.json` — rotación de los 12 títulos y descripciones del Tipo 5
 - `data/state/cartools_background_queue.json` — rotación de los 13 fondos seleccionados de Tools
 - `data/state/cartools_image_queue.json` — cola cíclica de la imagen R2 de `/createp` Tools
 - `data/state/cartools_social_copy_queue.json` — rotación de los 15 títulos y descripciones de Tools
