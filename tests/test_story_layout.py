@@ -10,6 +10,7 @@ from app.story_layout import (
     parse_story_subject_box_2d,
     parse_story_subject_point_2d,
     story_subject_box,
+    story_subject_source,
     write_story_subject_box,
 )
 
@@ -87,6 +88,7 @@ def test_saved_geometry_survives_loading_without_changing_scene_pixels(tmp_path)
         assert saved.convert("RGB").tobytes() == source.tobytes()
         assert saved.info["existing_note"] == "Preserve this note"
         assert story_subject_box(saved) == (0.2, 0.35, 0.9, 1.0)
+        assert story_subject_source(saved) == "review"
         assert story_subject_box(saved.convert("RGB").copy()) == (0.2, 0.35, 0.9, 1.0)
 
 
@@ -95,3 +97,47 @@ def test_missing_or_malformed_png_geometry_is_ignored():
     assert story_subject_box(source) is None
     source.info["story_subject_box"] = "[0.2, 0.35, 0.9, 0.3]"
     assert story_subject_box(source) is None
+
+
+def test_segmented_geometry_bypasses_color_refinement_and_preserves_pixels(tmp_path, monkeypatch):
+    path = tmp_path / "segmented.png"
+    source = Image.new("RGB", (96, 160), (126, 75, 43))
+    source.save(path)
+
+    def unexpected_color_refinement(*args):
+        pytest.fail("Pixel segmentation must not be replaced by a hair color estimate")
+
+    monkeypatch.setattr("app.story_subject_detection.refine_story_subject_box", unexpected_color_refinement)
+    box = (0.2, 0.35, 0.9, 1.0)
+    write_story_subject_box(path, box, anchor_point=(0.6, 0.5), source="segmentation")
+
+    with Image.open(path) as saved:
+        assert story_subject_box(saved) == box
+        assert story_subject_source(saved) == "segmentation"
+        assert saved.convert("RGB").tobytes() == source.tobytes()
+        assert story_subject_source(saved.convert("RGB").copy()) == "segmentation"
+
+
+def test_clearing_geometry_removes_the_previous_source_tag(tmp_path):
+    path = tmp_path / "scene.png"
+    source = Image.new("RGB", (96, 160), (182, 141, 95))
+    source.save(path)
+    write_story_subject_box(path, (0.2, 0.35, 0.9, 1.0), source="segmentation")
+
+    write_story_subject_box(path, None)
+
+    with Image.open(path) as saved:
+        assert story_subject_box(saved) is None
+        assert story_subject_source(saved) is None
+        assert saved.convert("RGB").tobytes() == source.tobytes()
+
+
+def test_unknown_source_tag_is_not_treated_as_segmentation(tmp_path):
+    image = Image.new("RGB", (96, 160))
+    image.info["story_subject_source"] = "untrusted"
+    assert story_subject_source(image) is None
+    path = tmp_path / "scene.png"
+    image.save(path)
+
+    with pytest.raises(ValueError, match="geometría"):
+        write_story_subject_box(path, (0.2, 0.35, 0.9, 1.0), source="untrusted")

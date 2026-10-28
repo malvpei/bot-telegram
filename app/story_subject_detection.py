@@ -122,7 +122,7 @@ def refine_story_subject_box(
     refined_top = max(0, y - radius) / height
     return (
         min(left, x / width),
-        refined_top,
+        min(top, refined_top),
         max(right, (x + component_width) / width),
         max(bottom, (y + component_height) / height),
     )

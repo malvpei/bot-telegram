@@ -28,6 +28,11 @@ from app.story_layout import (
     parse_story_subject_point_2d,
     write_story_subject_box,
 )
+from app.story_segmentation import (
+    STORY_SEGMENTATION_MODEL,
+    segmentation_input,
+    subject_box_from_segmentation,
+)
 
 
 LOGGER = logging.getLogger(__name__)
@@ -485,6 +490,11 @@ class StoryCarouselImageGenerator:
         reference_image_path: Path,
         job_dir: Path,
     ) -> list[MediaCandidate]:
+        if not self.settings.fal_key:
+            raise RuntimeError(
+                "Falta configurar fal.ai para comprobar la silueta del protagonista. "
+                "No se ha generado ninguna imagen."
+            )
         # Prompt construction also runs inside worker threads. Keep one active
         # profile on the generator for the complete carousel, and serialize calls
         # so two simultaneous videos can never leak their environments into each
@@ -589,6 +599,11 @@ class StoryCarouselImageGenerator:
                     ]
                     self._wait_for_futures(futures)
 
+        # Locate the actual foreground silhouette only after all six images have
+        # passed their generation/quality gates. A failed mask must never trigger
+        # a fresh image generation or publish a guessed caption position.
+        self._finalize_story_subjects([path for _index, _scene, path in scene_outputs])
+
         generated: list[MediaCandidate] = []
         for index, scene, output_path in scene_outputs:
             generated.append(
@@ -599,6 +614,73 @@ class StoryCarouselImageGenerator:
                 )
             )
         return generated
+
+    def _finalize_story_subjects(self, paths: Sequence[Path]) -> None:
+        def finalize(path: Path) -> None:
+            box = self._locate_story_subject(path)
+            write_story_subject_box(path, box, source="segmentation")
+
+        workers = min(2, len(paths), max(1, int(self.settings.story_image_workers or 1)))
+        if workers <= 1:
+            for path in paths:
+                finalize(path)
+            return
+        with ThreadPoolExecutor(
+            max_workers=workers,
+            thread_name_prefix="story-subject",
+        ) as executor:
+            self._wait_for_futures([executor.submit(finalize, path) for path in paths])
+
+    def _locate_story_subject(
+        self,
+        path: Path,
+    ) -> tuple[float, float, float, float]:
+        if not self.settings.fal_key:
+            raise RuntimeError(
+                "Falta la clave de fal.ai para localizar al protagonista. "
+                "Las imágenes generadas se han conservado."
+            )
+
+        def download(url: str) -> bytes:
+            response = requests.get(
+                url,
+                timeout=self.settings.fal_request_timeout_seconds,
+            )
+            if response.status_code >= 400:
+                raise RuntimeError("No pude descargar la máscara del protagonista.")
+            return response.content
+
+        arguments = segmentation_input(path)
+        for attempt in range(1, 3):
+            try:
+                response = requests.post(
+                    f"{FAL_QUEUE_BASE_URL}/{STORY_SEGMENTATION_MODEL}",
+                    headers=self._fal_headers(),
+                    json=arguments,
+                    timeout=self.settings.fal_request_timeout_seconds,
+                )
+                payload = self._json_response(response, "segmentación del protagonista")
+                if response.status_code >= 400:
+                    raise RuntimeError("fal.ai no pudo segmentar al protagonista.")
+                result = self._wait_for_fal_result(payload)
+                box = subject_box_from_segmentation(result, download=download)
+                if box is not None:
+                    return box
+                raise RuntimeError("La segmentación no localizó un protagonista fiable.")
+            except (
+                OSError, KeyError, TypeError, ValueError, RuntimeError,
+                requests.RequestException,
+            ) as error:
+                # Provider payloads and URLs may contain private details. Log
+                # only the image basename, attempt and exception category.
+                LOGGER.warning(
+                    "Story subject segmentation failed for %s, attempt %d/2 (%s)",
+                    path.name, attempt, type(error).__name__,
+                )
+        raise RuntimeError(
+            "No pude localizar con seguridad al protagonista para colocar el texto. "
+            "He detenido la entrega y conservado las imágenes generadas."
+        ) from None
 
     def _choose_environment_variant(self) -> StoryEnvironmentVariant:
         variants_by_key = {

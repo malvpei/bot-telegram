@@ -13,6 +13,7 @@ from app.render import (
     TEXT_BODY_AVOID_WEIGHT,
     TEXT_CARD_BODY_FONT_SIZE,
     TEXT_EYE_AVOID_WEIGHT,
+    TEXT_FACE_AVOID_WEIGHT,
     TEXT_HEAD_AVOID_WEIGHT,
     TYPE_4_STORY_CAPTION_ROLES,
     VideoRenderer,
@@ -196,22 +197,40 @@ def test_story_clearance_follows_subject_height_instead_of_fixed_text_center(
     assert " ".join(blocks[0]["lines"]).split() == text.split()
 
 
-def test_reviewed_subject_geometry_overrides_photo_detector_false_positives(renderer, monkeypatch):
+def test_segmented_geometry_keeps_independent_faces_and_ignores_body_false_positives(renderer, monkeypatch):
     source = Image.new("RGB", (864, 1536), (205, 215, 225))
     source.info["story_subject_box"] = "[0.25, 0.4375, 0.875, 0.9375]"
+    source.info["story_subject_source"] = "segmentation"
     slide = _slide(SlideRole.STORY_MCDONALD, "Mi primera historia.")
 
-    def unexpected_photo_detection(image):
-        pytest.fail("Reviewed cartoon geometry should not be replaced by photo detections")
-
-    monkeypatch.setattr(renderer, "_text_avoid_regions", unexpected_photo_detection)
+    face = ((250, 600, 740, 980), TEXT_FACE_AVOID_WEIGHT)
+    false_body = ((30, 200, 180, 1400), TEXT_BODY_AVOID_WEIGHT)
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [face, false_body])
 
     regions = renderer._slide_text_avoid_regions(slide, source)
 
-    assert len(regions) == 1
+    assert len(regions) == 2
     box, weight = regions[0]
     assert box == (216, 672, 756, 1440)
     assert weight >= TEXT_HEAD_AVOID_WEIGHT
+    assert face in regions
+    assert false_body not in regions
+
+
+@pytest.mark.parametrize("source_tag", (None, "review"))
+def test_unverified_geometry_keeps_the_reserved_top_area(renderer, monkeypatch, source_tag):
+    width, height = renderer.settings.width, renderer.settings.height
+    source = Image.new("RGB", (width, height), (205, 215, 225))
+    source.info["story_subject_box"] = "[0.25, 0.58, 0.875, 0.9375]"
+    if source_tag is not None:
+        source.info["story_subject_source"] = source_tag
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+
+    regions = renderer._slide_text_avoid_regions(
+        _slide(SlideRole.STORY_DROPRADAR, "Entonces encontré Dropradar."), source,
+    )
+
+    assert regions[0][0][1] == int(height * 0.39)
 
 
 def test_missing_reviewed_geometry_keeps_detection_for_story_and_other_formats(renderer, monkeypatch):
@@ -236,14 +255,11 @@ def test_still_and_video_keep_caption_clear_during_the_complete_camera_move(rend
     source = Image.new("RGB", (864, 1536), (205, 215, 225))
     path = tmp_path / "reviewed-scene.png"
     source.save(path)
-    write_story_subject_box(path, (0.25, 0.4375, 0.875, 0.9375))
+    write_story_subject_box(path, (0.25, 0.4375, 0.875, 0.9375), source="segmentation")
     slide = _slide(SlideRole.STORY_SUCCESS_COMIC, "Después de un año y medio...")
     slide.media.local_path = path
 
-    def unexpected_photo_detection(image):
-        pytest.fail("The saved review geometry must survive image loading")
-
-    monkeypatch.setattr(renderer, "_text_avoid_regions", unexpected_photo_detection)
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
     still = renderer.render_slide_still(slide, VideoType.TYPE_4)
     loaded = renderer._load_source_image(path)
     cache_key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, still.size)
@@ -264,6 +280,40 @@ def test_still_and_video_keep_caption_clear_during_the_complete_camera_move(rend
         if progress == 1.0:
             assert still.tobytes() == Image.fromarray(frame).tobytes()
     assert box[3] == min(swept_tops) - clearance + 1
+
+
+@pytest.mark.parametrize("role", (SlideRole.STORY_DROPRADAR, SlideRole.STORY_SUCCESS_COMIC))
+@pytest.mark.parametrize("weight", (TEXT_FACE_AVOID_WEIGHT, TEXT_EYE_AVOID_WEIGHT), ids=("face", "eyes"))
+def test_independent_face_guard_wins_over_incorrect_lower_subject_metadata(
+    renderer, tmp_path, monkeypatch, role, weight,
+):
+    source = Image.new("RGB", (864, 1536), (225, 201, 161))
+    path = tmp_path / "incorrect-lower-subject.png"
+    source.save(path)
+    # This models the reported failure: a lower shirt/sideburn estimate must
+    # never erase a separate face detection higher in the same image.
+    write_story_subject_box(path, (0.35, 0.58, 0.95, 0.99), source="segmentation")
+    face = (400, 630, 800, 1040)
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [(face, weight)])
+    text = (
+        "Entonces encontré Dropradar, validé un producto con datos "
+        "y ese mes conseguí mi primera venta."
+        if role == SlideRole.STORY_DROPRADAR else "Después de un año y medio..."
+    )
+    slide = _slide(role, text)
+    slide.media.local_path = path
+    renderer.render_slide_still(slide, VideoType.TYPE_4)
+    size = (renderer.settings.width, renderer.settings.height)
+    overlay = renderer._text_overlay_cache[renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, size)]
+    card = overlay.getbbox()
+    assert card is not None
+    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * size[1] / 1920))
+
+    for progress in (0.0, 0.5, 1.0):
+        scale = max(size[0] / 864, size[1] / 1536) * (1 + 0.06 * progress)
+        offset_y = int(max(0, int(1536 * scale) - size[1]) * 0.5)
+        face_top = int(face[1] * scale) - offset_y
+        assert card[3] - 1 <= face_top - clearance
 
 
 @pytest.mark.parametrize("role", (SlideRole.OCTOBER, SlideRole.TIP1, SlideRole.PARKEZ_PROMO, SlideRole.STORY_ORIGINAL_REFERENCE))

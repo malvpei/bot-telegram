@@ -478,15 +478,22 @@ despues para que el modelo no introduzca letras deformadas. En las seis escenas,
 el texto sobre fondo blanco conserva la ampliación del 16 %. Su borde inferior
 se coloca a 58 px del protagonista a resolución 1080×1920 (margen proporcional
 en otras resoluciones), en vez de usar una altura fija para todas las escenas.
-La revisión visual existente localiza la silueta principal, incluido pelo, gorros
-y manos levantadas. Una guía de coordenadas se añade solamente a la copia que
-ve el revisor; nunca a las imágenes entregadas. Un punto interior permite afinar
-localmente el borde del pelo oscuro y recuperar sus mechones finos, sin confundir
-los muebles con el protagonista. Las coordenadas finales se guardan en el PNG.
-Esto reutiliza la misma petición de IA. La composición protege toda la trayectoria del acercamiento
-del vídeo y utiliza la misma posición en las fotos entregadas. Si no hay
-coordenadas válidas del revisor, utiliza la detección local; si tampoco detecta
-el dibujo, respeta la zona superior reservada del 39 %.
+Después de aceptar las seis ilustraciones, `fal-ai/sam-3/image` segmenta a
+las personas y mide el borde real de la silueta principal, incluido el pelo
+castaño y las manos. Usa la misma `FAL_KEY`, con hasta dos tareas simultáneas.
+Las coordenadas de la máscara quedan guardadas en cada PNG con origen
+`segmentation`; los píxeles de la ilustración no cambian. Se conservan además
+las protecciones locales de caras y ojos: una estimación de IA nunca las anula.
+El refinado antiguo de color solo puede adelantar el límite, nunca bajarlo.
+
+La composición mantiene el margen durante todo el acercamiento del vídeo y
+en las fotos entregadas. La segmentación se reintenta dos veces sobre la misma
+imagen, sin regenerarla. Si no hay una máscara fiable, se detiene la entrega y
+se conservan los originales generados. Sin `FAL_KEY`, se avisa antes de generar.
+Esta comprobación añade seis peticiones SAM, aproximadamente 0,03 USD por
+historia según la [tarifa del modelo](https://fal.ai/models/fal-ai/sam-3/image).
+La revisión semántica conserva su guía temporal de coordenadas solo en la copia
+que recibe el revisor, nunca en las imágenes entregadas.
 Un revisor visual
 barato valida cada escena y solo regenera las que no alcancen
 `STORY_REVIEW_MIN_SCORE`: usa OpenAI si existe `OPENAI_API_KEY` y, si no, el

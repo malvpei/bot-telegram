@@ -26,7 +26,7 @@ from app.face_detection import build_face_detector
 from app.models import Language, MediaCandidate, SlidePlan, SlideRole, VideoPlan, VideoType
 from app.opencv_compat import CV2_ERROR, build_cascade, build_people_detector
 from app.parkez_advice import PARKEZ_ADVICE_ICON_FILES, PARKEZ_ADVICE_ICON_RELATIVE_PATH
-from app.story_layout import story_subject_box
+from app.story_layout import story_subject_box, story_subject_source
 
 if TYPE_CHECKING:
     from app.parkez_apps import ParkEzApp
@@ -3045,15 +3045,22 @@ class VideoRenderer:
         if slide.role in TYPE_4_STORY_CAPTION_ROLES:
             box = story_subject_box(source_image)
             if box is not None:
-                # The reviewer locates the whole foreground silhouette, including
-                # hair, hats and raised hands. Photo faces can miss these drawings.
+                # A semantic estimate must never override an independently
+                # detected face. Pixel segmentation supplies the full silhouette.
                 left, top, right, bottom = box
+                if story_subject_source(source_image) != "segmentation":
+                    top = min(top, TYPE_4_STORY_SUBJECT_TOP_RATIO)
+                faces = [
+                    (region, weight)
+                    for region, weight in self._text_avoid_regions(source_image)
+                    if weight in {TEXT_FACE_AVOID_WEIGHT, TEXT_EYE_AVOID_WEIGHT}
+                ]
                 return [((
                     math.floor(left * source_image.width),
                     math.floor(top * source_image.height),
                     math.ceil(right * source_image.width),
                     math.ceil(bottom * source_image.height),
-                ), TEXT_HEAD_AVOID_WEIGHT)]
+                ), TEXT_HEAD_AVOID_WEIGHT), *faces]
         return self._text_avoid_regions(source_image)
 
     def _project_cover_avoid_regions(

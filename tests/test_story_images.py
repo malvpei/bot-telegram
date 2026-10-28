@@ -674,6 +674,7 @@ def test_story_scenes_are_generated_with_bounded_parallelism(tmp_path, monkeypat
         "_generate_scene_with_quality_gate",
         fake_generate_with_gate,
     )
+    monkeypatch.setattr(generator, "_finalize_story_subjects", lambda paths: None)
 
     slides = generator.generate_slides(reference, tmp_path / "job")
 
@@ -718,6 +719,7 @@ def test_multi_reference_story_reuses_one_bedroom_anchor(tmp_path, monkeypatch):
         "_generate_scene_with_quality_gate",
         fake_generate_with_gate,
     )
+    monkeypatch.setattr(generator, "_finalize_story_subjects", lambda paths: None)
 
     generator.generate_slides(reference, tmp_path / "job")
 
@@ -776,6 +778,173 @@ def test_story_generator_waits_for_started_requests_after_an_error(tmp_path, mon
         generator.generate_slides(reference, tmp_path / "job")
 
     assert second_finished.is_set()
+
+
+def test_story_finalizes_all_six_subjects_after_generation_with_bounded_parallelism(tmp_path, monkeypatch):
+    from app.story_layout import story_subject_source
+
+    settings = replace(
+        get_settings(), story_image_workers=4,
+        image_provider="fal", story_fal_model="openai/gpt-image-2/edit",
+    )
+    generator = StoryCarouselImageGenerator(settings)
+    reference = tmp_path / "reference.png"
+    Image.new("RGB", (100, 180), (120, 140, 160)).save(reference)
+    generated = []
+    lock = Lock()
+    barrier = Barrier(2, timeout=3)
+    active = max_active = 0
+    located = []
+    originals = {}
+
+    def generate(original, inputs, scene, path):
+        index = STORY_SCENES.index(scene)
+        image = Image.new("RGB", (100 + index * 10, 180 + index * 18), (40 + index, 80, 120))
+        image.save(path)
+        write_story_subject_box(path, (0.2, 0.70, 0.9, 0.99))
+        with lock:
+            generated.append(scene.role)
+            originals[path.name] = (image.size, image.tobytes())
+
+    def locate(path):
+        nonlocal active, max_active
+        assert len(generated) == 6
+        index = int(path.name.split("_")[1]) - 1
+        with Image.open(path) as image:
+            assert image.size == originals[path.name][0]
+        with lock:
+            active += 1
+            max_active = max(max_active, active)
+            located.append(path.name)
+        barrier.wait()
+        with lock:
+            active -= 1
+        return (0.25, 0.20 + index * 0.02, 0.95, 0.98)
+
+    monkeypatch.setattr(generator, "_generate_scene_with_quality_gate", generate)
+    monkeypatch.setattr(generator, "_locate_story_subject", locate)
+
+    slides = generator.generate_slides(reference, tmp_path / "job")
+
+    assert max_active == 2
+    assert len(located) == len(set(located)) == len(slides) == 6
+    for index, slide in enumerate(slides):
+        with Image.open(slide.local_path) as image:
+            assert image.tobytes() == originals[slide.local_path.name][1]
+            assert story_subject_box(image) == (0.25, 0.20 + index * 0.02, 0.95, 0.98)
+            assert story_subject_source(image) == "segmentation"
+
+
+def test_story_subject_locator_submits_clean_segmentation_input_and_downloads_mask(tmp_path, monkeypatch):
+    from app.story_segmentation import STORY_SEGMENTATION_MODEL
+
+    generator = StoryCarouselImageGenerator(replace(get_settings(), fal_key="test-fal-secret"))
+    path = tmp_path / "scene.png"
+    Image.new("RGB", (100, 180), (20, 40, 60)).save(path)
+    arguments = {"image_url": "data:image/png;base64,test-image", "prompt": "person"}
+    posts = []
+    downloads = []
+    result = {"masks": [{"url": "https://example.test/mask.png"}]}
+
+    def post(url, *, headers, json, timeout):
+        posts.append((url, headers, json, timeout))
+        return FakeResponse(payload={"response_url": "https://queue.fal.run/result/mask"})
+
+    def get(url, *, timeout):
+        downloads.append(url)
+        return FakeResponse(content=b"test-mask-bytes")
+
+    def parse(payload, *, download):
+        assert payload is result
+        assert download(payload["masks"][0]["url"]) == b"test-mask-bytes"
+        return (0.3, 0.2, 0.8, 0.95)
+
+    monkeypatch.setattr("app.story_images.segmentation_input", lambda actual: arguments if actual == path else None)
+    monkeypatch.setattr("app.story_images.subject_box_from_segmentation", parse)
+    monkeypatch.setattr("app.story_images.requests.post", post)
+    monkeypatch.setattr("app.story_images.requests.get", get)
+    monkeypatch.setattr(generator, "_wait_for_fal_result", lambda payload: result)
+
+    assert generator._locate_story_subject(path) == (0.3, 0.2, 0.8, 0.95)
+    assert len(posts) == 1
+    assert posts[0][0].endswith("/" + STORY_SEGMENTATION_MODEL)
+    assert posts[0][1]["Authorization"] == "Key test-fal-secret"
+    assert posts[0][2] == arguments
+    assert downloads == ["https://example.test/mask.png"]
+
+
+def test_story_subject_locator_retries_segmentation_without_regenerating_images(tmp_path, monkeypatch):
+    generator = StoryCarouselImageGenerator(replace(get_settings(), fal_key="test-fal-secret"))
+    path = tmp_path / "scene.png"
+    Image.new("RGB", (100, 180), (20, 40, 60)).save(path)
+    calls = []
+    boxes = iter([None, (0.3, 0.2, 0.8, 0.95)])
+
+    def post(*args, **kwargs):
+        calls.append(kwargs["json"])
+        return FakeResponse(payload={"response_url": "https://queue.fal.run/result/mask"})
+
+    monkeypatch.setattr("app.story_images.segmentation_input", lambda path: {"image_url": "same-clean-image"})
+    monkeypatch.setattr("app.story_images.subject_box_from_segmentation", lambda result, **kwargs: next(boxes))
+    monkeypatch.setattr("app.story_images.requests.post", post)
+    monkeypatch.setattr(generator, "_wait_for_fal_result", lambda payload: {})
+    monkeypatch.setattr(generator, "_generate_scene", lambda *args, **kwargs: pytest.fail("Segmentation must not regenerate scenes"))
+
+    assert generator._locate_story_subject(path) == (0.3, 0.2, 0.8, 0.95)
+    assert calls == [{"image_url": "same-clean-image"}] * 2
+
+
+def test_failed_subject_segmentation_preserves_all_six_generated_images_and_blocks_delivery(tmp_path, monkeypatch, caplog):
+    generator = StoryCarouselImageGenerator(replace(
+        get_settings(), fal_key="test-fal-secret", story_image_workers=1,
+        image_provider="fal", story_fal_model="openai/gpt-image-2/edit",
+    ))
+    reference = tmp_path / "reference.png"
+    Image.new("RGB", (100, 180), (120, 140, 160)).save(reference)
+    generated = []
+    requests_made = []
+
+    def generate(original, inputs, scene, path):
+        generated.append(scene.role)
+        Image.new("RGB", (100, 180), (40, 80, 120)).save(path)
+
+    def post(*args, **kwargs):
+        requests_made.append(kwargs["json"])
+        raise RuntimeError("private provider payload test-fal-secret")
+
+    monkeypatch.setattr(generator, "_generate_scene_with_quality_gate", generate)
+    monkeypatch.setattr("app.story_images.segmentation_input", lambda path: {"image_url": "clean-scene"})
+    monkeypatch.setattr("app.story_images.requests.post", post)
+
+    with pytest.raises(RuntimeError, match="He detenido la entrega") as error:
+        generator.generate_slides(reference, tmp_path / "job")
+
+    assert len(generated) == len(set(generated)) == 6
+    assert len(requests_made) == 2
+    assert len(list((tmp_path / "job" / "story_ai_sources").glob("*.png"))) == 6
+    assert "test-fal-secret" not in str(error.value)
+    assert "test-fal-secret" not in caplog.text
+
+
+def test_story_missing_segmentation_key_stops_before_generating_images(tmp_path, monkeypatch):
+    generator = StoryCarouselImageGenerator(replace(get_settings(), fal_key=""))
+
+    def unexpected_generation(*args):
+        pytest.fail("Missing verification credentials must be detected before image generation")
+
+    monkeypatch.setattr(generator, "_generate_slides_locked", unexpected_generation)
+
+    with pytest.raises(RuntimeError, match="No se ha generado ninguna imagen"):
+        generator.generate_slides(tmp_path / "reference.png", tmp_path / "job")
+    assert not (tmp_path / "job").exists()
+
+
+def test_story_subject_locator_requires_fal_key_without_sending_any_request(tmp_path, monkeypatch):
+    generator = StoryCarouselImageGenerator(replace(get_settings(), fal_key=""))
+    monkeypatch.setattr("app.story_images.requests.post", lambda *args, **kwargs: pytest.fail("Missing keys must not call fal"))
+
+    with pytest.raises(RuntimeError, match="Falta la clave de fal.ai"):
+        generator._locate_story_subject(tmp_path / "scene.png")
 
 
 def test_story_prompts_lock_single_scene_style_and_bedroom_continuity():

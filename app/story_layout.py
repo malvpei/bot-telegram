@@ -12,6 +12,7 @@ from PIL import Image, PngImagePlugin
 
 
 STORY_SUBJECT_BOX_KEY = "story_subject_box"
+STORY_SUBJECT_SOURCE_KEY = "story_subject_source"
 StorySubjectBox = tuple[float, float, float, float]
 
 
@@ -67,32 +68,43 @@ def story_subject_box(image: Image.Image) -> StorySubjectBox | None:
         return None
 
 
+def story_subject_source(image: Image.Image) -> str | None:
+    value = image.info.get(STORY_SUBJECT_SOURCE_KEY)
+    return value if value in {"review", "segmentation"} else None
+
+
 def write_story_subject_box(
     path: Path,
     box: StorySubjectBox | None,
     *,
     anchor_point: tuple[float, float] | None = None,
+    source: str = "review",
 ) -> None:
     """Keep reviewed geometry with its PNG, including selected retry fallbacks."""
     normalized = parse_story_subject_box(box)
-    with Image.open(path) as source:
-        if normalized is None and STORY_SUBJECT_BOX_KEY not in source.info:
+    if source not in {"review", "segmentation"}:
+        raise ValueError("Origen de la geometría del protagonista no válido.")
+    with Image.open(path) as original:
+        if normalized is None and not any(
+            key in original.info for key in (STORY_SUBJECT_BOX_KEY, STORY_SUBJECT_SOURCE_KEY)
+        ):
             return
-        source.load()
-        image = source.copy()
-        if normalized is not None and anchor_point is not None:
+        original.load()
+        image = original.copy()
+        if source != "segmentation" and normalized is not None and anchor_point is not None:
             from app.story_subject_detection import refine_story_subject_box
 
             normalized = refine_story_subject_box(image, normalized, anchor_point)
         info = PngImagePlugin.PngInfo()
-        for key, value in source.info.items():
-            if key != STORY_SUBJECT_BOX_KEY and isinstance(value, str):
+        for key, value in original.info.items():
+            if key not in {STORY_SUBJECT_BOX_KEY, STORY_SUBJECT_SOURCE_KEY} and isinstance(value, str):
                 info.add_text(key, value)
         if normalized is not None:
             info.add_text(STORY_SUBJECT_BOX_KEY, json.dumps(normalized))
+            info.add_text(STORY_SUBJECT_SOURCE_KEY, source)
         save_options = {
-            key: source.info[key] for key in ("icc_profile", "exif")
-            if key in source.info
+            key: original.info[key] for key in ("icc_profile", "exif")
+            if key in original.info
         }
     temporary = path.with_name(path.name + ".layout.tmp")
     try:

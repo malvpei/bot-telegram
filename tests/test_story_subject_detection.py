@@ -50,7 +50,7 @@ def _assert_hair_top_was_refined(image, refined, *, left=0.45):
 
 
 def test_anchor_selects_hair_instead_of_higher_furniture_and_breaks_thin_outlines(scene):
-    reviewed = (0.45, 0.30, 0.95, 0.99)
+    reviewed = (0.45, 0.48, 0.95, 0.99)
 
     refined = refine_story_subject_box(scene, reviewed, (0.70, 0.50))
 
@@ -61,7 +61,7 @@ def test_refined_geometry_is_saved_without_changing_scene_pixels(scene, tmp_path
     path = tmp_path / "scene.png"
     scene.save(path)
 
-    write_story_subject_box(path, (0.45, 0.30, 0.95, 0.99), anchor_point=(0.70, 0.50))
+    write_story_subject_box(path, (0.45, 0.48, 0.95, 0.99), anchor_point=(0.70, 0.50))
 
     with Image.open(path) as saved:
         assert saved.convert("RGB").tobytes() == scene.tobytes()
@@ -76,7 +76,7 @@ def test_refined_geometry_is_saved_without_changing_scene_pixels(scene, tmp_path
     (0.70, 0.245),  # A point on the cabinet above the reviewed silhouette.
 ))
 def test_uncertain_or_invalid_anchor_keeps_reviewed_box(scene, point):
-    reviewed = (0.45, 0.30, 0.95, 0.99)
+    reviewed = (0.45, 0.48, 0.95, 0.99)
 
     assert refine_story_subject_box(scene, reviewed, point) == reviewed
 
@@ -84,7 +84,7 @@ def test_uncertain_or_invalid_anchor_keeps_reviewed_box(scene, point):
 def test_light_hair_keeps_reviewed_box_instead_of_searching_for_another_dark_object(scene):
     width, height = scene.size
     image = _draw_scene(width, height, hair=(205, 177, 99), bridge=False)
-    reviewed = (0.45, 0.30, 0.95, 0.99)
+    reviewed = (0.45, 0.48, 0.95, 0.99)
 
     assert refine_story_subject_box(image, reviewed, (0.70, 0.50)) == reviewed
 
@@ -97,7 +97,7 @@ def test_ambiguous_nearby_dark_components_keep_reviewed_box(scene):
     gap = max(2, round(3 * width / 1080))
     draw.rectangle((round(width * 0.55), round(height * 0.43), center_x - gap, round(height * 0.59)), fill=(42, 32, 24))
     draw.rectangle((center_x + gap, round(height * 0.43), round(width * 0.85), round(height * 0.59)), fill=(42, 32, 24))
-    reviewed = (0.45, 0.30, 0.95, 0.99)
+    reviewed = (0.45, 0.48, 0.95, 0.99)
 
     assert refine_story_subject_box(image, reviewed, (center_x / width, center_y / height)) == reviewed
 
@@ -109,7 +109,7 @@ def test_thick_connection_to_background_keeps_reviewed_box_when_shapes_cannot_be
         (round(width * 0.65), round(height * 0.28), round(width * 0.75), round(height * 0.50)),
         fill=(42, 32, 24),
     )
-    reviewed = (0.45, 0.30, 0.95, 0.99)
+    reviewed = (0.45, 0.48, 0.95, 0.99)
 
     assert refine_story_subject_box(scene, reviewed, (0.70, 0.50)) == reviewed
 
@@ -122,13 +122,13 @@ def test_small_dark_mark_is_not_mistaken_for_the_protagonists_hair(scene):
         (round(width * 0.69), round(height * 0.49), round(width * 0.71), round(height * 0.51)),
         fill=(42, 32, 24),
     )
-    reviewed = (0.45, 0.30, 0.95, 0.99)
+    reviewed = (0.45, 0.48, 0.95, 0.99)
 
     assert refine_story_subject_box(image, reviewed, (0.70, 0.50)) == reviewed
 
 
 def test_unique_hair_component_can_correct_a_small_horizontal_vision_point_error(scene):
-    reviewed = (0.30, 0.30, 0.95, 0.99)
+    reviewed = (0.30, 0.48, 0.95, 0.99)
 
     refined = refine_story_subject_box(scene, reviewed, (0.43, 0.50))
 
@@ -163,7 +163,7 @@ def test_horizontal_correction_does_not_replace_an_occupied_point_with_another_s
         (round(0.42 * width), round(0.49 * height), round(0.44 * width), round(0.51 * height)),
         fill=(42, 32, 24),
     )
-    reviewed = (0.30, 0.30, 0.95, 0.99)
+    reviewed = (0.30, 0.48, 0.95, 0.99)
 
     # A point already on an unrelated small mark is uncertain. It must not be
     # silently redirected to a different object further along the same row.
@@ -176,3 +176,25 @@ def test_horizontal_correction_requires_component_overlap_with_reviewed_protagon
     # Hair outside this reviewed person touches only a thin sliver of its box.
     # Being at the right height and near the point is insufficient evidence.
     assert refine_story_subject_box(scene, reviewed, (0.94, 0.50)) == reviewed
+
+
+def test_dark_component_never_moves_an_existing_safe_top_downward(scene):
+    reviewed = (0.45, 0.30, 0.95, 0.99)
+
+    refined = refine_story_subject_box(scene, reviewed, (0.70, 0.50))
+
+    assert refined[1] == reviewed[1]
+
+
+def test_brown_crown_is_not_discarded_when_only_a_lower_dark_patch_is_detected(scene):
+    width, height = scene.size
+    image = _draw_scene(width, height, hair=(126, 75, 43), bridge=False)
+    ImageDraw.Draw(image).ellipse(
+        (round(width * 0.60), round(height * 0.50), round(width * 0.80), round(height * 0.58)),
+        fill=(45, 30, 20),
+    )
+    reviewed = (0.45, 0.43, 0.95, 0.99)
+
+    refined = refine_story_subject_box(image, reviewed, (0.70, 0.54))
+
+    assert refined[1] == reviewed[1]
