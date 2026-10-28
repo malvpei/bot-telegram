@@ -493,9 +493,10 @@ Las antiguas colas de copy se conservan por compatibilidad; el texto de
 publicación definitivo se elige en este paso común. También se aplica a las
 plantillas R2, que ahora incluyen un título.
 
-El tipo 3 de Dropradar excluye los tres fondos rosas de su rotación y conserva
-18 fondos elegibles. Las colas antiguas descartan esos fondos pendientes. El
-catálogo de imágenes y la rotación independiente de Tools conservan sus assets.
+El tipo 3 de Dropradar excluye los fondos rosas, amarillo y salmón de su rotación
+y conserva 16 fondos elegibles. Las colas antiguas descartan esos fondos
+pendientes. El catálogo de imágenes y la rotación independiente de Tools
+conservan sus assets.
 
 ### Colocacion de texto y rendimiento
 

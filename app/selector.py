@@ -95,13 +95,16 @@ EXTREME_LUXURY_KEYWORDS = {
 }
 HEIC_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1")
 TYPE_3_BACKGROUND_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
-TYPE_3_PINK_BACKGROUND_NAMES = {
+TYPE_3_EXCLUDED_BACKGROUND_NAMES = {
     "pink gradient background.jpg",
     "backdrop purple background room studio with pink gradient spotlight backdrop blurred light.jpg",
     "elegant valentine gradient background.jpg",
+    "soft yellow watercolor texture design background.jpg",
+    "vecteezy_red-and-white-color-gradient-background_4519310.jpg",
 }
-TYPE_3_PINK_BACKGROUND_WORDS = {
+TYPE_3_EXCLUDED_BACKGROUND_WORDS = {
     "pink", "rosa", "rosas", "rosado", "rosados", "fucsia", "magenta",
+    "yellow", "amarillo", "amarilla", "amarillos", "amarillas", "salmon", "salmón",
 }
 TYPE_2_TIP3_FIXED_IMAGE_NAME = "tip3_dropradar.jpg"
 
@@ -718,14 +721,14 @@ class ImageSelector:
         language: Language,
     ) -> VideoPlan:
         # Keep the shared asset catalog and its stable IDs intact: ParkEz Tools
-        # also uses it. Only Dropradar's Type 3 excludes the pink backgrounds.
+        # also uses it. Dropradar's Type 3 excludes pink, yellow and salmon.
         backgrounds = tuple(
             background for background in self._type_3_backgrounds()
-            if not self._is_type_3_pink_background(background)
+            if not self._is_type_3_excluded_background(background)
         )
         if not backgrounds:
             raise ValueError(
-                "No hay fondos sin tonos rosas para el tipo 3 de Dropradar. "
+                "No hay fondos de colores permitidos para el tipo 3 de Dropradar. "
                 "Añade otro color en tipo3/fondocolores o tipo3/colores."
             )
         background_ids = [background.source_id for background in backgrounds]
@@ -2217,12 +2220,12 @@ class ImageSelector:
         return self._type_3_backgrounds_cache
 
     @staticmethod
-    def _is_type_3_pink_background(background: MediaCandidate) -> bool:
+    def _is_type_3_excluded_background(background: MediaCandidate) -> bool:
         name = background.local_path.name.casefold()
-        words = set(re.findall(r"[a-z0-9]+", background.local_path.stem.casefold()))
+        words = set(re.findall(r"[^\W_]+", background.local_path.stem.casefold()))
         return (
-            name in TYPE_3_PINK_BACKGROUND_NAMES
-            or bool(words & TYPE_3_PINK_BACKGROUND_WORDS)
+            name in TYPE_3_EXCLUDED_BACKGROUND_NAMES
+            or bool(words & TYPE_3_EXCLUDED_BACKGROUND_WORDS)
         )
 
     def _keyword_score(self, text: str, keywords: set[str]) -> float:

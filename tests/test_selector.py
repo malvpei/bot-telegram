@@ -1703,27 +1703,32 @@ def _type_3_color_filter_hook(settings):
     return hook
 
 
-def test_type_3_excludes_pink_preserves_other_colors_and_reconciles_old_queue(temp_workspace):
+def test_type_3_excludes_pink_yellow_salmon_and_reconciles_old_queue(temp_workspace):
     settings, state = temp_workspace
     backgrounds_dir = settings.root_dir / "tipo3" / "fondocolores"
-    pink_names = {
+    excluded_names = {
         "Pink Gradient Background.jpg",
         "Backdrop Purple Background Room Studio with Pink Gradient Spotlight Backdrop Blurred Light.jpg",
         "Elegant Valentine Gradient Background.jpg",
         "nuevo_fondo_ROSA.png",
+        "Soft Yellow Watercolor Texture Design Background.jpg",
+        "vecteezy_red-and-white-color-gradient-background_4519310.jpg",
+        "nuevo_fondo_AMARILLO.png",
+        "nuevo_fondo_SALMÓN.png",
+        "new_salmon_background.jpg",
     }
-    for name in pink_names:
+    for name in excluded_names:
         Image.new("RGB", (120, 180), (255, 160, 190)).save(backgrounds_dir / name)
-    # Red and purple remain eligible; only the pink variant of purple is removed.
+    # Other red and purple assets stay eligible; exclusions are specific.
     for name, color in (("red.jpg", (220, 20, 20)), ("purple.jpg", (70, 20, 160))):
         Image.new("RGB", (120, 180), color).save(backgrounds_dir / name)
     selector = ImageSelector(settings, state)
     shared = selector.type_3_backgrounds()
-    pink_ids = [item.source_id for item in shared if item.local_path.name in pink_names]
-    eligible = [item for item in shared if item.local_path.name not in pink_names]
-    saved_nonpink_order = [item.source_id for item in reversed(eligible)]
+    excluded_ids = [item.source_id for item in shared if item.local_path.name in excluded_names]
+    eligible = [item for item in shared if item.local_path.name not in excluded_names]
+    saved_eligible_order = [item.source_id for item in reversed(eligible)]
     queue_path = state.state_dir / "type3_background_queue.json"
-    queue_path.write_text(json.dumps({"order": pink_ids + saved_nonpink_order}))
+    queue_path.write_text(json.dumps({"order": excluded_ids + saved_eligible_order}))
     hook = _type_3_color_filter_hook(settings)
 
     picked = []
@@ -1733,18 +1738,18 @@ def test_type_3_excludes_pink_preserves_other_colors_and_reconciles_old_queue(te
             Language.ES if index % 2 else Language.EN,
         )
         picked.append(plan.type_3_background_id)
-        assert plan.slides[1].media.local_path.name not in pink_names
-        assert set(plan.type_3_background_candidates) == set(saved_nonpink_order)
+        assert plan.slides[1].media.local_path.name not in excluded_names
+        assert set(plan.type_3_background_candidates) == set(saved_eligible_order)
         state.remember_type_3_background_choice(
             plan.type_3_background_id, plan.type_3_background_candidates,
         )
 
-    assert picked == saved_nonpink_order
-    assert json.loads(queue_path.read_text())["order"] == saved_nonpink_order
+    assert picked == saved_eligible_order
+    assert json.loads(queue_path.read_text())["order"] == saved_eligible_order
     # Tools still receives the complete catalog, with its original source IDs.
     assert selector.type_3_backgrounds() is shared
-    assert {item.source_id for item in shared} == set(pink_ids + saved_nonpink_order)
-    assert all((backgrounds_dir / name).exists() for name in pink_names)
+    assert {item.source_id for item in shared} == set(excluded_ids + saved_eligible_order)
+    assert all((backgrounds_dir / name).exists() for name in excluded_names)
 
 
 @pytest.mark.parametrize("folder", ("fondocolores", "colores"))
@@ -1759,7 +1764,7 @@ def test_type_3_refuses_an_all_pink_pool_without_removing_shared_assets(temp_wor
     Image.new("RGB", (120, 180), (255, 80, 160)).save(pink)
     selector = ImageSelector(settings, state)
 
-    with pytest.raises(ValueError, match="No hay fondos sin tonos rosas"):
+    with pytest.raises(ValueError, match="No hay fondos de colores permitidos"):
         selector._create_type_3_plan({}, Language.ES)
 
     assert [item.local_path for item in selector.type_3_backgrounds()] == [pink]
