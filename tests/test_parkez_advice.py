@@ -201,21 +201,34 @@ def test_eighty_parkez_titles_both_designs_per_pack_and_hooks_survive_restart(tm
     monkeypatch.setattr(service.renderer, "render_parkez_advice_card", lambda *_: Image.new("RGB", (72, 128), "white"))
     copies_by_pack = {pack_id: [] for pack_id in PARKEZ_ADVICE_PACK_IDS}
     designs_by_pack = {pack_id: set() for pack_id in PARKEZ_ADVICE_PACK_IDS}
+    publication_order = []
     for index in range(80):
         pack_id = PARKEZ_ADVICE_PACK_IDS[index % 4]
         result = service.create_video(_request())
         design = PARKEZ_ADVICE_BACKGROUNDS[(index // 4) % 2]
         assert result.chosen_account == f"parkez:consejos:{design.value}:{pack_id}"
         assert result.social_copy.hook == PARKEZ_ADVICE_HOOKS[PARKEZ_ADVICE_HOOK_IDS[index % 2]]
+        assert "#coches" in result.social_copy.hashtags
         designs_by_pack[pack_id].add(design)
         copies_by_pack[pack_id].append(result.social_copy)
+        publication_order.append(result.social_copy)
         service.state = StateStore(service.settings.state_dir)
     assert len({copy.title for copies in copies_by_pack.values() for copy in copies}) == 80
     for pack_id, copies in copies_by_pack.items():
-        assert len({copy.title for copy in copies}) == len({copy.description for copy in copies}) == 20
+        assert len({copy.title for copy in copies}) == 20
+        descriptions = [copy.description for copy in copies if copy.description]
+        assert len(set(descriptions)) == len(descriptions)
         assert designs_by_pack[pack_id] == set(PARKEZ_ADVICE_BACKGROUNDS)
         assert service.state.peek_next_parkez_advice_social_copy_id(pack_id, PARKEZ_ADVICE_SOCIAL_COPY_IDS) == (PARKEZ_ADVICE_SOCIAL_COPY_IDS[0], True)
-    assert service.create_video(_request()).social_copy == copies_by_pack[PARKEZ_ADVICE_PACK_IDS[0]][0]
+    continued = service.create_video(_request())
+    assert continued.social_copy.title not in {copy.title for copy in publication_order}
+    assert continued.social_copy.hook == PARKEZ_ADVICE_HOOKS[PARKEZ_ADVICE_HOOK_IDS[0]]
+    assert "#coches" in continued.social_copy.hashtags
+    publication_order.append(continued.social_copy)
+    for offset in range(0, len(publication_order), 3):
+        group = publication_order[offset:offset + 3]
+        assert len(group) == 3
+        assert sum(not copy.description for copy in group) == 1
 
 
 @pytest.mark.parametrize("stage", ["download", "render", "normalize", "script", "log"])

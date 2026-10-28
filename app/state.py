@@ -5,7 +5,9 @@ import os
 import re
 import tempfile
 import time
+from collections.abc import Callable
 from contextlib import contextmanager
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from threading import Lock
@@ -21,7 +23,7 @@ except ImportError:  # pragma: no cover - fallback when filelock not installed
     _HAS_FILELOCK = False
 
 from app.batches import BATCH_ROTATION_CYCLE_LENGTH
-from app.models import Language, VideoType
+from app.models import Language, SocialCopy, VideoType
 
 
 _LOCK_TIMEOUT_SECONDS = 30.0
@@ -43,6 +45,7 @@ class StateStore:
         self._recent_scripts_path = self.state_dir / "recent_scripts.json"
         self._recent_text_choices_path = self.state_dir / "recent_text_choices.json"
         self._recent_social_choices_path = self.state_dir / "recent_social_choices.json"
+        self._publication_copy_history_path = self.state_dir / "publication_copy_history.json"
         self._script_history_path = self.state_dir / "script_history.json"
         self._jobs_log_path = self.state_dir / "jobs_log.json"
         self._media_pool_path = self.state_dir / "media_pool.json"
@@ -351,6 +354,53 @@ class StateStore:
             recent = self._read_json(self._recent_social_choices_path, {})
             recent[self._bucket_key(video_type, language)] = choice_key
             self._write_json(self._recent_social_choices_path, recent)
+
+    @staticmethod
+    def _validate_publication_brand(brand: str) -> None:
+        if not isinstance(brand, str) or brand not in {"dropradar", "parkez", "gograduate"}:
+            raise ValueError("Marca de publicación no válida.")
+
+    def _publication_copy_history(self) -> dict[str, Any]:
+        raw = self._read_json(self._publication_copy_history_path, {})
+        if (
+            not isinstance(raw, dict)
+            or type(raw.get("version")) is not int
+            or raw["version"] != 1
+            or not isinstance(raw.get("brands"), dict)
+        ):
+            return {"version": 1, "brands": {}}
+        return {
+            "version": 1,
+            "brands": {
+                brand: history
+                for brand, history in raw["brands"].items()
+                if brand in {"dropradar", "parkez", "gograduate"} and isinstance(history, dict)
+            },
+        }
+
+    def publication_copy_snapshot(self, brand: str) -> dict[str, Any]:
+        """Read one brand's publication history without consuming any choices."""
+        self._validate_publication_brand(brand)
+        with self._exclusive():
+            history = self._publication_copy_history()
+            return deepcopy(history["brands"].get(brand, {}))
+
+    def update_publication_copy(
+        self,
+        brand: str,
+        update: Callable[[dict[str, Any]], tuple[SocialCopy, dict[str, Any]]],
+    ) -> SocialCopy:
+        """Choose and remember copy atomically; the callback must perform no I/O."""
+        self._validate_publication_brand(brand)
+        with self._exclusive():
+            history = self._publication_copy_history()
+            previous = deepcopy(history["brands"].get(brand, {}))
+            selected, updated = update(previous)
+            if not isinstance(selected, SocialCopy) or not isinstance(updated, dict):
+                raise TypeError("La selección debe devolver un texto social y su historial.")
+            history["brands"][brand] = deepcopy(updated)
+            self._write_json(self._publication_copy_history_path, history)
+            return selected
 
     def get_known_signatures(self, video_type: VideoType, language: Language) -> set[str]:
         with self._exclusive():

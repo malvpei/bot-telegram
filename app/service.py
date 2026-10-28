@@ -80,6 +80,8 @@ from app.parkez_apps import (
     APP_BY_KEY, PARKEZ_APP, PARKEZ_APPS_HOOKS, PARKEZ_APPS_SOCIAL_COPY_IDS, ROTATING_APPS,
     build_parkez_apps_social_copy,
 )
+from app.publication_copy import PublicationComposer
+from app.publication_writer import PublicationWriter
 from app.r2_storage import R2_IMAGE_EXTENSIONS, R2Object, R2StorageClient
 from app.render import VideoRenderer
 from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
@@ -345,6 +347,7 @@ class VideoCreationService:
             self.selector,
         )
         self.script_generator = ScriptGenerator(self.state)
+        self.publication_writer = PublicationWriter(self.settings)
         self.renderer = VideoRenderer(self.settings)
         self.r2_storage = R2StorageClient(self.settings)
         self.story_image_generator = StoryCarouselImageGenerator(
@@ -477,7 +480,15 @@ class VideoCreationService:
 
     def create_video(self, request: VideoRequest) -> GenerationResult:
         with self._job_lock:
-            return self._create_video_locked(request)
+            result = self._create_video_locked(request)
+            social_copy = PublicationComposer(
+                self.state,
+                writer=getattr(self, "publication_writer", None),
+            ).compose(
+                result,
+                lowercase=request.lowercase_text and result.video_type != VideoType.TYPE_4,
+            )
+            return replace(result, social_copy=social_copy)
 
     def create_extra_image(self, request: VideoRequest) -> MediaCandidate:
         with self._job_lock:
@@ -557,11 +568,18 @@ class VideoCreationService:
                 template_language,
             )
             self._cleanup_old_outputs()
-            return TemplateVideoResult(
-                video_path=output_path,
-                social_copy=_prepare_template_video_social_copy(
+            social_copy = PublicationComposer(
+                self.state,
+                writer=getattr(self, "publication_writer", None),
+            ).compose_template(
+                _prepare_template_video_social_copy(
                     random.choice(TEMPLATE_VIDEO_SOCIAL_COPIES[template_language])
                 ),
+                template_language,
+            )
+            return TemplateVideoResult(
+                video_path=output_path,
+                social_copy=social_copy,
                 queue_restarted=queue_restarted,
             )
 

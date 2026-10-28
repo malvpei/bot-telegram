@@ -1622,7 +1622,7 @@ async def gograduate_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await _show_ui(
         update, context,
         "gograduate.io · Consejos de estudio\n\n"
-        "Una lámina de consejos y una foto, con hook, título y descripción "
+        "Una lámina de consejos y una foto, con hook y texto para publicar "
         "por separado. Los diseños y textos rotan automáticamente.",
         gograduate_keyboard(),
     )
@@ -1664,7 +1664,7 @@ async def createp_command(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "Mujer / Hombre · Fotos con cierre de ParkEz\n"
         "Tools · Apps para conducir\nmode3 · Trucos para nuevos conductores\n"
         "Consejos · Recopilatorio de apps\nApps iPhone · Hook y fichas de apps\n\n"
-        "Cada formato incluye sus títulos y descripciones.",
+        "Incluye título y hashtags. Una de cada tres publicaciones va sin descripción.",
         parkez_keyboard(),
     )
     return GENDER_STATE
@@ -2329,13 +2329,13 @@ async def _execute_job(
         header = (
             "GoGraduate · Tipo 1 listo\n"
             "Entrega: diseño de consejos + imagen limpia de R2\n"
-            "Hook, título y descripción de las colas de GoGraduate"
+            "Hook y texto para publicar"
         )
     elif result.video_type == VideoType.PARKEZ_ADVICE:
         header = (
             "ParkEz · Consejos listo\n"
             "Entrega: cuatro apps con iconos y explicación + imagen limpia de R2\n"
-            "Hook, título y descripción de las colas de Consejos"
+            "Hook y texto para publicar"
         )
     elif result.video_type == VideoType.PARKEZ_APPS:
         header = (
@@ -2377,7 +2377,7 @@ async def _execute_job(
         header = (
             "Carrusel ParkEz mode3 listo\n"
             "Entrega: 4 imágenes limpias + hook y 3 consejos separados\n"
-            "Título y descripción de la cola de mode3"
+            "Título y texto para publicar"
         )
     elif result.video_type == VideoType.PARKEZ:
         header = (

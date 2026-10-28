@@ -462,6 +462,41 @@ hombres y mujeres. Una cuenta solo figura como viable para Tipo 1 cuando puede
 formar la combinación completa: portada con persona, al menos cinco fotos con
 persona y, como máximo, un paisaje sin persona.
 
+### Textos para publicar
+
+Todas las familias usan un redactor común después de terminar correctamente la
+generación. Trabaja con el idioma final y los textos de las slides entregadas:
+las apps y negocios seleccionados son la fuente, nunca los nombres de archivos
+ni los captions de las fotos de fondo. Los hooks y textos de las imágenes siguen
+su selección propia; este sistema prepara el título, descripción y hashtags.
+
+Por cada tres publicaciones de una marca hay una sin descripción, una breve
+(hasta 220 caracteres) y otra de hasta 550 caracteres. El orden cambia entre
+grupos y evita dos publicaciones sin descripción seguidas. Sin descripción se
+envían título y hashtags, además del hook independiente cuando corresponda.
+
+El historial conserva las últimas 120 publicaciones por marca e idioma, con
+selección y escritura atómicas. Rechaza títulos y descripciones muy parecidos y
+varía los conjuntos de hashtags, sin contar un cambio de orden como novedad.
+Dropradar mantiene `#dropshipping`, ParkEz mantiene `#coches` y GoGraduate mantiene
+`#estudiantes`; cada marca conserva además su hashtag. El nombre público de
+GoGraduate se normaliza a `gograduate.io`. Los demás hashtags dependen del tema.
+
+Con `FAL_KEY`, el redactor usa Gemini 2.5 Flash mediante el
+[endpoint de texto de fal](https://fal.ai/models/openrouter/router), con memoria
+reciente y validación local de contenido, cifras, longitud y repeticiones. Si no
+hay clave o el proveedor falla, utiliza variantes locales relacionadas con las
+slides, sin bloquear la entrega. Las llamadas de red se hacen fuera del bloqueo
+del historial. Los errores de generación no consumen esta rotación.
+
+Las antiguas colas de copy se conservan por compatibilidad; el texto de
+publicación definitivo se elige en este paso común. También se aplica a las
+plantillas R2, que ahora incluyen un título.
+
+El tipo 3 de Dropradar excluye los tres fondos rosas de su rotación y conserva
+18 fondos elegibles. Las colas antiguas descartan esos fondos pendientes. El
+catálogo de imágenes y la rotación independiente de Tools conservan sus assets.
+
 ### Colocacion de texto y rendimiento
 
 El renderer detecta caras frontales y de perfil sobre una copia reducida de la
@@ -601,6 +636,7 @@ a la vez y lista las ultimas imagenes del prefijo seleccionado con preview.
 - `data/state/recent_scripts.json` — última firma generada por (tipo, idioma)
 - `data/state/script_history.json` — historial acotado de firmas
 - `data/state/jobs_log.json` — histórico de jobs
+- `data/state/publication_copy_history.json` — formatos, títulos, descripciones y hashtags recientes por marca e idioma
 - `data/state/type4_image_queue.json` — rotación de las imágenes limpias R2 del Tipo 4 - Consejos
 - `data/state/type5_business_queue.json` — rotación de las parejas de negocios del Tipo 5
 - `data/state/type5_social_queue.json` — rotación de los 12 títulos y descripciones del Tipo 5

@@ -194,8 +194,10 @@ def test_gograduate_delivers_two_images_and_rotates_without_touching_dropradar(t
         assert GOGRADUATE_PROMO.body in result.preview_text
         assert result.preview_text == result.slides[0].text
         assert result.preview_text in result.script_path.read_text(encoding="utf-8")
-        assert "gograduate.io" in result.social_copy.description
-        assert "GoGraduate" not in result.social_copy.description
+        assert "#estudiantes" in result.social_copy.hashtags
+        publication_text = result.social_copy.title + " " + result.social_copy.description
+        mentions = re.findall(r"(?<![#\w])gograduate(?:\.io)?\b", publication_text, re.IGNORECASE)
+        assert all(mention == "gograduate.io" for mention in mentions)
         assert f":{background.value}:" in result.chosen_account
         assert result.social_copy.hook == GOGRADUATE_HOOKS[GOGRADUATE_HOOK_IDS[index % 2]]
         if background == AdviceBackground.ILLUSTRATED:
@@ -289,19 +291,33 @@ def test_service_exhausts_twenty_copies_per_pack_and_preserves_hooks_on_restart(
     monkeypatch.setattr(service.renderer, "render_gograduate_card", lambda *_: Image.new("RGB", (72, 128), "white"))
     request = VideoRequest(chat_id=1, user_id=10, video_type=VideoType.GOGRADUATE_TYPE_1, language=Language.ES, account_inputs=[])
     copies_by_pack = {pack_id: [] for pack_id in GOGRADUATE_PACK_IDS}
+    publication_order = []
     for index in range(80):
         pack_id = GOGRADUATE_PACK_IDS[index % 4]
         result = service.create_video(request)
         assert result.chosen_account.endswith(f":{pack_id}")
         assert result.social_copy.hook == GOGRADUATE_HOOKS[GOGRADUATE_HOOK_IDS[index % 2]]
+        assert "#estudiantes" in result.social_copy.hashtags
         copies_by_pack[pack_id].append(result.social_copy)
+        publication_order.append(result.social_copy)
         service.state = StateStore(service.settings.state_dir)
     assert len({copy.title for copies in copies_by_pack.values() for copy in copies}) == 80
     for pack_id, copies in copies_by_pack.items():
-        assert len({copy.title for copy in copies}) == len({copy.description for copy in copies}) == 20
+        assert len({copy.title for copy in copies}) == 20
+        descriptions = [copy.description for copy in copies if copy.description]
+        assert len(set(descriptions)) == len(descriptions)
         assert service.state.peek_next_gograduate_social_copy_id(pack_id, GOGRADUATE_SOCIAL_COPY_IDS) == (GOGRADUATE_SOCIAL_COPY_IDS[0], True)
-    repeated = service.create_video(request)
-    assert repeated.social_copy == copies_by_pack[GOGRADUATE_PACK_IDS[0]][0]
+    # Legacy pack queues can restart while the publication history keeps the
+    # next title fresh and retains one title-only post per complete triple.
+    continued = service.create_video(request)
+    assert continued.social_copy.title not in {copy.title for copy in publication_order}
+    assert continued.social_copy.hook == GOGRADUATE_HOOKS[GOGRADUATE_HOOK_IDS[0]]
+    assert "#estudiantes" in continued.social_copy.hashtags
+    publication_order.append(continued.social_copy)
+    for offset in range(0, len(publication_order), 3):
+        group = publication_order[offset:offset + 3]
+        assert len(group) == 3
+        assert sum(not copy.description for copy in group) == 1
 
 
 def test_gograduate_r2_queue_deduplicates_prioritizes_new_uploads_and_never_uses_other_folders(tmp_path):

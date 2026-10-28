@@ -1,3 +1,4 @@
+import json
 import shutil
 from dataclasses import replace
 from pathlib import Path
@@ -1686,6 +1687,83 @@ def test_type_3_background_catalog_skips_truncated_images(temp_workspace):
     backgrounds = ImageSelector(settings, state)._type_3_backgrounds()
 
     assert truncated_path not in {background.local_path for background in backgrounds}
+
+
+def _type_3_color_filter_hook(settings):
+    account_dir = settings.downloads_dir / "type3_color_filter"
+    account_dir.mkdir()
+    hook = _make_candidate(
+        account_dir, username="type3_color_filter", idx=0, caption="old money laptop",
+    )
+    hook.metrics = _metrics_stub(
+        quality=0.9, daylight=0.8, faces=1, is_landscape=False,
+        casual=0.05, luxury=0.8, portrait_focus=0.75, affluent=0.85,
+        laptop=1.0, hands=0.5,
+    )
+    return hook
+
+
+def test_type_3_excludes_pink_preserves_other_colors_and_reconciles_old_queue(temp_workspace):
+    settings, state = temp_workspace
+    backgrounds_dir = settings.root_dir / "tipo3" / "fondocolores"
+    pink_names = {
+        "Pink Gradient Background.jpg",
+        "Backdrop Purple Background Room Studio with Pink Gradient Spotlight Backdrop Blurred Light.jpg",
+        "Elegant Valentine Gradient Background.jpg",
+        "nuevo_fondo_ROSA.png",
+    }
+    for name in pink_names:
+        Image.new("RGB", (120, 180), (255, 160, 190)).save(backgrounds_dir / name)
+    # Red and purple remain eligible; only the pink variant of purple is removed.
+    for name, color in (("red.jpg", (220, 20, 20)), ("purple.jpg", (70, 20, 160))):
+        Image.new("RGB", (120, 180), color).save(backgrounds_dir / name)
+    selector = ImageSelector(settings, state)
+    shared = selector.type_3_backgrounds()
+    pink_ids = [item.source_id for item in shared if item.local_path.name in pink_names]
+    eligible = [item for item in shared if item.local_path.name not in pink_names]
+    saved_nonpink_order = [item.source_id for item in reversed(eligible)]
+    queue_path = state.state_dir / "type3_background_queue.json"
+    queue_path.write_text(json.dumps({"order": pink_ids + saved_nonpink_order}))
+    hook = _type_3_color_filter_hook(settings)
+
+    picked = []
+    for index in range(len(eligible)):
+        plan = selector.create_plan(
+            {"type3_color_filter": [hook]}, VideoType.TYPE_3,
+            Language.ES if index % 2 else Language.EN,
+        )
+        picked.append(plan.type_3_background_id)
+        assert plan.slides[1].media.local_path.name not in pink_names
+        assert set(plan.type_3_background_candidates) == set(saved_nonpink_order)
+        state.remember_type_3_background_choice(
+            plan.type_3_background_id, plan.type_3_background_candidates,
+        )
+
+    assert picked == saved_nonpink_order
+    assert json.loads(queue_path.read_text())["order"] == saved_nonpink_order
+    # Tools still receives the complete catalog, with its original source IDs.
+    assert selector.type_3_backgrounds() is shared
+    assert {item.source_id for item in shared} == set(pink_ids + saved_nonpink_order)
+    assert all((backgrounds_dir / name).exists() for name in pink_names)
+
+
+@pytest.mark.parametrize("folder", ("fondocolores", "colores"))
+def test_type_3_refuses_an_all_pink_pool_without_removing_shared_assets(temp_workspace, folder):
+    settings, state = temp_workspace
+    backgrounds_dir = settings.root_dir / "tipo3" / "fondocolores"
+    for path in backgrounds_dir.iterdir():
+        path.unlink()
+    if folder == "colores":
+        backgrounds_dir = backgrounds_dir.rename(backgrounds_dir.with_name(folder))
+    pink = backgrounds_dir / "magenta.png"
+    Image.new("RGB", (120, 180), (255, 80, 160)).save(pink)
+    selector = ImageSelector(settings, state)
+
+    with pytest.raises(ValueError, match="No hay fondos sin tonos rosas"):
+        selector._create_type_3_plan({}, Language.ES)
+
+    assert [item.local_path for item in selector.type_3_backgrounds()] == [pink]
+    assert pink.exists()
 
 
 def test_image_analysis_is_restored_from_persistent_cache(temp_workspace, monkeypatch):

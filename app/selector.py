@@ -95,6 +95,14 @@ EXTREME_LUXURY_KEYWORDS = {
 }
 HEIC_BRANDS = (b"heic", b"heix", b"hevc", b"hevx", b"mif1", b"msf1")
 TYPE_3_BACKGROUND_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif"}
+TYPE_3_PINK_BACKGROUND_NAMES = {
+    "pink gradient background.jpg",
+    "backdrop purple background room studio with pink gradient spotlight backdrop blurred light.jpg",
+    "elegant valentine gradient background.jpg",
+}
+TYPE_3_PINK_BACKGROUND_WORDS = {
+    "pink", "rosa", "rosas", "rosado", "rosados", "fucsia", "magenta",
+}
 TYPE_2_TIP3_FIXED_IMAGE_NAME = "tip3_dropradar.jpg"
 
 # Slots whose image can be swapped for a landscape without breaking the
@@ -709,7 +717,17 @@ class ImageSelector:
         catalog: dict[str, list[MediaCandidate]],
         language: Language,
     ) -> VideoPlan:
-        backgrounds = self._type_3_backgrounds()
+        # Keep the shared asset catalog and its stable IDs intact: ParkEz Tools
+        # also uses it. Only Dropradar's Type 3 excludes the pink backgrounds.
+        backgrounds = tuple(
+            background for background in self._type_3_backgrounds()
+            if not self._is_type_3_pink_background(background)
+        )
+        if not backgrounds:
+            raise ValueError(
+                "No hay fondos sin tonos rosas para el tipo 3 de Dropradar. "
+                "Añade otro color en tipo3/fondocolores o tipo3/colores."
+            )
         background_ids = [background.source_id for background in backgrounds]
         selected_background_id = self.state.get_next_type_3_background_id(background_ids)
         background_by_id = {
@@ -2197,6 +2215,15 @@ class ImageSelector:
             )
         self._type_3_backgrounds_cache = tuple(backgrounds)
         return self._type_3_backgrounds_cache
+
+    @staticmethod
+    def _is_type_3_pink_background(background: MediaCandidate) -> bool:
+        name = background.local_path.name.casefold()
+        words = set(re.findall(r"[a-z0-9]+", background.local_path.stem.casefold()))
+        return (
+            name in TYPE_3_PINK_BACKGROUND_NAMES
+            or bool(words & TYPE_3_PINK_BACKGROUND_WORDS)
+        )
 
     def _keyword_score(self, text: str, keywords: set[str]) -> float:
         lowered = (text or "").lower()

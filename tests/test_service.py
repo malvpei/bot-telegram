@@ -2079,8 +2079,9 @@ def test_create_template_video_picks_video_from_configured_folder():
         result = service.create_template_video()
 
         assert result.video_path.exists()
-        assert result.social_copy.title == ""
-        assert len(result.social_copy.hashtags) == 5
+        assert result.social_copy.title
+        assert 4 <= len(result.social_copy.hashtags) <= 6
+        assert "#dropshipping" in result.social_copy.hashtags
         assert result.social_copy.hashtag_line.startswith("#")
         assert service.renderer.template_input_video == chosen
     finally:
@@ -2112,9 +2113,10 @@ def test_create_template_video_can_render_english_version(monkeypatch):
 
         assert result.video_path.exists()
         assert service.renderer.template_language == Language.EN
-        assert result.social_copy.title == ""
-        assert len(result.social_copy.hashtags) == 5
-        assert result.social_copy.description.startswith("If you want to launch")
+        assert result.social_copy.title
+        assert 4 <= len(result.social_copy.hashtags) <= 6
+        assert "#dropshipping" in result.social_copy.hashtags
+        assert "herramientas" not in result.social_copy.title.lower()
     finally:
         shutil.rmtree(root, ignore_errors=True)
 
