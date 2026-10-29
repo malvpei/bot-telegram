@@ -16,7 +16,7 @@ from uuid import uuid4
 from PIL import Image, ImageOps
 
 from app.advice_cards import (
-    ADVICE_EXTERNAL_PHRASES,
+    ADVICE_EXTERNAL_HOOKS,
     ADVICE_ROTATION_CYCLE_LENGTH,
     AdviceBackground,
     advice_social_copy,
@@ -1099,7 +1099,7 @@ class VideoCreationService:
             title=social_title,
             description=social_description,
             hashtags=social_hashtags,
-            hook=ADVICE_EXTERNAL_PHRASES[language],
+            hook=ADVICE_EXTERNAL_HOOKS[language][phase % len(ADVICE_EXTERNAL_HOOKS[language])],
         )
         self.state.log_job(
             self.state.build_job_record(

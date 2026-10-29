@@ -263,6 +263,17 @@ ADVICE_EXTERNAL_PHRASES: dict[Language, str] = {
     ),
 }
 
+ADVICE_EXTERNAL_HOOKS: dict[Language, tuple[str, ...]] = {
+    Language.ES: (
+        ADVICE_EXTERNAL_PHRASES[Language.ES],
+        "un dropshipper millonario me contó la regla №1 para hacer más de 30k al mes",
+    ),
+    Language.EN: (
+        ADVICE_EXTERNAL_PHRASES[Language.EN],
+        "A millionaire dropshipper told me rule №1 for making over 30k a month",
+    ),
+}
+
 ADVICE_SOCIAL_TITLES: dict[Language, tuple[tuple[str, ...], ...]] = {
     Language.ES: (
         (
@@ -1087,6 +1098,7 @@ ADVICE_ILLUSTRATED_TITLES: dict[Language, tuple[str, str]] = {
 ADVICE_ROTATION_CYCLE_LENGTH = lcm(
     ADVICE_VISUAL_CYCLE_LENGTH,
     ADVICE_SOCIAL_CYCLE_LENGTH,
+    *(len(hooks) for hooks in ADVICE_EXTERNAL_HOOKS.values()),
 )
 
 

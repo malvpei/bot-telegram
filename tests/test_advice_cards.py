@@ -1,5 +1,6 @@
 from app.advice_cards import (
     ADVICE_BACKGROUNDS,
+    ADVICE_EXTERNAL_HOOKS,
     ADVICE_EXTERNAL_PHRASES,
     ADVICE_PACKS,
     ADVICE_ROTATION_CYCLE_LENGTH,
@@ -105,6 +106,15 @@ def test_advice_external_phrases_match_requested_copy():
     assert ADVICE_EXTERNAL_PHRASES[Language.ES] == (
         "un dropshipper millonario me contó la regla número #1 para vender fácilmente"
     )
+    assert ADVICE_EXTERNAL_HOOKS[Language.ES] == (
+        ADVICE_EXTERNAL_PHRASES[Language.ES],
+        "un dropshipper millonario me contó la regla №1 para hacer más de 30k al mes",
+    )
+    assert ADVICE_EXTERNAL_HOOKS[Language.EN] == (
+        ADVICE_EXTERNAL_PHRASES[Language.EN],
+        "A millionaire dropshipper told me rule №1 for making over 30k a month",
+    )
+    assert ADVICE_ROTATION_CYCLE_LENGTH % len(ADVICE_EXTERNAL_HOOKS[Language.ES]) == 0
 
 
 def test_advice_social_copy_has_description_and_related_hashtags():

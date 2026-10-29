@@ -731,7 +731,7 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
             "un dropshipper millonario me contó la regla número #1 para vender fácilmente"
         )
         assert english.social_copy.hook == (
-            "A millionaire dropshipper told me rule number #1 for selling easily"
+            "A millionaire dropshipper told me rule №1 for making over 30k a month"
         )
         assert spanish.social_copy.description
         assert len(spanish.social_copy.description) >= 1500
@@ -749,6 +749,22 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
         assert service.state.peek_next_type_4_image_id(
             ["etag:a:100", "etag:b:110"]
         ) == ("etag:a:100", True)
+        # The hook alternation survives a new StateStore and crosses languages.
+        service.state = StateStore(settings.state_dir)
+        for expected_hook in (
+            "un dropshipper millonario me contó la regla número #1 para vender fácilmente",
+            "un dropshipper millonario me contó la regla №1 para hacer más de 30k al mes",
+        ):
+            result = service._create_video_locked(
+                VideoRequest(
+                    chat_id=1,
+                    user_id=10,
+                    video_type=VideoType.ADVICE,
+                    language=Language.ES,
+                    account_inputs=[],
+                )
+            )
+            assert result.social_copy.hook == expected_hook
     finally:
         shutil.rmtree(root, ignore_errors=True)
 

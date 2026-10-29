@@ -571,7 +571,7 @@ class ScriptGenerator:
 
     def _build_type_3_es(self) -> ScriptPackage:
         hooks = {
-            "h1": "Como hacer dropshipping en 2026",
+            "h1": "Como hacer dropshipping en 2026 ✅",
         }
         payment_tool = random.choice(("PayPal", "Stripe"))
         marketing_tool = random.choice(("Instagram", "TikTok"))
@@ -587,7 +587,7 @@ class ScriptGenerator:
 
     def _build_type_3_en(self) -> ScriptPackage:
         hooks = {
-            "h1": "How to start in Dropshipping in 2026",
+            "h1": "How to start in Dropshipping in 2026 ✅",
         }
         payment_tool = random.choice(("PayPal", "Stripe"))
         marketing_tool = random.choice(("Instagram", "TikTok"))

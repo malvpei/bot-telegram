@@ -239,7 +239,10 @@ cinco filas. Incluye 39 pares de título y
 descripción por idioma, vinculados a los consejos de cada guion. Cada guion
 recorre sus propios textos antes de repetirlos, también al reiniciar el ciclo
 general. Cada entrega incluye fuera de
-la imagen la frase de apertura correspondiente al idioma y, como segunda
+la imagen la frase de apertura correspondiente al idioma. Alterna el hook
+actual de vender fácilmente con «un dropshipper millonario me contó la regla
+№1 para hacer más de 30k al mes», usando la rotación guardada y avanzando solo
+tras una generación correcta. Como segunda
 imagen, una foto limpia del prefijo R2 configurado por
 `R2_TYPE_4_IMAGE_PREFIX` (`4` por defecto). Las fotos R2 recorren una cola
 cíclica propia y solo avanzan cuando la entrega se genera correctamente.
@@ -502,6 +505,8 @@ El tipo 3 de Dropradar excluye los fondos rosas, amarillo y salmón de su rotaci
 y conserva 16 fondos elegibles. Las colas antiguas descartan esos fondos
 pendientes. El catálogo de imágenes y la rotación independiente de Tools
 conservan sus assets.
+El hook del tipo 3 entregado por Telegram termina en `✅` en español e inglés,
+también al seleccionar minúsculas.
 
 ### Colocacion de texto y rendimiento
 
