@@ -345,6 +345,14 @@ def _format_filter_float(value: float) -> str:
     return f"{value:.3f}".rstrip("0").rstrip(".")
 
 
+class StoryCaptionNeedsRoom(Exception):
+    """Internal layout signal: reserve space without regenerating the image."""
+
+    def __init__(self, block_height: int) -> None:
+        super().__init__("The story scene needs more caption headroom")
+        self.block_height = block_height
+
+
 class VideoRenderer:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -365,6 +373,7 @@ class VideoRenderer:
         self._eye_detector = build_cascade("haarcascade_eye.xml")
         self._people_detector = build_people_detector()
         self._text_overlay_cache: dict[tuple[object, ...], Image.Image] = {}
+        self._story_scene_cache: dict[tuple[object, ...], Image.Image] = {}
         self._type_4_overlay_cache: dict[Language, Image.Image] = {}
         self._fixed_canvas_cache: dict[tuple[object, ...], Image.Image] = {}
         self._font_cache: dict[tuple[object, ...], ImageFont.ImageFont] = {}
@@ -2824,15 +2833,27 @@ class VideoRenderer:
     ) -> np.ndarray:
         if video_type in TYPE_3_STYLE_VIDEO_TYPES:
             return self._render_type_3_slide_frame(slide, source_image, progress)
+        story_scene = None
+        if slide.role in TYPE_4_STORY_CAPTION_ROLES and not slide.fixed_asset:
+            self._prepare_slide_text_overlay(slide, source_image, video_type)
+            cache_key = self._slide_overlay_cache_key(
+                slide, video_type, (self.settings.width, self.settings.height),
+            )
+            story_scene = self._story_scene_cache.get(cache_key)
         image_progress = 0.0 if slide.fixed_asset else progress
-        if slide.fixed_asset:
+        if story_scene is not None:
+            # The alternate composition keeps the complete scene in view.
+            # Do not zoom it back into the caption's reserved space.
+            canvas = story_scene.copy()
+        elif slide.fixed_asset:
             canvas = self._fit_fixed_image(source_image)
         elif video_type == VideoType.TYPE_5:
             canvas = self._cover_image(source_image, 0.0)
         else:
             canvas = self._cover_image(source_image, image_progress)
         composed = canvas.convert("RGBA")
-        self._draw_story_screen_brand(composed, slide)
+        if story_scene is None:
+            self._draw_story_screen_brand(composed, slide)
         self._draw_text(composed, slide, video_type)
         return np.asarray(composed.convert("RGB"))
 
@@ -3029,6 +3050,7 @@ class VideoRenderer:
         )
         if cache_key in self._text_overlay_cache:
             return
+        self._story_scene_cache.pop(cache_key, None)
 
         source_regions = self._slide_text_avoid_regions(slide, source_image)
         avoid_regions = self._project_cover_avoid_regions(
@@ -3037,12 +3059,74 @@ class VideoRenderer:
             progresses=(0.0, 0.5, 1.0),
         )
         layout_image = self._cover_image(source_image, 0.5).convert("RGBA")
-        self._draw_text(
-            layout_image,
-            slide,
-            video_type,
-            avoid_regions=avoid_regions,
+        try:
+            self._draw_text(
+                layout_image, slide, video_type, avoid_regions=avoid_regions,
+            )
+        except StoryCaptionNeedsRoom as needed:
+            branded_source = source_image.convert("RGBA")
+            self._draw_story_screen_brand(branded_source, slide)
+            scene, safe_regions = self._compose_story_with_headroom(
+                branded_source, source_regions, needed.block_height,
+            )
+            self._draw_text(
+                scene.copy(), slide, video_type, avoid_regions=safe_regions,
+            )
+            self._story_scene_cache[cache_key] = scene
+            LOGGER.info(
+                "Adapted story scene %s for readable caption (%s px); reused generated image",
+                slide.role.value, needed.block_height,
+            )
+
+    def _compose_story_with_headroom(
+        self,
+        source: Image.Image,
+        regions: list[tuple[tuple[int, int, int, int], float]],
+        block_height: int,
+    ) -> tuple[Image.Image, list[tuple[tuple[int, int, int, int], float]]]:
+        """Contain the original scene and move every protected region with it."""
+        width, height = self.settings.width, self.settings.height
+        min_y, _ = self._safe_text_vertical_bounds(height, block_height)
+        required_top = min_y + block_height + _scale_y(TEXT_AVOID_CLEARANCE_MARGIN, height) + 2
+        protected = [
+            (box, weight) for box, weight in regions
+            if weight >= TEXT_BODY_AVOID_WEIGHT and weight not in {
+                TEXT_FALLBACK_HEAD_AVOID_WEIGHT, TEXT_FALLBACK_BODY_AVOID_WEIGHT,
+            }
+        ]
+        if not protected:
+            protected = [((0, 0, source.width, source.height), TEXT_HEAD_AVOID_WEIGHT)]
+        subject_top = max(0, min(box[1] for box, _ in protected))
+        scale = min(
+            width / source.width,
+            height / source.height,
+            max(1, height - required_top) / max(1, source.height - subject_top),
         )
+        resized_width = max(1, math.floor(source.width * scale))
+        resized_height = max(1, math.floor(source.height * scale))
+        offset_x = (width - resized_width) // 2
+        offset_y = height - resized_height
+        # A single sampled colour cannot introduce a second blurred face above
+        # the real one. The source is only resized, never cropped or repainted.
+        edge = source.convert("RGB").crop((0, 0, source.width, max(1, source.height // 100)))
+        colour = edge.resize((1, 1), Image.Resampling.BOX).getpixel((0, 0))
+        scene = Image.new("RGBA", (width, height), (*colour, 255))
+        scene.paste(source.resize((resized_width, resized_height), Image.Resampling.LANCZOS), (offset_x, offset_y))
+        scale_x, scale_y = resized_width / source.width, resized_height / source.height
+        projected = [
+            ((
+                offset_x + math.floor(box[0] * scale_x),
+                offset_y + math.floor(box[1] * scale_y),
+                offset_x + math.ceil(box[2] * scale_x),
+                offset_y + math.ceil(box[3] * scale_y),
+            ), weight)
+            for box, weight in protected
+        ]
+        # Guard the earliest protected point across the whole caption width,
+        # including faces near a side edge of the contained scene.
+        protected_top = min(box[1] for box, _ in projected)
+        projected.append(((0, protected_top, width, height), TEXT_HEAD_AVOID_WEIGHT))
+        return scene, projected
 
     def _slide_text_avoid_regions(
         self,
@@ -4158,6 +4242,7 @@ class VideoRenderer:
         if len(self._text_overlay_cache) > TEXT_OVERLAY_CACHE_MAX_ITEMS:
             oldest_key = next(iter(self._text_overlay_cache))
             self._text_overlay_cache.pop(oldest_key, None)
+            self._story_scene_cache.pop(oldest_key, None)
 
     def _uses_hook_paragraph_style(
         self,
@@ -4592,9 +4677,6 @@ class VideoRenderer:
         body_max_height = int(height * 0.40)
         if story_bottom is not None:
             min_y, _max_y = self._safe_text_vertical_bounds(height, 0)
-            body_max_height = max(
-                1, min(body_max_height, story_bottom - min_y - padding_y * 2),
-            )
 
         title_font, title_lines = self._fit_caption_title_text(
             first_line,
@@ -4634,6 +4716,7 @@ class VideoRenderer:
         if not groups:
             return
 
+        preferred_height = None
         while True:
             group_heights = [
                 self._pill_lines_height(
@@ -4646,20 +4729,29 @@ class VideoRenderer:
                 for lines, font, line_gap, _connected, group_padding_y in groups
             ]
             total_height = sum(group_heights) + block_gap * max(0, len(groups) - 1)
+            if preferred_height is None:
+                preferred_height = total_height
             if story_bottom is None or total_height <= story_bottom - min_y:
                 break
-            # Preserve the margin even if a generated character sits unusually
-            # high. The normal story layout keeps the larger font above.
+            # Never solve missing headroom with illegible type. The caller can
+            # recompose this same scene once, at the preferred caption size.
             fitted_groups = []
             for lines, font, line_gap, connected, group_padding_y in groups:
-                size = getattr(font, "size", 1) - 1
-                if size < 1:
-                    raise ValueError("Historia IA: no hay espacio para el texto sobre el protagonista.")
+                minimum_size = round(self._scaled_text_size(
+                    TEXT_CARD_BODY_MIN_FONT_SIZE if connected else TEXT_CARD_TITLE_MIN_FONT_SIZE,
+                    minimum=14 if connected else 15,
+                ) * font_scale)
+                size = max(minimum_size, getattr(font, "size", minimum_size) - 1)
                 font = self._load_font(size=size, bold=False)
                 lines = self._wrap_text_balanced(
                     " ".join(lines), font, max_text_width, draw, stroke_width=0,
                 )
                 fitted_groups.append((lines, font, line_gap, connected, group_padding_y))
+            if all(
+                getattr(old[1], "size", 0) == getattr(new[1], "size", 0)
+                for old, new in zip(groups, fitted_groups)
+            ):
+                raise StoryCaptionNeedsRoom(preferred_height)
             groups = fitted_groups
         title_min_box_width = self._caption_title_min_box_width(slide, width)
         block_width = min(
@@ -5369,6 +5461,12 @@ class VideoRenderer:
             self._detect_render_faces(gray),
             self._detect_render_profile_faces(gray),
         )
+        if story_subject_source(image) == "segmentation":
+            # Equalizing a nearly uniform illustrated wall amplifies its tiny
+            # texture into false Haar faces. Check the unmodified pixels first;
+            # keep detailed faces and all independent neural detections.
+            cascade_faces = self._filter_flat_story_detections(rgb, cascade_faces)
+            eye_boxes = self._filter_flat_story_detections(rgb, eye_boxes)
         face_boxes = self._deduplicate_detection_boxes(neural_faces, cascade_faces)
         restored_faces = self._restore_detection_boxes(
             face_boxes,
@@ -5534,6 +5632,21 @@ class VideoRenderer:
             (body, TEXT_FALLBACK_BODY_AVOID_WEIGHT),
             (head, TEXT_FALLBACK_HEAD_AVOID_WEIGHT),
         ]
+
+    @staticmethod
+    def _filter_flat_story_detections(rgb: np.ndarray, boxes: np.ndarray) -> np.ndarray:
+        """Reject only near-uniform patches hallucinated by equalized cascades."""
+        gray = cv2.cvtColor(rgb, cv2.COLOR_RGB2GRAY)
+        height, width = gray.shape
+        kept = []
+        for x, y, w, h in boxes:
+            patch = gray[max(0, y):min(height, y + h), max(0, x):min(width, x + w)]
+            if not patch.size:
+                continue
+            low, high = np.percentile(patch, (5, 95))
+            if high - low >= 6 or float(patch.std()) >= 3:
+                kept.append((x, y, w, h))
+        return np.asarray(kept, dtype=np.int32).reshape((-1, 4))
 
     def _face_avoid_detectors_unavailable(self) -> bool:
         return (

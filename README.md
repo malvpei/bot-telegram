@@ -537,10 +537,17 @@ castaño y las manos. Usa la misma `FAL_KEY`, con hasta dos tareas simultáneas.
 Las coordenadas de la máscara quedan guardadas en cada PNG con origen
 `segmentation`; los píxeles de la ilustración no cambian. Se conservan además
 las protecciones locales de caras y ojos: una estimación de IA nunca las anula.
+En las escenas segmentadas se descartan únicamente detecciones de cascadas
+sobre superficies casi uniformes, comprobando el contraste antes de ecualizar
+la imagen; las caras neuronales y las zonas con detalles siguen protegidas.
 El refinado antiguo de color solo puede adelantar el límite, nunca bajarlo.
 
 La composición mantiene el margen durante todo el acercamiento del vídeo y
-en las fotos entregadas. La segmentación se reintenta dos veces sobre la misma
+en las fotos entregadas. Si el texto no cabe con una letra legible, se contiene
+la escena completa sobre un fondo liso y se reserva espacio encima del
+protagonista. Ese encuadre alternativo no lleva zoom: conserva el texto entero,
+la separación y la imagen ya generada, sin otra petición de IA. La foto original
+final no cambia. La segmentación se reintenta dos veces sobre la misma
 imagen, sin regenerarla. Si no hay una máscara fiable, se detiene la entrega y
 se conservan los originales generados. Sin `FAL_KEY`, se avisa antes de generar.
 Esta comprobación añade seis peticiones SAM, aproximadamente 0,03 USD por

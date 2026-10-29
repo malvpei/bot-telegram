@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
+import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 
@@ -12,9 +13,12 @@ from app.render import (
     TEXT_AVOID_CLEARANCE_MARGIN,
     TEXT_BODY_AVOID_WEIGHT,
     TEXT_CARD_BODY_FONT_SIZE,
+    TEXT_CARD_BODY_MIN_FONT_SIZE,
     TEXT_EYE_AVOID_WEIGHT,
     TEXT_FACE_AVOID_WEIGHT,
     TEXT_HEAD_AVOID_WEIGHT,
+    TEXT_OVERLAY_CACHE_MAX_ITEMS,
+    TYPE_4_STORY_CAPTION_FONT_SCALE,
     TYPE_4_STORY_CAPTION_ROLES,
     VideoRenderer,
 )
@@ -153,24 +157,22 @@ def test_story_card_leaves_margin_from_the_highest_detected_subject_part(rendere
     assert box[3] == subject_top - clearance + 1
 
 
-def test_long_story_copy_stays_above_a_high_protagonist(renderer, monkeypatch):
-    width, height = renderer.settings.width, renderer.settings.height
-    subject_top = round(height * 0.20)
-    regions = [((round(width * 0.15), subject_top, round(width * 0.85), height), TEXT_HEAD_AVOID_WEIGHT)]
+def test_long_story_copy_stays_above_a_high_protagonist(renderer, tmp_path, monkeypatch):
+    path, subject_color, _subject_box = _high_subject_scene(tmp_path, 0.20)
     text = (
         "Los meses siguientes fueron peores: probé 3 productos, no vendí "
         "ninguno y estuve a punto de dejarlo para siempre."
     )
-
-    overlay, blocks = _render_caption(
-        renderer, SlideRole.STORY_DEEP_FAILURE, text, monkeypatch, regions=regions,
-    )
-
-    assert " ".join(blocks[0]["lines"]).split() == text.split()
-    box = overlay.getbbox()
+    slide = _slide(SlideRole.STORY_DEEP_FAILURE, text)
+    slide.media.local_path = path
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+    still = renderer.render_slide_still(slide, VideoType.TYPE_4)
+    key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, still.size)
+    box = renderer._text_overlay_cache[key].getbbox()
     assert box is not None
-    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * height / 1920))
-    assert box[3] == subject_top - clearance + 1
+    subject_top = _painted_subject_top(still, subject_color)
+    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * still.height / 1920))
+    assert subject_top - box[3] + 1 >= clearance
 
 
 @pytest.mark.parametrize("subject_top_ratio", (0.28, 0.43, 0.63))
@@ -340,3 +342,364 @@ def test_story_original_reference_is_delivered_without_a_caption(renderer, story
     assert slide.text == ""
     assert result.size == source.size
     assert result.tobytes() == source.tobytes()
+
+
+def _high_subject_scene(
+    tmp_path, top_ratio, *, metadata_top_ratio=None,
+    size=(864, 1536), subject_color=(40, 83, 129),
+):
+    """Paint a visible subject so tests can inspect the final composed pixels."""
+    source = Image.new("RGB", size, (225, 201, 161))
+    subject_box = (round(size[0] * 0.25), round(size[1] * top_ratio), round(size[0] * 0.875), round(size[1] * 0.9375))
+    ImageDraw.Draw(source).rectangle(
+        (subject_box[0], subject_box[1], subject_box[2] - 1, subject_box[3] - 1),
+        fill=subject_color,
+    )
+    path = tmp_path / "high-subject-scene.png"
+    source.save(path)
+    write_story_subject_box(
+        path,
+        (0.25, top_ratio if metadata_top_ratio is None else metadata_top_ratio, 0.875, 0.9375),
+        source="segmentation",
+    )
+    return path, subject_color, subject_box
+
+
+def _painted_subject_top(image, color):
+    pixels = np.asarray(image.convert("RGB"))
+    rows = np.flatnonzero(np.any(np.all(pixels == color, axis=2), axis=1))
+    assert len(rows), "The scene must preserve the visible protagonist."
+    return int(rows[0])
+
+
+def _record_story_headroom(renderer, monkeypatch):
+    composed_regions = []
+    original = renderer._compose_story_with_headroom
+
+    def record(*args, **kwargs):
+        scene, regions = original(*args, **kwargs)
+        composed_regions.extend(regions)
+        return scene, regions
+
+    monkeypatch.setattr(renderer, "_compose_story_with_headroom", record)
+    return composed_regions
+
+
+@pytest.mark.parametrize("subject_top_ratio", (0.0, 0.02, 0.10), ids=("at-top", "2-percent", "10-percent"))
+def test_story_adds_headroom_instead_of_failing_or_using_tiny_text(
+    renderer, story_texts, tmp_path, monkeypatch, subject_top_ratio,
+):
+    path, subject_color, _subject_box = _high_subject_scene(tmp_path, subject_top_ratio)
+    text = story_texts[SlideRole.STORY_DEEP_FAILURE]
+    slide = _slide(SlideRole.STORY_DEEP_FAILURE, text)
+    slide.media.local_path = path
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+    composed_regions = _record_story_headroom(renderer, monkeypatch)
+    blocks = []
+    original = renderer._draw_connected_pill_lines
+
+    def record(draw, lines, font, **kwargs):
+        blocks.append((list(lines), font.size))
+        return original(draw, lines, font, **kwargs)
+
+    monkeypatch.setattr(renderer, "_draw_connected_pill_lines", record)
+    still = renderer.render_slide_still(slide, VideoType.TYPE_4)
+    key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, still.size)
+    scene = renderer._story_scene_cache[key]
+    card = renderer._text_overlay_cache[key].getbbox()
+    assert card is not None
+    assert blocks
+    assert " ".join(blocks[-1][0]).split() == text.split()
+    minimum_font = round(
+        max(14, round(TEXT_CARD_BODY_MIN_FONT_SIZE * still.width / 1080))
+        * TYPE_4_STORY_CAPTION_FONT_SCALE
+    )
+    assert blocks[-1][1] >= minimum_font
+    assert 0 <= card[0] < card[2] <= still.width
+    assert 0 <= card[1] < card[3] < still.height
+    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * still.height / 1920))
+    subject_top = _painted_subject_top(scene, subject_color)
+    projected_top = min(box[1] for box, _weight in composed_regions)
+    assert card[3] == projected_top - clearance + 1
+    # Lanczos blends the first subject rows; the first fully coloured pixel
+    # may be a few pixels below the conservative projected boundary.
+    assert 0 <= subject_top - projected_top <= 5
+    assert subject_top - card[3] + 1 >= clearance
+    top_row = np.asarray(scene.convert("RGB"))[0]
+    assert np.all(top_row == top_row[0])
+
+    loaded = renderer._load_source_image(path)
+    for progress in (0.0, 0.25, 0.5, 0.75, 1.0):
+        frame = Image.fromarray(renderer._render_slide_frame(slide, loaded, progress, VideoType.TYPE_4))
+        assert frame.tobytes() == still.tobytes()
+        assert _painted_subject_top(frame, subject_color) == subject_top
+
+
+def test_story_headroom_also_respects_faces_above_incorrect_subject_metadata(
+    renderer, tmp_path, monkeypatch,
+):
+    path, subject_color, face = _high_subject_scene(tmp_path, 0.02, metadata_top_ratio=0.58)
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [(face, TEXT_FACE_AVOID_WEIGHT)])
+    composed_regions = _record_story_headroom(renderer, monkeypatch)
+    slide = _slide(SlideRole.STORY_SUCCESS_COMIC, "Después de un año y medio...")
+    slide.media.local_path = path
+
+    still = renderer.render_slide_still(slide, VideoType.TYPE_4)
+
+    key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, still.size)
+    card = renderer._text_overlay_cache[key].getbbox()
+    assert card is not None
+    subject_top = _painted_subject_top(renderer._story_scene_cache[key], subject_color)
+    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * still.height / 1920))
+    projected_top = min(box[1] for box, _weight in composed_regions)
+    assert card[3] == projected_top - clearance + 1
+    assert 0 <= subject_top - projected_top <= 5
+    assert subject_top - card[3] + 1 >= clearance
+
+
+def test_direct_story_frames_rebuild_the_matching_scene_after_overlay_eviction(
+    renderer, tmp_path, monkeypatch,
+):
+    path, _subject_color, _subject_box = _high_subject_scene(tmp_path, 0.0)
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+    slide = _slide(SlideRole.STORY_DEEP_FAILURE, "Probé tres productos y seguí aprendiendo de mis errores.")
+    slide.media.local_path = path
+    loaded = renderer._load_source_image(path)
+    # Exercise the frame entry point with no still or explicit preparation first.
+    first = renderer._render_slide_frame(slide, loaded, 0.0, VideoType.TYPE_4)
+    size = (renderer.settings.width, renderer.settings.height)
+    key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, size)
+    assert key in renderer._story_scene_cache
+    assert key in renderer._text_overlay_cache
+
+    for index in range(TEXT_OVERLAY_CACHE_MAX_ITEMS):
+        renderer._remember_text_overlay(("another-slide", index), Image.new("RGBA", size))
+
+    assert key not in renderer._text_overlay_cache
+    assert key not in renderer._story_scene_cache
+    rebuilt = renderer._render_slide_frame(slide, loaded, 1.0, VideoType.TYPE_4)
+    assert np.array_equal(first, rebuilt)
+    assert key in renderer._story_scene_cache
+    assert key in renderer._text_overlay_cache
+
+
+@pytest.mark.parametrize("source_size", ((1920, 1080), (540, 2400)), ids=("landscape", "very-tall"))
+def test_story_headroom_preserves_the_whole_scene_with_unusual_dimensions(
+    renderer, tmp_path, monkeypatch, source_size,
+):
+    path, subject_color, _subject_box = _high_subject_scene(tmp_path, 0.0, size=source_size)
+    with Image.open(path) as image:
+        source = image.copy()
+    marker_width, marker_height = round(source.width * 0.08), round(source.height * 0.05)
+    markers = (
+        ((0, 0), (190, 10, 30)),
+        ((source.width - marker_width, 0), (10, 170, 40)),
+        ((0, source.height - marker_height), (10, 40, 220)),
+        ((source.width - marker_width, source.height - marker_height), (180, 20, 200)),
+    )
+    for (x, y), color in markers:
+        ImageDraw.Draw(source).rectangle((x, y, x + marker_width - 1, y + marker_height - 1), fill=color)
+    source.save(path)
+    write_story_subject_box(path, (0.25, 0.0, 0.875, 0.9375), source="segmentation")
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+    slide = _slide(SlideRole.STORY_DEEP_FAILURE, "Los primeros meses fueron difíciles, pero seguí aprendiendo.")
+    slide.media.local_path = path
+
+    still = renderer.render_slide_still(slide, VideoType.TYPE_4)
+
+    key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, still.size)
+    scene = renderer._story_scene_cache[key]
+    scene_pixels = np.asarray(scene.convert("RGB"))
+    for _corner, color in markers:
+        assert np.any(np.all(scene_pixels == color, axis=2)), "All four image corners must remain visible."
+    card = renderer._text_overlay_cache[key].getbbox()
+    assert card is not None
+    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * still.height / 1920))
+    assert _painted_subject_top(scene, subject_color) - card[3] + 1 >= clearance
+
+
+def test_replacing_a_story_source_rebuilds_its_scene_and_caption(renderer, tmp_path, monkeypatch):
+    path, old_subject_color, _subject_box = _high_subject_scene(tmp_path, 0.0)
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+    slide = _slide(SlideRole.STORY_DEEP_FAILURE, "Probé tres productos y seguí aprendiendo de mis errores.")
+    slide.media.local_path = path
+    first = renderer.render_slide_still(slide, VideoType.TYPE_4)
+    old_key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, first.size)
+
+    path, new_subject_color, _subject_box = _high_subject_scene(tmp_path, 0.02, subject_color=(140, 44, 90))
+    loaded = renderer._load_source_image(path)
+    second = renderer._render_slide_frame(slide, loaded, 0.5, VideoType.TYPE_4)
+    new_key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, first.size)
+
+    assert new_key != old_key
+    assert new_key in renderer._story_scene_cache
+    assert new_key in renderer._text_overlay_cache
+    scene = renderer._story_scene_cache[new_key]
+    assert _painted_subject_top(scene, new_subject_color) > 0
+    assert not np.any(np.all(np.asarray(scene.convert("RGB")) == old_subject_color, axis=2))
+    assert not np.array_equal(np.asarray(first), second)
+
+
+def test_story_headroom_never_changes_the_following_original_reference(
+    renderer, story_texts, tmp_path, monkeypatch,
+):
+    path, _subject_color, _subject_box = _high_subject_scene(tmp_path, 0.0)
+    monkeypatch.setattr(renderer, "_text_avoid_regions", lambda image: [])
+    story = _slide(SlideRole.STORY_DEEP_FAILURE, story_texts[SlideRole.STORY_DEEP_FAILURE])
+    story.media.local_path = path
+    renderer.render_slide_still(story, VideoType.TYPE_4)
+    assert renderer._story_scene_cache
+
+    size = (renderer.settings.width, renderer.settings.height)
+    original = Image.new("RGB", size, (37, 73, 109))
+    ImageDraw.Draw(original).rectangle((20, 30, 80, 90), fill=(180, 70, 30))
+    reference_path = tmp_path / "original-after-fallback.png"
+    original.save(reference_path)
+    reference = _slide(SlideRole.STORY_ORIGINAL_REFERENCE, story_texts[SlideRole.STORY_ORIGINAL_REFERENCE])
+    reference.media.local_path = reference_path
+    reference.fixed_asset = True
+
+    result = renderer.render_slide_still(reference, VideoType.TYPE_4)
+
+    assert reference.text == ""
+    assert result.tobytes() == original.tobytes()
+    key = renderer._slide_overlay_cache_key(reference, VideoType.TYPE_4, size)
+    assert key not in renderer._story_scene_cache
+
+
+def _wall_story(source_tag, *, subtle_noise=False):
+    """Reproduce a high false face on a plain illustrated wall, without fixtures."""
+    width, height = 864, 1536
+    pixels = np.full((height, width, 3), (225, 201, 161), dtype=np.int16)
+    if subtle_noise:
+        noise = (np.arange(height)[:, None] // 5 + np.arange(width)[None, :] // 7) % 3 - 1
+        pixels += noise[:, :, None]
+    image = Image.fromarray(pixels.astype(np.uint8))
+    ImageDraw.Draw(image).rectangle((240, 765, 790, 1535), fill=(40, 83, 129))
+    if source_tag is not None:
+        image.info["story_subject_source"] = source_tag
+        image.info["story_subject_box"] = f"[{240 / width}, {765 / height}, {791 / width}, 1.0]"
+    return image
+
+
+def _stub_story_detectors(
+    renderer, monkeypatch, source_size, *, frontal=(), profile=(), eyes=(), neural=(),
+):
+    """Mock every detector, returning its real resized-image coordinate format."""
+    def at_detection_size(image, boxes):
+        if not boxes:
+            return np.empty((0, 4), dtype=np.int32)
+        scale = image.shape[0] / source_size[1]
+        return np.rint(np.asarray(boxes, dtype=np.float64) * scale).astype(np.int32)
+
+    monkeypatch.setattr(renderer, "_detect_render_faces", lambda gray: at_detection_size(gray, frontal))
+    monkeypatch.setattr(renderer, "_detect_render_profile_faces", lambda gray: at_detection_size(gray, profile))
+    monkeypatch.setattr(renderer, "_detect_render_eyes", lambda gray: at_detection_size(gray, eyes))
+    monkeypatch.setattr(renderer, "_detect_render_people", lambda rgb: np.empty((0, 4), dtype=np.int32))
+    monkeypatch.setattr(renderer._neural_face_detector, "detect_faces", lambda rgb: at_detection_size(rgb, neural))
+    monkeypatch.setattr(renderer, "_face_avoid_detectors_unavailable", lambda: False)
+
+
+@pytest.mark.parametrize("subtle_noise", (False, True), ids=("flat-wall", "soft-texture"))
+@pytest.mark.parametrize("detector", ("frontal", "profile", "eyes"))
+def test_segmented_story_ignores_false_cascades_on_flat_wall(
+    renderer, monkeypatch, subtle_noise, detector,
+):
+    source = _wall_story("segmentation", subtle_noise=subtle_noise)
+    # This models the reported wall false positive, well above the SAM body.
+    false_detection = ((391, 152, 206, 151),)
+    _stub_story_detectors(renderer, monkeypatch, source.size, **{detector: false_detection})
+
+    assert renderer._text_avoid_regions(source) == []
+    regions = renderer._slide_text_avoid_regions(
+        _slide(SlideRole.STORY_DEEP_FAILURE, "Seguí aprendiendo."), source,
+    )
+    assert len(regions) == 1
+    assert regions[0][0][1] == 765
+    assert regions[0][1] == TEXT_HEAD_AVOID_WEIGHT
+
+
+@pytest.mark.parametrize("source_tag", (None, "review"), ids=("ordinary-photo", "review-only"))
+@pytest.mark.parametrize("detector", ("frontal", "profile", "eyes"))
+def test_non_segmented_images_keep_their_existing_cascade_guards(
+    renderer, monkeypatch, source_tag, detector,
+):
+    source = _wall_story(source_tag, subtle_noise=True)
+    detection = ((391, 152, 206, 151),)
+    _stub_story_detectors(renderer, monkeypatch, source.size, **{detector: detection})
+
+    regions = renderer._text_avoid_regions(source)
+
+    expected_weight = TEXT_EYE_AVOID_WEIGHT if detector == "eyes" else TEXT_FACE_AVOID_WEIGHT
+    assert len(regions) == 1
+    assert regions[0][1] == expected_weight
+    assert regions[0][0][1] < 152
+
+
+@pytest.mark.parametrize("detector", ("frontal", "profile", "eyes"))
+def test_segmented_story_keeps_detailed_faces_above_the_sam_body(
+    renderer, monkeypatch, detector,
+):
+    source = _wall_story("segmentation")
+    # Two small dark eyes are enough evidence even if most of the crop is skin.
+    draw = ImageDraw.Draw(source)
+    draw.ellipse((440, 480, 454, 496), fill=(0, 0, 0))
+    draw.ellipse((529, 480, 543, 496), fill=(0, 0, 0))
+    real_detection = ((391, 450, 206, 151),)
+    _stub_story_detectors(renderer, monkeypatch, source.size, **{detector: real_detection})
+
+    regions = renderer._text_avoid_regions(source)
+    protected = renderer._slide_text_avoid_regions(
+        _slide(SlideRole.STORY_DEEP_FAILURE, "Seguí aprendiendo."), source,
+    )
+
+    expected_weight = TEXT_EYE_AVOID_WEIGHT if detector == "eyes" else TEXT_FACE_AVOID_WEIGHT
+    assert len(regions) == 1
+    assert regions[0][1] == expected_weight
+    assert regions[0][0][1] < 450
+    assert regions[0] in protected
+    assert any(weight == TEXT_HEAD_AVOID_WEIGHT and box[1] == 765 for box, weight in protected)
+
+
+def test_segmented_story_preserves_neural_faces_even_in_a_flat_patch(renderer, monkeypatch):
+    source = _wall_story("segmentation", subtle_noise=True)
+    detection = ((391, 152, 206, 151),)
+    # The same flat cascade is discarded before merging; the independent
+    # YuNet result must still survive, protecting the higher face.
+    _stub_story_detectors(renderer, monkeypatch, source.size, frontal=detection, neural=detection)
+
+    regions = renderer._text_avoid_regions(source)
+    protected = renderer._slide_text_avoid_regions(
+        _slide(SlideRole.STORY_DEEP_FAILURE, "Seguí aprendiendo."), source,
+    )
+
+    assert len(regions) == 1
+    assert regions[0][1] == TEXT_FACE_AVOID_WEIGHT
+    assert regions[0][0][1] < 152
+    assert regions[0] in protected
+
+
+def test_false_face_on_wall_does_not_force_unnecessary_scene_shrinking(renderer, tmp_path, monkeypatch):
+    source = _wall_story("segmentation", subtle_noise=True)
+    path = tmp_path / "story-with-false-wall-face.png"
+    source.save(path)
+    write_story_subject_box(path, (240 / 864, 765 / 1536, 791 / 864, 1.0), source="segmentation")
+    _stub_story_detectors(
+        renderer, monkeypatch, source.size,
+        frontal=((391, 152, 206, 151),),
+    )
+    slide = _slide(
+        SlideRole.STORY_DEEP_FAILURE,
+        "Los meses siguientes fueron peores: probé 3 productos, no vendí "
+        "ninguno y estuve a punto de dejarlo para siempre.",
+    )
+    slide.media.local_path = path
+
+    result = renderer.render_slide_still(slide, VideoType.TYPE_4)
+
+    key = renderer._slide_overlay_cache_key(slide, VideoType.TYPE_4, result.size)
+    assert key not in renderer._story_scene_cache
+    card = renderer._text_overlay_cache[key].getbbox()
+    assert card is not None
+    clearance = max(1, round(TEXT_AVOID_CLEARANCE_MARGIN * result.height / 1920))
+    assert _painted_subject_top(result, (40, 83, 129)) - card[3] + 1 >= clearance
