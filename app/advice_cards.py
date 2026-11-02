@@ -266,7 +266,7 @@ ADVICE_EXTERNAL_PHRASES: dict[Language, str] = {
 ADVICE_EXTERNAL_HOOKS: dict[Language, tuple[str, ...]] = {
     Language.ES: (
         ADVICE_EXTERNAL_PHRASES[Language.ES],
-        "un dropshipper millonario me contó la regla №1 para hacer más de 30k al mes",
+        "un dropshipper millonario me contó la regla numero #1 para hacer más de 30k al mes",
     ),
     Language.EN: (
         ADVICE_EXTERNAL_PHRASES[Language.EN],

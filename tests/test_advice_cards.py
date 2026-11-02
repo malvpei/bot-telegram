@@ -108,7 +108,7 @@ def test_advice_external_phrases_match_requested_copy():
     )
     assert ADVICE_EXTERNAL_HOOKS[Language.ES] == (
         ADVICE_EXTERNAL_PHRASES[Language.ES],
-        "un dropshipper millonario me contó la regla №1 para hacer más de 30k al mes",
+        "un dropshipper millonario me contó la regla numero #1 para hacer más de 30k al mes",
     )
     assert ADVICE_EXTERNAL_HOOKS[Language.EN] == (
         ADVICE_EXTERNAL_PHRASES[Language.EN],

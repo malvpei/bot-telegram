@@ -241,7 +241,7 @@ recorre sus propios textos antes de repetirlos, también al reiniciar el ciclo
 general. Cada entrega incluye fuera de
 la imagen la frase de apertura correspondiente al idioma. Alterna el hook
 actual de vender fácilmente con «un dropshipper millonario me contó la regla
-№1 para hacer más de 30k al mes», usando la rotación guardada y avanzando solo
+numero #1 para hacer más de 30k al mes», usando la rotación guardada y avanzando solo
 tras una generación correcta. Como segunda
 imagen, una foto limpia del prefijo R2 configurado por
 `R2_TYPE_4_IMAGE_PREFIX` (`4` por defecto). Las fotos R2 recorren una cola

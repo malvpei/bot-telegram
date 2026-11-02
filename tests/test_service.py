@@ -753,7 +753,7 @@ def test_advice_type_4_needs_no_accounts_and_rotates_background_and_copy():
         service.state = StateStore(settings.state_dir)
         for expected_hook in (
             "un dropshipper millonario me contó la regla número #1 para vender fácilmente",
-            "un dropshipper millonario me contó la regla №1 para hacer más de 30k al mes",
+            "un dropshipper millonario me contó la regla numero #1 para hacer más de 30k al mes",
         ):
             result = service._create_video_locked(
                 VideoRequest(
