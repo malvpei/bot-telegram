@@ -80,6 +80,8 @@ def test_writer_sends_only_fact_context_and_recent_history_in_one_bounded_reques
     assert prompt["avoid_recent"]["descriptions"] == history["descriptions"][-6:]
     assert "must-not-be-transmitted" not in json.dumps(payload)
     assert prompt["description_style"] == "short"
+    assert prompt["title_max_characters"] == 90
+    assert "at most 90 characters" in payload["messages"][0]["content"]
     assert prompt["description_max_characters"] == 220
 
 
@@ -116,7 +118,7 @@ def test_oversize_or_unrequested_empty_descriptions_are_rejected(writer, context
     "", "not json", "[]", "null", '{"title": "Missing description"}',
     '{"title": [], "description": "text"}', '{"title": "text", "description": {}}',
     '{"title": "", "description": "text"}',
-    json.dumps({"title": "x" * 121, "description": "text"}),
+    json.dumps({"title": "x" * 91, "description": "text"}),
     json.dumps({"title": "Two\nlines", "description": "text"}),
     json.dumps({"title": "Título #coches", "description": "text"}),
     json.dumps({"title": "Título natural", "description": "Texto #ParkEz"}),
@@ -130,6 +132,20 @@ def test_malformed_or_unsuitable_provider_copy_returns_fallback(writer, context,
 def test_fenced_json_and_numbered_title_are_valid(writer, context, monkeypatch):
     monkeypatch.setattr("app.publication_writer.requests.post", lambda *args, **kwargs: Response('```json\n{"title":"El consejo #1 para organizarte", "description":"Una observación útil."}\n```'))
     assert writer.write(context, {}, "short") == {"title": "El consejo #1 para organizarte", "description": "Una observación útil."}
+
+
+@pytest.mark.parametrize("length, accepted", ((90, True), (91, False), (120, False)))
+def test_provider_title_character_limit_is_90(writer, context, monkeypatch, length, accepted):
+    title = "á" * length
+    description = "Una observación útil sobre tus aplicaciones."
+    monkeypatch.setattr(
+        "app.publication_writer.requests.post",
+        lambda *args, **kwargs: Response(json.dumps({"title": title, "description": description})),
+    )
+
+    result = writer.write(context, {}, "short")
+
+    assert result == ({"title": title, "description": description} if accepted else None)
 
 
 @pytest.mark.parametrize("response", (

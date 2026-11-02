@@ -478,6 +478,12 @@ las apps y negocios seleccionados son la fuente, nunca los nombres de archivos
 ni los captions de las fotos de fondo. Los hooks y textos de las imágenes siguen
 su selección propia; este sistema prepara el título, descripción y hashtags.
 
+Los títulos tienen un máximo de 90 caracteres, incluidos espacios y signos de
+puntuación, en todas las marcas y formatos, también las plantillas y los lotes.
+El redactor debe escribirlos completos dentro del límite; la validación rechaza
+los que lo superan. Los títulos predefinidos antiguos tienen además una protección
+que los acorta por palabras antes de enviarlos.
+
 Por cada tres publicaciones de una marca hay una sin descripción, una breve
 (hasta 220 caracteres) y otra de hasta 550 caracteres. El orden cambia entre
 grupos y evita dos publicaciones sin descripción seguidas. Sin descripción se

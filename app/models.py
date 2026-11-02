@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
 
+from app.publication_limits import limit_publication_title
+
 
 class VideoType(str, Enum):
     TYPE_1 = "1"
@@ -210,6 +212,9 @@ class SocialCopy:
     hashtags: list[str]
     hook: str = ""
 
+    def __post_init__(self) -> None:
+        self.title = limit_publication_title(self.title)
+
     @property
     def hashtag_line(self) -> str:
         return " ".join(self.hashtags)
@@ -223,9 +228,10 @@ class SocialCopy:
             if hashtags
             else description
         )
+        # SocialCopy is mutable; guard the actual outbound title as well.
         return [
             message
-            for message in [self.hook, self.title, description_block]
+            for message in [self.hook, limit_publication_title(self.title), description_block]
             if message.strip()
         ]
 

@@ -13,6 +13,7 @@ from functools import lru_cache
 from typing import TYPE_CHECKING
 
 from app.models import GenerationResult, Language, SocialCopy, VideoType
+from app.publication_limits import MAX_PUBLICATION_TITLE_LENGTH, limit_publication_title
 
 if TYPE_CHECKING:
     from app.publication_writer import PublicationWriter
@@ -234,7 +235,7 @@ def _valid_written(copy: object, context: dict, style: str, records: list[dict],
         return False
     title, description = copy["title"].strip(), copy["description"].strip()
     limit = 220 if style == "short" else 550
-    if not 8 <= len(title) <= 120 or "\n" in title or _identity(title) == _identity(hook):
+    if not 8 <= len(title) <= MAX_PUBLICATION_TITLE_LENGTH or "\n" in title or _identity(title) == _identity(hook):
         return False
     if (style == "none" and description) or (style != "none" and not 20 <= len(description) <= limit):
         return False
@@ -356,7 +357,17 @@ def _fallback_copy(context: dict, style: str, records: list[dict], hook: str) ->
     for heading in headings:
         if 8 <= len(heading) <= 85:
             titles.extend(frame.format(heading=heading, lower=heading[0].lower() + heading[1:]) for frame in heading_frames)
-    title = _pick_text([text for text in titles if len(text) <= 120 and _allowed_text(text, context)], _recent(records, "title"), hook)
+    titles = [_brand_wording({"title": text}, context)["title"] for text in titles]
+    candidates = [
+        text for text in titles
+        if len(text) <= MAX_PUBLICATION_TITLE_LENGTH and _allowed_text(text, context)
+    ]
+    if not candidates:
+        shortened = [limit_publication_title(text) for text in titles]
+        candidates = [
+            text for text in shortened if _allowed_text(text, context)
+        ]
+    title = _pick_text(candidates, _recent(records, "title"), hook)
     if style == "none":
         return {"title": title, "description": ""}
     facts = _facts(context)
@@ -459,6 +470,7 @@ class PublicationComposer:
             tags = _choose_hashtags(context, actual_records)
             if lowercase:
                 title, description, tags = title.lower(), description.lower(), [tag.lower() for tag in tags]
+            title = limit_publication_title(title)
             record = {"title": title, "description": description, "hashtags": list(tags),
                       "format": actual_style, "family": context["family"],
                       "source": "writer" if use_written else "local"}

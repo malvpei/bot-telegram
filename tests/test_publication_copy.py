@@ -470,3 +470,119 @@ def test_accepted_gograduate_copy_uses_io_domain_and_keeps_literal_hook(tmp_path
     assert record["title"] == selected.title
     assert record["description"] == selected.description
     assert ".org" not in record["title"] + record["description"]
+
+
+@pytest.mark.parametrize("video_type", list(VideoType), ids=lambda video_type: video_type.value)
+@pytest.mark.parametrize("language", (Language.ES, Language.EN), ids=("es", "en"))
+def test_every_video_family_publishes_and_remembers_titles_within_90_characters(tmp_path, video_type, language):
+    result = _result(video_type, language)
+    result.social_copy.hook = "Hook literal que conserva todo su contenido " + "completo " * 12
+    store = StateStore(tmp_path)
+    composer = PublicationComposer(store)
+    brand = publication_context(result)["brand"]
+
+    for _ in range(3):
+        selected = composer.compose(result)
+        record = store.publication_copy_snapshot(brand)["languages"][language.value][-1]
+        assert 0 < len(selected.title) <= 90
+        assert selected.messages[1] == selected.title == record["title"]
+        assert selected.hook == result.social_copy.hook
+
+
+def test_oversize_provider_title_can_be_rewritten_on_the_second_attempt(tmp_path):
+    calls = []
+
+    class RetryWriter:
+        def write(self, context, history, style):
+            calls.append(style)
+            return {
+                "title": "x" * 91 if len(calls) == 1 else "Piensa en la llegada antes de arrancar",
+                "description": "" if style == "none" else "Prepara la ruta y la zona donde buscar aparcamiento.",
+            }
+
+    store = StateStore(tmp_path)
+    selected = PublicationComposer(store, RetryWriter()).compose(_result())
+
+    assert len(calls) == 2
+    assert selected.title == "Piensa en la llegada antes de arrancar"
+    record = store.publication_copy_snapshot("parkez")["languages"]["es"][-1]
+    assert record["title"] == selected.title
+    assert record["source"] == "writer"
+
+
+@pytest.mark.parametrize("raw_length, accepted", ((87, True), (90, False)))
+def test_gograduate_domain_expansion_respects_the_final_character_budget(tmp_path, raw_length, accepted):
+    result = _result(VideoType.GOGRADUATE_TYPE_1)
+    title = "GoGraduate " + "a" * (raw_length - len("GoGraduate "))
+    writer = RecordingWriter(lambda context, history, style: {
+        "title": title,
+        "description": "" if style == "none" else "GoGraduate ayuda a trabajar con tus apuntes y organizar el repaso.",
+    })
+    store = StateStore(tmp_path)
+
+    selected = PublicationComposer(store, writer).compose(result)
+
+    record = store.publication_copy_snapshot("gograduate")["languages"]["es"][-1]
+    assert 0 < len(selected.title) <= 90
+    assert selected.title == selected.messages[1] == record["title"]
+    assert selected.hook == result.social_copy.hook
+    assert record["source"] == ("writer" if accepted else "local")
+    assert len(writer.calls) == (1 if accepted else 2)
+    if accepted:
+        assert selected.title == title.replace("GoGraduate", "gograduate.io")
+        assert len(selected.title) == 90
+
+
+def test_lowercasing_that_expands_unicode_is_bounded_before_history_is_written(tmp_path):
+    result = _result()
+    writer = RecordingWriter(lambda context, history, style: {
+        "title": "İ" * 90,
+        "description": "" if style == "none" else "Prepara tus aplicaciones antes de salir de casa.",
+    })
+    store = StateStore(tmp_path)
+
+    selected = PublicationComposer(store, writer).compose(result, lowercase=True)
+
+    assert len(writer.calls) == 1
+    assert 0 < len(selected.title) <= 90
+    assert selected.title == selected.title.lower()
+    assert selected.hook == result.social_copy.hook
+    record = store.publication_copy_snapshot("parkez")["languages"]["es"][-1]
+    assert record["title"] == selected.title == selected.messages[1]
+
+
+@pytest.mark.parametrize("language", (Language.ES, Language.EN), ids=("es", "en"))
+def test_template_video_rejects_oversize_titles_and_remembers_the_delivered_fallback(tmp_path, language):
+    original = SocialCopy(
+        title="", description="Shopify prepara la tienda y Dropradar ayuda a investigar productos.",
+        hashtags=["#old"], hook="Hook literal " + "completo " * 12,
+    )
+    snapshot = copy.deepcopy(original)
+    writer = RecordingWriter(lambda context, history, style: {
+        "title": "x" * 91,
+        "description": "" if style == "none" else "Una observación útil para preparar la próxima tienda.",
+    })
+    store = StateStore(tmp_path)
+
+    selected = PublicationComposer(store, writer).compose_template(original, language)
+
+    assert len(writer.calls) == 2
+    assert 0 < len(selected.title) <= 90
+    assert selected.hook == original.hook
+    assert original == snapshot
+    record = store.publication_copy_snapshot("dropradar")["languages"][language.value][-1]
+    assert record["source"] == "local"
+    assert record["title"] == selected.title == selected.messages[1]
+
+
+def test_local_writer_can_publish_when_every_topic_exceeds_the_title_budget(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "app.publication_copy._fallback_topics",
+        lambda context: ["organizar las herramientas de la tienda y preparar la siguiente prueba " * 4],
+    )
+    result = _result(VideoType.TYPE_3)
+
+    selected = PublicationComposer(StateStore(tmp_path)).compose(result)
+
+    assert 0 < len(selected.title) <= 90
+    assert selected.hook == result.social_copy.hook
