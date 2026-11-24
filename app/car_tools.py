@@ -39,7 +39,7 @@ CAR_TOOLS_BACKGROUND_FILES: tuple[str, ...] = (
 
 CAR_TOOLS_ICON_FILES: dict[SlideRole, str] = {
     SlideRole.CAR_TOOL_RADARBOT: "radarbot.png",
-    SlideRole.CAR_TOOL_PARKEZ: "parkez.png",
+    SlideRole.CAR_TOOL_PARKEZ: "parkez_tools.png",
     SlideRole.CAR_TOOL_WAZE: "waze.png",
     SlideRole.CAR_TOOL_GOOGLE_MAPS: "google_maps.png",
     SlideRole.CAR_TOOL_MIDGT: "midgt.png",

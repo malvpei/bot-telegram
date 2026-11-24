@@ -1,3 +1,5 @@
+from collections import defaultdict
+
 from app.advice_cards import (
     ADVICE_BACKGROUNDS,
     ADVICE_EXTERNAL_HOOKS,
@@ -8,6 +10,7 @@ from app.advice_cards import (
     ADVICE_SOCIAL_DESCRIPTIONS,
     ADVICE_SOCIAL_TITLES,
     AdviceBackground,
+    advice_highlights_brand,
     advice_selection,
     advice_social_copy,
 )
@@ -77,6 +80,18 @@ def test_advice_backgrounds_and_scripts_complete_full_rotation():
         1,
     ]
     assert advice_selection(360, Language.ES) == advice_selection(0, Language.ES)
+
+
+def test_every_advice_design_and_pack_rotates_through_both_brand_styles():
+    for language, packs in ADVICE_PACKS.items():
+        styles = defaultdict(set)
+        for phase in range(ADVICE_ROTATION_CYCLE_LENGTH):
+            background, _, pack_index = advice_selection(phase, language)
+            styles[background, pack_index].add(advice_highlights_brand(phase))
+
+        assert len(styles) == len(ADVICE_BACKGROUNDS) * len(packs)
+        assert all(variants == {True, False} for variants in styles.values())
+        assert advice_highlights_brand(ADVICE_ROTATION_CYCLE_LENGTH) == advice_highlights_brand(0)
 
 
 def test_editorial_advice_background_adds_a_fifth_dropshipping_tip():

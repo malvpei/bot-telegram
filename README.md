@@ -117,6 +117,7 @@ assets/fixed/parkez_male.png
 assets/fixed/parkez_female.png
 cartools/iconos/radarbot.png
 cartools/iconos/parkez.png
+cartools/iconos/parkez_tools.png
 cartools/iconos/waze.png
 cartools/iconos/google_maps.png
 cartools/iconos/midgt.png
@@ -232,10 +233,11 @@ los accesos se comprueban de nuevo antes de ejecutar una acción.
 
 El **Tipo 4** genera una imagen vertical de consejos y no necesita cuentas de
 Instagram. Rota entre sus cinco diseños y cuatro guiones en español e inglés;
-el último consejo siempre recomienda Dropradar. El nombre de la app aparece en
-verde en los cinco diseños y su icono sustituye al gráfico genérico del cuarto
-consejo en la plantilla ilustrada y del quinto en la plantilla editorial de
-cinco filas. Incluye 39 pares de título y
+el último consejo siempre recomienda Dropradar. Cada diseño (negro, blanco,
+ilustrado, editorial y marrón) sale en ambas versiones: con el nombre en verde
+y con el nombre en el mismo color que el resto del texto. El icono de la app
+aparece en el paso 4 de la plantilla ilustrada y en el paso 5 de la editorial.
+Incluye 39 pares de título y
 descripción por idioma, vinculados a los consejos de cada guion. Cada guion
 recorre sus propios textos antes de repetirlos, también al reiniciar el ciclo
 general. Cada entrega incluye fuera de
@@ -416,7 +418,8 @@ y [ParkEz en App Store](https://apps.apple.com/dk/app/parkez/id6799709478).
 
 La opción **Tools** de `/createp` crea cinco slides dedicados a RadarBot,
 ParkEz, Waze, Google Maps y miDGT, en ese orden. Cada uno lleva su icono y su texto
-incrustado sobre el mismo fondo. Tools solo usa los 13 fondos seleccionados en
+incrustado sobre el mismo fondo. La lámina de ParkEz usa `cartools/iconos/parkez_tools.png`.
+Tools solo usa los 13 fondos seleccionados en
 `app/car_tools.py`, manteniendo el orden elegido y una rotación propia que no
 modifica la del Tipo 3 normal. Las cinco slides mantienen ese fondo y el
 siguiente carrusel Tools avanza al siguiente de su rotación. El carrusel se

@@ -1096,10 +1096,17 @@ ADVICE_ILLUSTRATED_TITLES: dict[Language, tuple[str, str]] = {
 }
 
 ADVICE_ROTATION_CYCLE_LENGTH = lcm(
-    ADVICE_VISUAL_CYCLE_LENGTH,
+    2 * ADVICE_VISUAL_CYCLE_LENGTH,
     ADVICE_SOCIAL_CYCLE_LENGTH,
     *(len(hooks) for hooks in ADVICE_EXTERNAL_HOOKS.values()),
 )
+
+
+def advice_highlights_brand(phase: int) -> bool:
+    """Alternate the text color and reverse the order on each visual cycle."""
+    phase = max(0, phase)
+    # The same layout and advice pack get the opposite treatment next time.
+    return (phase + phase // ADVICE_VISUAL_CYCLE_LENGTH) % 2 == 0
 
 
 def advice_selection(

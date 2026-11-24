@@ -88,7 +88,7 @@ EXPECTED_CAR_TOOLS_BODY_LINES = {
 
 EXPECTED_CAR_TOOLS_ICON_FILES = {
     SlideRole.CAR_TOOL_RADARBOT: "radarbot.png",
-    SlideRole.CAR_TOOL_PARKEZ: "parkez.png",
+    SlideRole.CAR_TOOL_PARKEZ: "parkez_tools.png",
     SlideRole.CAR_TOOL_WAZE: "waze.png",
     SlideRole.CAR_TOOL_GOOGLE_MAPS: "google_maps.png",
     SlideRole.CAR_TOOL_MIDGT: "midgt.png",
@@ -240,6 +240,8 @@ def test_car_tools_renderer_resolves_each_role_icon_from_cartools_directory(
         Image.new("RGBA", (96, 96), color).save(
             icons_dir / EXPECTED_CAR_TOOLS_ICON_FILES[role]
         )
+    # Apps iPhone and ParkEz Consejos still have the original icon by this name.
+    Image.new("RGBA", (96, 96), "black").save(icons_dir / "parkez.png")
 
     renderer = VideoRenderer(
         replace(

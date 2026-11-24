@@ -18,8 +18,9 @@ from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 from app.advice_cards import (
     AdviceBackground,
     AdviceTip,
+    advice_highlights_brand,
 )
-from app.car_tools import CAR_TOOLS_BODY_LINES
+from app.car_tools import CAR_TOOLS_BODY_LINES, CAR_TOOLS_ICON_FILES
 from app.gograduate import GOGRADUATE_ICON_RELATIVE_PATH
 from app.config import Settings
 from app.face_detection import build_face_detector
@@ -729,19 +730,32 @@ class VideoRenderer:
         *,
         rotation_index: int = 0,
     ) -> Image.Image:
+        brand_fill = None
+        if advice_highlights_brand(rotation_index):
+            brand_fill = (
+                ADVICE_DROPRADAR_GREEN_ON_DARK
+                if background in {AdviceBackground.BLACK, AdviceBackground.BROWN}
+                else ADVICE_DROPRADAR_GREEN
+            )
         if background in {AdviceBackground.EDITORIAL, AdviceBackground.BROWN}:
             if len(tips) != 5:
                 raise ValueError(
                     "Las plantillas de cinco filas del Tipo 4 necesitan cinco consejos."
                 )
         if background == AdviceBackground.BROWN:
-            return self._render_brown_advice_card(tips, language)
+            return self._render_brown_advice_card(
+                tips, language, brand_fill=brand_fill,
+            )
         if background == AdviceBackground.EDITORIAL:
-            return self._render_editorial_advice_card(tips, language)
+            return self._render_editorial_advice_card(
+                tips, language, brand_fill=brand_fill,
+            )
         if len(tips) != 4:
             raise ValueError("El Tipo 4 necesita exactamente cuatro consejos.")
         if background == AdviceBackground.ILLUSTRATED:
-            return self._render_illustrated_advice_card(tips, language)
+            return self._render_illustrated_advice_card(
+                tips, language, brand_fill=brand_fill,
+            )
 
         canvas_fill = (
             (0, 0, 0, 255)
@@ -764,6 +778,7 @@ class VideoRenderer:
             tips,
             fill=text_fill,
             stroke_fill=stroke_fill,
+            brand_fill=brand_fill,
             emoji_offset=rotation_index,
         )
         return image.convert("RGB")
@@ -831,6 +846,7 @@ class VideoRenderer:
         *,
         fill: tuple[int, int, int, int],
         stroke_fill: tuple[int, int, int, int],
+        brand_fill: tuple[int, int, int] | None,
         emoji_offset: int = 0,
     ) -> None:
         draw = ImageDraw.Draw(image)
@@ -948,11 +964,7 @@ class VideoRenderer:
                     fill=fill,
                     stroke_width=stroke_width,
                     stroke_fill=stroke_fill,
-                    brand_fill=(
-                        ADVICE_DROPRADAR_GREEN_ON_DARK
-                        if sum(fill[:3]) > 500
-                        else ADVICE_DROPRADAR_GREEN
-                    ),
+                    brand_fill=brand_fill,
                 )
                 if line_index == len(title_lines) - 1:
                     line_width = bbox[2] - bbox[0]
@@ -992,11 +1004,7 @@ class VideoRenderer:
                     fill=body_fill,
                     stroke_width=stroke_width,
                     stroke_fill=stroke_fill,
-                    brand_fill=(
-                        ADVICE_DROPRADAR_GREEN_ON_DARK
-                        if sum(fill[:3]) > 500
-                        else ADVICE_DROPRADAR_GREEN
-                    ),
+                    brand_fill=brand_fill,
                 )
                 y += (bbox[3] - bbox[1]) + line_gap
             if body_lines:
@@ -1857,7 +1865,7 @@ class VideoRenderer:
         language: Language,
         *,
         brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
-        brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+        brand_fill: tuple[int, int, int] | None = ADVICE_DROPRADAR_GREEN,
         brand_icon_path: Path | None = None,
         row_icon_paths: tuple[Path, ...] | None = None,
     ) -> Image.Image:
@@ -2030,7 +2038,9 @@ class VideoRenderer:
                 ),
                 radius=divider_height // 2,
                 fill=(
-                    brand_fill if icon_drawn and is_brand_tip and brand_icon_path
+                    brand_fill
+                    if brand_fill is not None
+                    and icon_drawn and is_brand_tip and brand_icon_path
                     else self._advice_icon_palette(index)[2]
                 ),
             )
@@ -2088,6 +2098,8 @@ class VideoRenderer:
         self,
         tips: tuple[AdviceTip, ...],
         language: Language,
+        *,
+        brand_fill: tuple[int, int, int] | None,
     ) -> Image.Image:
         """Render the five-tip brown serif layout from the supplied reference."""
         del language  # The selected tips are already localized.
@@ -2187,7 +2199,7 @@ class VideoRenderer:
                 start_y=y,
                 fill=ADVICE_BROWN_TEXT[:3],
                 line_gap=line_gap,
-                brand_fill=ADVICE_DROPRADAR_GREEN_ON_DARK,
+                brand_fill=brand_fill,
             )
             y += title_height + title_gap
             self._draw_left_aligned_lines(
@@ -2198,7 +2210,7 @@ class VideoRenderer:
                 start_y=y,
                 fill=ADVICE_BROWN_TEXT[:3],
                 line_gap=line_gap,
-                brand_fill=ADVICE_DROPRADAR_GREEN_ON_DARK,
+                brand_fill=brand_fill,
             )
             y += body_height
             if block_index < len(selected_blocks) - 1:
@@ -2211,7 +2223,7 @@ class VideoRenderer:
         language: Language,
         *,
         brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
-        brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+        brand_fill: tuple[int, int, int] | None = ADVICE_DROPRADAR_GREEN,
         brand_icon_path: Path | None = None,
         row_icon_paths: tuple[Path, ...] | None = None,
     ) -> Image.Image:
@@ -2494,12 +2506,11 @@ class VideoRenderer:
         fill: tuple[int, ...],
         stroke_width: int = 0,
         stroke_fill: tuple[int, ...] | None = None,
-        brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+        brand_fill: tuple[int, int, int] | None = ADVICE_DROPRADAR_GREEN,
         brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
     ) -> None:
         """Color only the brand word, retaining the original line's geometry."""
-        matches = list(brand_word.finditer(text))
-        if not matches:
+        if brand_fill is None or not (matches := list(brand_word.finditer(text))):
             draw.text(
                 position, text, font=font, fill=fill,
                 stroke_width=stroke_width, stroke_fill=stroke_fill,
@@ -2546,7 +2557,7 @@ class VideoRenderer:
         start_y: int,
         fill: tuple[int, int, int],
         line_gap: int,
-        brand_fill: tuple[int, int, int] = ADVICE_DROPRADAR_GREEN,
+        brand_fill: tuple[int, int, int] | None = ADVICE_DROPRADAR_GREEN,
         brand_word: re.Pattern[str] = _ADVICE_DROPRADAR_WORD,
     ) -> None:
         y = start_y
@@ -3787,6 +3798,11 @@ class VideoRenderer:
         return fitted
 
     def _type_3_icon_path(self, role: SlideRole, text: str) -> Path | None:
+        icon_file = CAR_TOOLS_ICON_FILES.get(role)
+        if icon_file is not None:
+            icon_path = self._car_tools_icons_dir / icon_file
+            if icon_path.is_file():
+                return icon_path
         return self._icon_path_for_tool_key(self._type_3_tool_key(role, text))
 
     def _icon_path_for_tool_key(self, tool_key: str) -> Path | None:

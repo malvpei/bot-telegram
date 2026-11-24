@@ -16,7 +16,7 @@ PARKEZ_ADVICE_ICON_FILES = {
     "RadarBot": CAR_TOOLS_ICON_FILES[SlideRole.CAR_TOOL_RADARBOT],
     "Waze": CAR_TOOLS_ICON_FILES[SlideRole.CAR_TOOL_WAZE],
     "Google Maps": CAR_TOOLS_ICON_FILES[SlideRole.CAR_TOOL_GOOGLE_MAPS],
-    "ParkEz": CAR_TOOLS_ICON_FILES[SlideRole.CAR_TOOL_PARKEZ],
+    "ParkEz": "parkez.png",
 }
 PARKEZ_ADVICE_ICON_RELATIVE_PATH = Path("cartools/iconos") / PARKEZ_ADVICE_ICON_FILES["ParkEz"]
 PARKEZ_ADVICE_BACKGROUNDS = (AdviceBackground.ILLUSTRATED, AdviceBackground.EDITORIAL)
@@ -33,7 +33,7 @@ PARKEZ_ADVICE_PROMO = AdviceTip(
 )
 
 # Keep pack, hook and copy IDs stable so existing queues resume after this change.
-# Every design explains the same four apps, using Tools' real icon assets.
+# Every design explains the same four apps using their real icons.
 # Sources for app features and distraction guidance are linked in README.md.
 # ParkEz guides the search; it does not reserve or guarantee a parking space.
 PARKEZ_ADVICE_PACKS: dict[str, tuple[AdviceTip, ...]] = {

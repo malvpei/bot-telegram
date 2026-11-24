@@ -4,7 +4,7 @@ import numpy as np
 import pytest
 from PIL import Image, ImageDraw
 
-from app.advice_cards import AdviceBackground, advice_selection
+from app.advice_cards import ADVICE_VISUAL_CYCLE_LENGTH, AdviceBackground, advice_selection
 from app.config import get_settings
 from app.models import Language
 from app.render import (
@@ -16,18 +16,30 @@ from app.render import (
 
 @pytest.mark.parametrize("phase", range(5))
 @pytest.mark.parametrize("language", list(Language))
-def test_dropradar_text_is_green_in_every_advice_design_and_language(phase, language):
+def test_dropradar_text_rotates_between_green_and_plain_in_each_design(phase, language):
     renderer = VideoRenderer(replace(get_settings(), width=1080, height=1920))
     background, tips, _ = advice_selection(phase, language)
-    result = renderer.render_advice_card(tips, language, background)
-    pixels = np.asarray(result)
+    first = np.asarray(
+        renderer.render_advice_card(tips, language, background, rotation_index=phase)
+    )
+    second = np.asarray(
+        renderer.render_advice_card(
+            tips, language, background, rotation_index=phase + ADVICE_VISUAL_CYCLE_LENGTH,
+        )
+    )
+    highlighted, plain = (first, second) if phase % 2 == 0 else (second, first)
+    if background in {AdviceBackground.ILLUSTRATED, AdviceBackground.EDITORIAL}:
+        # The icon stays identical in both versions. Inspect the text to its right.
+        np.testing.assert_array_equal(highlighted[:, :360], plain[:, :360])
+        highlighted, plain = highlighted[:, 360:], plain[:, 360:]
     brand_color = (
         ADVICE_DROPRADAR_GREEN_ON_DARK
         if background in {AdviceBackground.BLACK, AdviceBackground.BROWN}
         else ADVICE_DROPRADAR_GREEN
     )
 
-    assert (pixels == brand_color).all(axis=2).sum() > 20
+    assert (highlighted == brand_color).all(axis=2).sum() > 20
+    assert not (plain == brand_color).all(axis=2).any()
 
 
 def test_advice_only_colors_the_brand_word_and_keeps_surrounding_text_gray():
