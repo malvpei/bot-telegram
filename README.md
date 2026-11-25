@@ -17,8 +17,8 @@ Este proyecto monta un bot de Telegram que:
 
 ## Lo que hace el pipeline
 
-- **Tipo 1** — 7 slides, narrativa octubre → marzo con una única cuenta.
-  Slide 6 es siempre `imagen6.png` (febrero). El texto de febrero menciona
+- **Tipo 1** — 7 slides, narrativa junio → noviembre con una única cuenta.
+  Slide 6 es siempre `imagen6.png` (octubre). El texto de octubre menciona
   obligatoriamente Dropradar. Nunca se mezclan imágenes de dos cuentas en el
   mismo video.
 - **Tipo 2** — 5 slides, hook con cara visible preferente, 4 consejos. Slide
@@ -31,7 +31,7 @@ Ambos tipos:
 - Reservan atómicamente las IDs de imagen antes de empezar a renderizar, así
   dos jobs en paralelo no pueden coger la misma foto.
 - Empalman el texto con el slide **por rol**, no por posición, así un cambio
-  de orden nunca desincroniza "texto de febrero" con "imagen de enero".
+  de orden nunca desincroniza el texto de octubre con la imagen de septiembre.
 - Mantienen un historial acotado (`HISTORY_MAX_PER_BUCKET`) de firmas para
   que el dedup no degenere con el tiempo.
 - La imagen del hook se entrega limpia; su texto se envía como un mensaje

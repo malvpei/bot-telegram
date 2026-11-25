@@ -34,15 +34,22 @@ def _make_generator(state_dir: Path) -> ScriptGenerator:
     return ScriptGenerator(StateStore(state_dir))
 
 
-def test_type_1_es_has_seven_slides_and_dropradar_in_february(state_dir):
+@pytest.mark.parametrize(
+    ("language", "months"),
+    [
+        (Language.ES, ["Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre"]),
+        (Language.EN, ["June", "July", "August", "September", "October", "November"]),
+    ],
+)
+def test_type_1_has_seven_slides_and_dropradar_in_october(state_dir, language, months):
     generator = _make_generator(state_dir)
-    package = generator.generate(VideoType.TYPE_1, Language.ES)
 
-    assert len(package.ordered_slides) == 7
-    assert "Dropradar" in package.slides_by_role[SlideRole.FEBRUARY]
-    # Months in correct narrative order.
-    assert package.slides_by_role[SlideRole.OCTOBER].startswith("Octubre")
-    assert package.slides_by_role[SlideRole.MARCH].startswith("Marzo")
+    for _ in range(3):
+        package = generator.generate(VideoType.TYPE_1, language)
+        assert len(package.ordered_slides) == 7
+        assert [slide.split(" - ", 1)[0] for slide in package.ordered_slides[1:]] == months
+        assert "Dropradar" in package.ordered_slides[5]
+        generator.state.set_last_text_choice(VideoType.TYPE_1, language, package.choice_key)
 
 
 def test_type_1_hooks_are_short_and_example_like(state_dir):
@@ -91,7 +98,7 @@ def test_type_1_es_rejects_unapproved_exactamente_hook():
                 SlideRole.HOOK: (
                     "Exactamente cuánto facturé haciendo Dropshipping en mis primeros 6 meses"
                 ),
-                SlideRole.FEBRUARY: "Febrero - 800€\nDropradar",
+                SlideRole.FEBRUARY: "Octubre - 800€\nDropradar",
             },
         )
 
@@ -100,11 +107,10 @@ def test_type_1_amounts_are_coherent(state_dir):
     generator = _make_generator(state_dir)
     for _ in range(20):
         package = generator.generate(VideoType.TYPE_1, Language.ES)
-        feb_amount = _extract_amount(package.slides_by_role[SlideRole.FEBRUARY])
-        march_amount = _extract_amount(package.slides_by_role[SlideRole.MARCH])
-        assert feb_amount is not None and march_amount is not None
-        # March is the stable-income month, must beat February.
-        assert march_amount > feb_amount
+        promo_amount = _extract_amount(package.slides_by_role[SlideRole.FEBRUARY])
+        final_amount = _extract_amount(package.slides_by_role[SlideRole.MARCH])
+        assert promo_amount is not None and final_amount is not None
+        assert final_amount > promo_amount
 
 
 def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
@@ -116,8 +122,8 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
         first.slides_by_role[SlideRole.HOOK]
         == "Cuanto facturé haciendo Dropshipping\nen mis primeros 6 meses y por qué casi lo dejo..."
     )
-    assert "Febrero - 800€" in first.slides_by_role[SlideRole.FEBRUARY]
-    assert "Marzo - 2700€" in first.slides_by_role[SlideRole.MARCH]
+    assert "Octubre - 800€" in first.slides_by_role[SlideRole.FEBRUARY]
+    assert "Noviembre - 2700€" in first.slides_by_role[SlideRole.MARCH]
 
     generator.state.set_last_text_choice(
         VideoType.TYPE_1,
@@ -130,8 +136,8 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
         second.slides_by_role[SlideRole.HOOK]
         == "Cuanto gané haciendo Dropshipping\nen estos 6 meses y por qué casi lo dejo...."
     )
-    assert "Febrero - 680€" in second.slides_by_role[SlideRole.FEBRUARY]
-    assert "Marzo - 3100€" in second.slides_by_role[SlideRole.MARCH]
+    assert "Octubre - 680€" in second.slides_by_role[SlideRole.FEBRUARY]
+    assert "Noviembre - 3100€" in second.slides_by_role[SlideRole.MARCH]
 
     generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, second.choice_key)
     third = generator.generate(VideoType.TYPE_1, Language.ES)
@@ -140,8 +146,8 @@ def test_type_1_es_uses_fixed_variants_and_alternates(state_dir):
         third.slides_by_role[SlideRole.HOOK]
         == "Cuanto facturé haciendo Dropshipping\nen mis primeros 6 meses y porqué casi lo dejo..."
     )
-    assert "Febrero - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
-    assert "Marzo - 3100€" in third.slides_by_role[SlideRole.MARCH]
+    assert "Octubre - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
+    assert "Noviembre - 3100€" in third.slides_by_role[SlideRole.MARCH]
 
     generator.state.set_last_text_choice(VideoType.TYPE_1, Language.ES, third.choice_key)
     assert generator.generate(VideoType.TYPE_1, Language.ES).choice_key == "a"
@@ -176,10 +182,10 @@ def test_type_1_es_female_gender_adapts_self_references(state_dir):
         gender=VideoGender.FEMALE,
     )
 
-    march = second.slides_by_role[SlideRole.MARCH]
-    assert "No soy millonaria" in march
-    assert "no haberme rendido" in march
-    assert "millonario" not in march
+    closing_slide = second.slides_by_role[SlideRole.MARCH]
+    assert "No soy millonaria" in closing_slide
+    assert "no haberme rendido" in closing_slide
+    assert "millonario" not in closing_slide
 
 
 def test_type_2_es_female_gender_uses_specific_hook(state_dir):
@@ -211,8 +217,8 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
         first.slides_by_role[SlideRole.HOOK]
         == "How much I earned doing Dropshipping\nin my first 6 months and why I almost quit..."
     )
-    assert "February - $800" in first.slides_by_role[SlideRole.FEBRUARY]
-    assert "March - $2700" in first.slides_by_role[SlideRole.MARCH]
+    assert "October - $800" in first.slides_by_role[SlideRole.FEBRUARY]
+    assert "November - $2700" in first.slides_by_role[SlideRole.MARCH]
 
     generator.state.set_last_text_choice(VideoType.TYPE_1, Language.EN, first.choice_key)
     second = generator.generate(VideoType.TYPE_1, Language.EN)
@@ -221,8 +227,8 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
         second.slides_by_role[SlideRole.HOOK]
         == "How much I made doing Dropshipping\nin my first 6 months and why I almost quit..."
     )
-    assert "February - $680" in second.slides_by_role[SlideRole.FEBRUARY]
-    assert "March - $3100" in second.slides_by_role[SlideRole.MARCH]
+    assert "October - $680" in second.slides_by_role[SlideRole.FEBRUARY]
+    assert "November - $3100" in second.slides_by_role[SlideRole.MARCH]
 
     generator.state.set_last_text_choice(VideoType.TYPE_1, Language.EN, second.choice_key)
     third = generator.generate(VideoType.TYPE_1, Language.EN)
@@ -231,8 +237,8 @@ def test_type_1_en_uses_fixed_variants_and_alternates(state_dir):
         third.slides_by_role[SlideRole.HOOK]
         == "Exactly how much I made doing Dropshipping\nin my first 6 months and why I almost quit."
     )
-    assert "February - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
-    assert "March - 3100€" in third.slides_by_role[SlideRole.MARCH]
+    assert "October - 1220€" in third.slides_by_role[SlideRole.FEBRUARY]
+    assert "November - 3100€" in third.slides_by_role[SlideRole.MARCH]
 
     generator.state.set_last_text_choice(VideoType.TYPE_1, Language.EN, third.choice_key)
     assert generator.generate(VideoType.TYPE_1, Language.EN).choice_key == "a"
