@@ -98,6 +98,7 @@ R2_TEMPLATE_CACHE_MAX_ITEMS = 8
 R2_TEMPLATE_CACHE_MAX_BYTES = 512 * 1024 * 1024
 R2_TEMPLATE_PARTIAL_MAX_AGE_SECONDS = 6 * 60 * 60
 CARTOOLS_UPLOAD_BATCH_GAP_SECONDS = 30 * 60
+R2_PRIORITY_IMAGE_FOLDER = "priority/"
 
 
 @dataclass(frozen=True)
@@ -116,6 +117,12 @@ class _AdviceR2Selection:
     queue_id: str
     queue_ids: tuple[str, ...]
     queue_restarted: bool
+
+
+@dataclass(frozen=True)
+class _Type5R2Selection:
+    media: list[MediaCandidate]
+    priority_ids: list[str]
 
 
 TEMPLATE_VIDEO_SOCIAL_COPIES: dict[Language, tuple[SocialCopy, ...]] = {
@@ -1185,7 +1192,7 @@ class VideoCreationService:
             peek_choice = self.state.peek_next_parkez_advice_image_id
         elif video_type == VideoType.ADVICE:
             label, origin, source_key, source_prefix = "El Tipo 4", "del Tipo 4", "type_4", "r2-type4"
-            peek_choice = self.state.peek_next_type_4_image_id
+            peek_choice = None
         else:
             raise ValueError("Tipo de consejos no disponible para la cola R2.")
         if (
@@ -1199,9 +1206,20 @@ class VideoCreationService:
 
         attempted_prefixes = [prefix]
         listing_prefix = f"{prefix}/" if prefix else ""
-        listed_images = self._list_advice_images(listing_prefix)
         bucket_prefix = self.settings.r2_bucket.strip().strip("/")
         qualified_bucket_prefix = f"{bucket_prefix}/" if bucket_prefix else ""
+        tools_prefix = (
+            self.settings.r2_cartools_image_prefix.strip().strip("/")
+            or DEFAULT_R2_CARTOOLS_IMAGE_PREFIX
+        )
+        exclude_tools_priority = (
+            video_type == VideoType.PARKEZ_ADVICE
+            and prefix.removeprefix(qualified_bucket_prefix)
+            == tools_prefix.removeprefix(qualified_bucket_prefix)
+        )
+        listed_images = self._list_advice_images(
+            listing_prefix, exclude_priority=exclude_tools_priority,
+        )
         if (
             not listed_images
             and qualified_bucket_prefix
@@ -1212,7 +1230,7 @@ class VideoCreationService:
                 attempted_prefixes.append(fallback_prefix)
                 fallback_listing_prefix = f"{fallback_prefix}/"
                 fallback_images = self._list_advice_images(
-                    fallback_listing_prefix
+                    fallback_listing_prefix, exclude_priority=exclude_tools_priority,
                 )
                 if fallback_images:
                     LOGGER.info(
@@ -1225,12 +1243,15 @@ class VideoCreationService:
                     listing_prefix = fallback_listing_prefix
                     listed_images = fallback_images
 
-        images_by_identity: dict[str, R2Object] = {}
-        for image in listed_images:
-            identity = self._r2_template_content_identity(image)
-            if video_type != VideoType.ADVICE:
-                identity = f"{self.settings.r2_bucket}:{prefix}:{identity}"
-            images_by_identity.setdefault(identity, image)
+        priority_prefix = f"{listing_prefix}{R2_PRIORITY_IMAGE_FOLDER}"
+        images_by_identity = self._r2_images_by_identity(
+            listed_images, priority_prefix if video_type == VideoType.ADVICE else None,
+        )
+        if video_type != VideoType.ADVICE:
+            images_by_identity = {
+                f"{self.settings.r2_bucket}:{prefix}:{identity}": image
+                for identity, image in images_by_identity.items()
+            }
         if not images_by_identity:
             attempted = " o ".join(repr(item) for item in attempted_prefixes)
             raise ValueError(
@@ -1239,7 +1260,16 @@ class VideoCreationService:
             )
 
         queue_ids = list(images_by_identity)
-        selected_identity, queue_restarted = peek_choice(queue_ids)
+        if peek_choice is None:
+            selected_identity, queue_restarted = self.state.peek_next_type_4_image_id(
+                queue_ids,
+                priority_ids=[
+                    image_id for image_id, image in images_by_identity.items()
+                    if image.key.startswith(priority_prefix)
+                ],
+            )
+        else:
+            selected_identity, queue_restarted = peek_choice(queue_ids)
         selected = images_by_identity.get(str(selected_identity or ""))
         if selected is None:
             raise RuntimeError(f"La cola R2 {origin} no devolvió una imagen válida.")
@@ -1275,13 +1305,17 @@ class VideoCreationService:
             queue_restarted=queue_restarted,
         )
 
-    def _list_advice_images(self, listing_prefix: str) -> list[R2Object]:
+    def _list_advice_images(
+        self, listing_prefix: str, *, exclude_priority: bool = False,
+    ) -> list[R2Object]:
         """Put the newest R2 uploads first, with a stable key order for ties."""
+        priority_prefix = f"{listing_prefix}{R2_PRIORITY_IMAGE_FOLDER}"
         return sorted(
             (
                 image
                 for image in self.r2_storage.list_images(listing_prefix)
                 if image.key.startswith(listing_prefix)
+                and (not exclude_priority or not image.key.startswith(priority_prefix))
             ),
             key=lambda item: (
                 -item.last_modified.timestamp()
@@ -1524,10 +1558,8 @@ class VideoCreationService:
                     prefix = fallback_prefix
                     listing_prefix = fallback_listing_prefix
                     listed_images = fallback_images
-        images_by_identity = {}
-        for image in listed_images:
-            identity = self._r2_template_content_identity(image)
-            images_by_identity.setdefault(identity, image)
+        priority_prefix = f"{listing_prefix}{R2_PRIORITY_IMAGE_FOLDER}"
+        images_by_identity = self._r2_images_by_identity(listed_images, priority_prefix)
         if not images_by_identity:
             attempted = " o ".join(repr(item) for item in attempted_prefixes)
             raise ValueError(
@@ -1536,7 +1568,11 @@ class VideoCreationService:
             )
 
         queue_ids = list(images_by_identity)
-        priority_ids = self._latest_cartools_upload_batch_ids(images_by_identity)
+        priority_ids = [
+            image_id
+            for image_id, image in images_by_identity.items()
+            if image.key.startswith(priority_prefix)
+        ] or self._latest_cartools_upload_batch_ids(images_by_identity)
         selected_identity, queue_restarted = self.state.peek_next_cartools_image_id(
             queue_ids,
             priority_ids=priority_ids,
@@ -1627,7 +1663,8 @@ class VideoCreationService:
 
         job_id = self._build_job_id()
         job_dir = self._job_output_dir(job_id, request.user_id)
-        r2_media = self._download_type_5_images_from_r2(job_dir)
+        r2_selection = self._download_type_5_images_from_r2(job_dir)
+        r2_media = r2_selection.media
         media = [*r2_media, self._build_type_5_dropradar_media()]
         slides = [
             SlidePlan(
@@ -1655,20 +1692,6 @@ class VideoCreationService:
             job_dir,
             embed_slide_text=False,
         )
-        self.state.remember_type_5_business_pair_choice(
-            str(selected_business_pair_id), business_pair_ids,
-        )
-        social_copies = type_5_social_copies(language, business_roles)
-        social_copy_ids = [f"type5-{index:02d}" for index in range(len(social_copies))]
-        selected_social_id, social_queue_restarted = (
-            self.state.get_next_type_5_social_copy_id(social_copy_ids)
-        )
-        try:
-            selected_social_index = social_copy_ids.index(str(selected_social_id))
-        except ValueError:
-            selected_social_index = 0
-        social_copy = social_copies[selected_social_index]
-
         self.state.log_job(
             self.state.build_job_record(
                 job_id=job_id,
@@ -1684,6 +1707,20 @@ class VideoCreationService:
                 chat_id=request.chat_id,
             )
         )
+        self.state.remember_type_5_priority_image_choices(r2_selection.priority_ids)
+        self.state.remember_type_5_business_pair_choice(
+            str(selected_business_pair_id), business_pair_ids,
+        )
+        social_copies = type_5_social_copies(language, business_roles)
+        social_copy_ids = [f"type5-{index:02d}" for index in range(len(social_copies))]
+        selected_social_id, social_queue_restarted = (
+            self.state.get_next_type_5_social_copy_id(social_copy_ids)
+        )
+        try:
+            selected_social_index = social_copy_ids.index(str(selected_social_id))
+        except ValueError:
+            selected_social_index = 0
+        social_copy = social_copies[selected_social_index]
         if business_queue_restarted:
             LOGGER.info("Type 5 business queue restarted after completing a cycle")
         if social_queue_restarted:
@@ -1707,33 +1744,26 @@ class VideoCreationService:
     def _download_type_5_images_from_r2(
         self,
         job_dir: Path,
-    ) -> list[MediaCandidate]:
+    ) -> _Type5R2Selection:
         if getattr(self, "r2_storage", None) is None or not self.r2_storage.is_configured:
             raise ValueError(
                 "El Tipo 5 necesita Cloudflare R2 configurado. Sube las imagenes al "
                 f"prefijo {self.settings.r2_type_5_image_prefix!r}."
             )
-        prefix = self.settings.r2_type_5_image_prefix
+        prefix = self.settings.r2_type_5_image_prefix.strip().strip("/")
+        listing_prefix = f"{prefix}/" if prefix else ""
+        priority_prefix = f"{listing_prefix}{R2_PRIORITY_IMAGE_FOLDER}"
         listed_images = sorted(
-            self.r2_storage.list_images(prefix),
+            (
+                image for image in self.r2_storage.list_images(listing_prefix)
+                if image.key.startswith(listing_prefix)
+            ),
             key=lambda item: (
                 bool(re.search(r"\s\(\d+\)$", Path(item.key).stem)),
                 item.key,
             ),
         )
-        images = []
-        seen_content: set[str] = set()
-        for image in listed_images:
-            etag = str(getattr(image, "etag", "") or "").strip().strip('"').lower()
-            identity = (
-                f"etag:{etag}:{int(getattr(image, 'size', 0) or 0)}"
-                if etag
-                else f"key:{image.key}"
-            )
-            if identity in seen_content:
-                continue
-            seen_content.add(identity)
-            images.append(image)
+        images = self._r2_images_by_identity(listed_images, priority_prefix)
         r2_image_count = len(TYPE_5_ROLES) - 1
         if len(images) < r2_image_count:
             raise ValueError(
@@ -1741,10 +1771,33 @@ class VideoCreationService:
                 f"el prefijo {prefix!r}; encontre {len(images)} imagenes unicas."
             )
 
-        selected_keys = [image.key for image in random.sample(images, k=r2_image_count)]
+        priority_images = {
+            image_id: image for image_id, image in images.items()
+            if image.key.startswith(priority_prefix)
+        }
+        selected_priority_ids = self.state.pending_type_5_priority_image_ids(
+            list(priority_images)
+        )[:r2_image_count]
+        selected_images = [
+            priority_images[image_id] for image_id in selected_priority_ids
+        ]
+        remaining_count = r2_image_count - len(selected_images)
+        if remaining_count:
+            candidates = list(images.values())
+            if selected_images:
+                candidates = [
+                    image for image_id, image in images.items()
+                    if image_id not in priority_images
+                ]
+                if len(candidates) < remaining_count:
+                    candidates = [
+                        image for image in images.values() if image not in selected_images
+                    ]
+            selected_images.extend(random.sample(candidates, k=remaining_count))
         inputs_dir = job_dir / "type_5_inputs"
         media: list[MediaCandidate] = []
-        for index, key in enumerate(selected_keys, start=1):
+        for index, selected_image in enumerate(selected_images, start=1):
+            key = selected_image.key
             suffix = Path(key).suffix.lower()
             if suffix not in {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".avif"}:
                 suffix = ".jpg"
@@ -1769,7 +1822,7 @@ class VideoCreationService:
                     created_at="r2",
                 )
             )
-        return media
+        return _Type5R2Selection(media, selected_priority_ids)
 
     def _build_type_5_dropradar_media(self) -> MediaCandidate:
         fixed_path = (
@@ -2593,6 +2646,26 @@ class VideoCreationService:
         # Older/test R2 listings may not expose an ETag. The key is then the
         # strongest stable identity available without downloading every object.
         return f"key:{video.key}"
+
+    def _r2_images_by_identity(
+        self, images: list[R2Object], priority_prefix: str | None = None,
+    ) -> dict[str, R2Object]:
+        identified_images = [
+            (self._r2_template_content_identity(image), image) for image in images
+        ]
+        catalog_ids = {
+            image_id for image_id, image in identified_images
+            if priority_prefix and not image.key.startswith(priority_prefix)
+        }
+        images_by_identity: dict[str, R2Object] = {}
+        for image_id, image in identified_images:
+            if (
+                priority_prefix and image_id in catalog_ids
+                and image.key.startswith(priority_prefix)
+            ):
+                continue
+            images_by_identity.setdefault(image_id, image)
+        return images_by_identity
 
     def _normalize_slide_images(
         self,

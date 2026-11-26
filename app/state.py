@@ -58,6 +58,7 @@ class StateStore:
         self._story_reference_queue_path = self.state_dir / "story_reference_queue.json"
         self._type_5_social_queue_path = self.state_dir / "type5_social_queue.json"
         self._type_5_business_queue_path = self.state_dir / "type5_business_queue.json"
+        self._type_5_priority_images_path = self.state_dir / "type5_priority_images.json"
         self._cartools_background_queue_path = (
             self.state_dir / "cartools_background_queue.json"
         )
@@ -809,14 +810,39 @@ class StateStore:
             pair_ids,
         )
 
+    def pending_type_5_priority_image_ids(self, image_ids: list[str]) -> list[str]:
+        if not image_ids:
+            return []
+        with self._exclusive():
+            consumed = self._consumed_type_5_priority_image_ids()
+        return [image_id for image_id in image_ids if image_id not in consumed]
+
+    def remember_type_5_priority_image_choices(self, selected_ids: list[str]) -> None:
+        """Keep priority photos one-time without changing normal random sampling."""
+        if not selected_ids:
+            return
+        with self._exclusive():
+            consumed = self._consumed_type_5_priority_image_ids()
+            consumed.update(selected_ids)
+            self._write_json(self._type_5_priority_images_path, sorted(consumed))
+
+    def _consumed_type_5_priority_image_ids(self) -> set[str]:
+        saved = self._read_json(self._type_5_priority_images_path, [])
+        if not isinstance(saved, list):
+            return set()
+        return {image_id for image_id in saved if isinstance(image_id, str)}
+
     def peek_next_type_4_image_id(
         self,
         image_ids: list[str],
+        *,
+        priority_ids: list[str] | None = None,
     ) -> tuple[str | None, bool]:
         """Inspect the next Type 4 image in the current R2 priority order."""
-        return self._peek_simple_cycle_id(
+        return self._peek_r2_priority_image_id(
             self._type_4_image_queue_path,
             image_ids,
+            priority_ids=priority_ids,
             prefer_input_order=True,
         )
 
@@ -826,7 +852,7 @@ class StateStore:
         image_ids: list[str],
     ) -> bool:
         """Consume a clean Type 4 image only after a successful render."""
-        return self._remember_simple_cycle_choice(
+        return self._remember_r2_priority_image_choice(
             self._type_4_image_queue_path,
             selected_id,
             image_ids,
@@ -844,7 +870,8 @@ class StateStore:
             return None, False
         with self._exclusive():
             queue, order, remaining, _started, restarted = (
-                self._cartools_image_cycle_state(
+                self._r2_priority_image_cycle_state(
+                    self._cartools_image_queue_path,
                     image_ids,
                     priority_ids=priority_ids,
                 )
@@ -857,9 +884,6 @@ class StateStore:
                     "remaining": remaining,
                     "last_selected": selected,
                     "started": selected is not None,
-                    "restart_after_new": bool(
-                        queue.get("restart_after_new", False)
-                    ),
                     "prioritized_ids": queue.get("prioritized_ids", []),
                 },
             )
@@ -872,30 +896,9 @@ class StateStore:
         priority_ids: list[str] | None = None,
     ) -> tuple[str | None, bool]:
         """Inspect the next car-tools image without consuming it."""
-        if not image_ids:
-            return None, False
-        with self._exclusive():
-            queue, order, remaining, started, restarted = (
-                self._cartools_image_cycle_state(
-                    image_ids,
-                    priority_ids=priority_ids,
-                )
-            )
-            selected = remaining[0] if remaining else None
-            self._write_json(
-                self._cartools_image_queue_path,
-                {
-                    "order": order,
-                    "remaining": remaining,
-                    "last_selected": queue.get("last_selected"),
-                    "started": started,
-                    "restart_after_new": bool(
-                        queue.get("restart_after_new", False)
-                    ),
-                    "prioritized_ids": queue.get("prioritized_ids", []),
-                },
-            )
-        return selected, restarted
+        return self._peek_r2_priority_image_id(
+            self._cartools_image_queue_path, image_ids, priority_ids=priority_ids,
+        )
 
     def remember_cartools_image_choice(
         self,
@@ -903,42 +906,89 @@ class StateStore:
         image_ids: list[str],
     ) -> bool:
         """Consume a previously peeked image after its carousel rendered."""
+        return self._remember_r2_priority_image_choice(
+            self._cartools_image_queue_path, selected_id, image_ids,
+        )
+
+    def _peek_r2_priority_image_id(
+        self,
+        path: Path,
+        image_ids: list[str],
+        *,
+        priority_ids: list[str] | None,
+        prefer_input_order: bool = False,
+    ) -> tuple[str | None, bool]:
+        if not image_ids:
+            return None, False
+        with self._exclusive():
+            queue, order, remaining, started, restarted = (
+                self._r2_priority_image_cycle_state(
+                    path,
+                    image_ids,
+                    priority_ids=priority_ids,
+                    prefer_input_order=prefer_input_order,
+                )
+            )
+            selected = remaining[0] if remaining else None
+            self._write_json(
+                path,
+                {
+                    "order": order,
+                    "remaining": remaining,
+                    "last_selected": queue.get("last_selected"),
+                    "started": started,
+                    "prioritized_ids": queue.get("prioritized_ids", []),
+                },
+            )
+        return selected, restarted
+
+    def _remember_r2_priority_image_choice(
+        self,
+        path: Path,
+        selected_id: str,
+        image_ids: list[str],
+        *,
+        prefer_input_order: bool = False,
+    ) -> bool:
         if not selected_id or not image_ids:
             return False
         with self._exclusive():
             queue, order, remaining, _started, _restarted = (
-                self._cartools_image_cycle_state(image_ids)
+                self._r2_priority_image_cycle_state(
+                    path, image_ids, prefer_input_order=prefer_input_order,
+                )
             )
             if selected_id not in remaining:
                 return False
             remaining.remove(selected_id)
             self._write_json(
-                self._cartools_image_queue_path,
+                path,
                 {
                     "order": order,
                     "remaining": remaining,
                     "last_selected": selected_id,
                     "started": True,
-                    "restart_after_new": bool(
-                        queue.get("restart_after_new", False)
-                    ),
                     "prioritized_ids": queue.get("prioritized_ids", []),
                 },
             )
         return True
 
-    def _cartools_image_cycle_state(
+    def _r2_priority_image_cycle_state(
         self,
+        path: Path,
         image_ids: list[str],
         *,
         priority_ids: list[str] | None = None,
+        prefer_input_order: bool = False,
     ) -> tuple[dict[str, Any], list[str], list[str], bool, bool]:
-        """Prioritize newly discovered R2 images, then restart the full cycle."""
-        queue = self._read_json(self._cartools_image_queue_path, {})
+        """Insert new R2 images before the pending part of the current cycle."""
+        queue = self._read_json(path, {})
         if not isinstance(queue, dict):
             queue = {}
 
-        order = self._normalize_template_video_order(queue, image_ids)
+        order = self._normalize_template_video_order(
+            {} if prefer_input_order else queue, image_ids,
+        )
         saved_order_raw = queue.get("order", [])
         saved_order: set[str] = set()
         if isinstance(saved_order_raw, list):
@@ -947,8 +997,6 @@ class StateStore:
                 for item in saved_order_raw
                 if str(item or "").strip()
             }
-        new_ids = [item for item in order if item not in saved_order]
-
         remaining_raw = queue.get("remaining")
         if isinstance(remaining_raw, list):
             remaining = self._normalize_template_video_order(
@@ -959,54 +1007,39 @@ class StateStore:
         else:
             remaining = list(order)
             started = False
+        if prefer_input_order and "prioritized_ids" not in queue:
+            # Restore the newest-first order for Type 4 queues saved before
+            # pending uploads were tracked separately.
+            pending = set(remaining)
+            remaining = [item for item in order if item in pending]
 
-        restart_after_new = bool(queue.get("restart_after_new", False))
-        if new_ids and saved_order:
-            if restart_after_new:
-                remaining = [
-                    *new_ids,
-                    *(item for item in remaining if item not in new_ids),
-                ]
-            else:
-                # A new upload batch supersedes the unfinished old cycle. Once
-                # this batch is exhausted, the queue starts again with all IDs.
-                remaining = list(new_ids)
-            restart_after_new = True
-
-        prioritized_raw = queue.get("prioritized_ids", [])
-        prioritized_ids: list[str] = []
-        if isinstance(prioritized_raw, list):
-            prioritized_ids = [
-                str(item or "").strip()
-                for item in prioritized_raw
-                if str(item or "").strip()
-            ]
+        raw_prioritized_ids = queue.get("prioritized_ids", [])
+        prioritized_ids = []
+        if isinstance(raw_prioritized_ids, list):
+            prioritized_ids = self._normalize_template_video_order({}, raw_prioritized_ids)
         prioritized_set = set(prioritized_ids)
+        new_ids = [item for item in order if saved_order and item not in saved_order]
+        pending_or_new = set(remaining).union(new_ids)
         normalized_priority = self._normalize_template_video_order(
             {},
-            [item for item in (priority_ids or []) if item in order],
+            [item for item in (priority_ids or []) if item in pending_or_new],
         )
         unseen_priority = [
             item for item in normalized_priority if item not in prioritized_set
         ]
-        if unseen_priority:
-            if restart_after_new:
-                remaining = [
-                    *unseen_priority,
-                    *(item for item in remaining if item not in unseen_priority),
-                ]
-            else:
-                remaining = list(unseen_priority)
-            restart_after_new = True
-            prioritized_ids.extend(unseen_priority)
+        front = list(dict.fromkeys([*unseen_priority, *new_ids]))
+        if started and not remaining and new_ids:
+            # The old catalog was about to wrap. Include its next cycle now
+            # so this batch is not served again during that same cycle.
+            remaining = [item for item in order if item in saved_order]
+        front_set = set(front)
+        remaining = [*front, *(item for item in remaining if item not in front_set)]
 
         restarted = bool(started and not remaining)
         if not remaining:
             remaining = list(order)
-            restart_after_new = False
 
-        queue["restart_after_new"] = restart_after_new
-        queue["prioritized_ids"] = prioritized_ids
+        queue["prioritized_ids"] = [*prioritized_ids, *unseen_priority]
         return queue, order, remaining, started, restarted
 
     def peek_next_cartools_background_id(

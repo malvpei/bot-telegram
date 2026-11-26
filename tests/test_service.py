@@ -3,10 +3,11 @@ from __future__ import annotations
 import os
 import shutil
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from threading import Lock
+from threading import Barrier, Lock
 from uuid import uuid4
 
 from PIL import Image, ImageChops
@@ -812,13 +813,16 @@ def test_type_4_r2_image_queue_uses_exact_prefix_dedup_and_bucket_fallback(
     assert storage.downloaded_keys == ["4/a.jpg", "4/b.jpg"]
 
 
-@pytest.mark.parametrize("queue_mode", ["empty", "existing", "legacy"])
+@pytest.mark.parametrize(
+    "queue_mode", ["empty", "existing", "legacy", "marked", "marked-without-date", "completed"],
+)
 def test_type_4_new_uploads_go_first_and_preserve_pending_photos(
     tmp_path,
     queue_mode,
 ):
     old_upload = datetime(2026, 9, 7, 12, tzinfo=timezone.utc)
     new_upload = datetime(2026, 9, 16, 15, tzinfo=timezone.utc)
+    new_prefix = "4/priority" if queue_mode.startswith("marked") else "4"
     storage = Type4AdviceR2Storage(
         [
             R2Object("4/a-old.jpg", 100, "old-a", old_upload),
@@ -844,16 +848,24 @@ def test_type_4_new_uploads_go_first_and_preserve_pending_photos(
             initial.queue_id,
             list(initial.queue_ids),
         )
+    if queue_mode == "completed":
+        last = service._download_next_type_4_image_from_r2(tmp_path / "last")
+        assert last.media.source_id == "r2-type4:4/a-old.jpg"
+        assert service.state.remember_type_4_image_choice(last.queue_id, list(last.queue_ids))
 
+    first_uploaded_at = new_upload
+    second_uploaded_at = new_upload + timedelta(seconds=1)
+    if queue_mode == "marked-without-date":
+        first_uploaded_at = second_uploaded_at = None
     storage.objects.extend(
         [
-            R2Object("4/z-new-a.jpg", 120, "new-a", new_upload),
+            R2Object(f"{new_prefix}/z-new-a.jpg", 120, "new-a", first_uploaded_at),
             R2Object(
-                "4/z-new-b.jpg", 130, "new-b", new_upload + timedelta(seconds=1)
+                f"{new_prefix}/z-new-b.jpg", 130, "new-b", second_uploaded_at
             ),
             # A duplicate from the same upload must not consume a second turn.
             R2Object(
-                "4/z-new-copy.jpg", 130, "new-b", new_upload + timedelta(seconds=1)
+                f"{new_prefix}/z-new-copy.jpg", 130, "new-b", second_uploaded_at
             ),
         ]
     )
@@ -872,8 +884,10 @@ def test_type_4_new_uploads_go_first_and_preserve_pending_photos(
             },
         )
 
-    expected_keys = ["4/z-new-b.jpg", "4/z-new-a.jpg"]
-    if queue_mode == "empty":
+    expected_keys = [f"{new_prefix}/z-new-b.jpg", f"{new_prefix}/z-new-a.jpg"]
+    if queue_mode == "marked-without-date":
+        expected_keys.reverse()
+    if queue_mode in {"empty", "completed"}:
         expected_keys.append("4/b-old.jpg")
     expected_keys.append("4/a-old.jpg")
     for index, expected_key in enumerate(expected_keys):
@@ -894,7 +908,8 @@ def test_type_4_new_uploads_go_first_and_preserve_pending_photos(
         )
 
     wrapped = service._download_next_type_4_image_from_r2(tmp_path / "wrapped")
-    assert wrapped.media.source_id == "r2-type4:4/z-new-b.jpg"
+    wrapped_key = "4/b-old.jpg" if queue_mode == "marked-without-date" else expected_keys[0]
+    assert wrapped.media.source_id == f"r2-type4:{wrapped_key}"
     assert wrapped.queue_restarted is True
 
 
@@ -1234,11 +1249,13 @@ def test_cartools_r2_image_queue_uses_exact_prefix_fifo_cycle_and_etag_dedup(
     assert restarted == [False, False, False, True]
 
 
-def test_cartools_r2_prioritizes_new_upload_batch_then_restarts_all_images(
-    tmp_path,
+@pytest.mark.parametrize("marked", [True, False])
+def test_cartools_r2_prioritizes_new_upload_batch_then_resumes_pending_images(
+    tmp_path, marked,
 ):
     old_upload = datetime(2026, 8, 30, 9, 32, tzinfo=timezone.utc)
     new_upload = datetime(2026, 9, 10, 8, 22, tzinfo=timezone.utc)
+    new_prefix = "cartools/priority" if marked else "cartools"
     storage = CartoolsR2Storage(
         [
             R2Object(
@@ -1278,16 +1295,16 @@ def test_cartools_r2_prioritizes_new_upload_batch_then_restarts_all_images(
     storage.objects.extend(
         [
             R2Object(
-                key="cartools/new-a.jpg",
+                key=f"{new_prefix}/new-a.jpg",
                 size=120,
                 etag="new-a",
-                last_modified=new_upload,
+                last_modified=None if marked else new_upload,
             ),
             R2Object(
-                key="cartools/new-b.jpg",
+                key=f"{new_prefix}/new-b.jpg",
                 size=130,
                 etag="new-b",
-                last_modified=new_upload + timedelta(seconds=1),
+                last_modified=None if marked else new_upload + timedelta(seconds=1),
             ),
         ]
     )
@@ -1326,12 +1343,12 @@ def test_cartools_r2_prioritizes_new_upload_batch_then_restarts_all_images(
         )
 
     assert selected == [
-        "r2-cartools:cartools/new-a.jpg",
-        "r2-cartools:cartools/new-b.jpg",
-        "r2-cartools:cartools/old-a.jpg",
+        f"r2-cartools:{new_prefix}/new-a.jpg",
+        f"r2-cartools:{new_prefix}/new-b.jpg",
         "r2-cartools:cartools/old-b.jpg",
+        "r2-cartools:cartools/old-a.jpg",
     ]
-    assert restarted == [False, False, True, False]
+    assert restarted == [False, False, False, True]
 
 
 def test_cartools_r2_falls_back_when_prefix_repeats_bucket_name(tmp_path):
@@ -1679,7 +1696,7 @@ def test_type_5_uses_three_random_clean_photos_and_rotates_social_copy(monkeypat
         )
 
         assert result.video_type == VideoType.TYPE_5
-        assert r2_storage.listed_image_prefixes == ["tipo4/imagenstipo4"]
+        assert r2_storage.listed_image_prefixes == ["tipo4/imagenstipo4/"]
         assert r2_storage.downloaded_keys == [
             f"tipo4/imagenstipo4/{index:02d}.jpg"
             for index in range(4, 7)
@@ -2019,6 +2036,79 @@ def test_type_5_failure_does_not_consume_business_pair(tmp_path, monkeypatch, fa
     assert result.social_copy == type_5_social_copies(Language.ES)[0]
 
 
+@pytest.mark.parametrize("failure_stage", ["render", "log"])
+def test_type_5_prioritizes_each_new_photo_once_before_resuming_random_selection(
+    tmp_path, monkeypatch, failure_stage,
+):
+    prefix = "tipo4/imagenstipo4"
+    old = [f"{prefix}/catalog-{index}.jpg" for index in range(3)]
+    new = [f"{prefix}/priority/new-{index}.jpg" for index in range(4)]
+    storage = CartoolsR2Storage([
+        *(R2Object(key, 100, f"image-{index}") for index, key in enumerate([*old, *new])),
+        R2Object(f"{prefix}/priority/duplicate.jpg", 100, "image-0"),
+        R2Object(f"{prefix}-old/outside.jpg", 100, "outside"),
+    ])
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = replace(
+        get_settings(),
+        root_dir=tmp_path,
+        data_dir=tmp_path / "data",
+        outputs_dir=tmp_path / "outputs",
+        state_dir=tmp_path / "state",
+        r2_type_5_image_prefix=prefix,
+        width=72,
+        height=128,
+    )
+    service.state = StateStore(service.settings.state_dir)
+    service.renderer = FakeRenderer()
+    service.r2_storage = storage
+    service._job_lock = Lock()
+    request = VideoRequest(
+        chat_id=1,
+        user_id=1,
+        video_type=VideoType.TYPE_5,
+        language=Language.ES,
+        account_inputs=[],
+    )
+    sampled_batches = []
+
+    def sample(images, *, k):
+        sampled_batches.append(([image.key for image in images], k))
+        return images[:k]
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("generation failed")
+
+    monkeypatch.setattr("app.service.random.sample", sample)
+    with monkeypatch.context() as failure_patch:
+        if failure_stage == "render":
+            failure_patch.setattr(service.renderer, "render_slide_still", fail)
+        else:
+            failure_patch.setattr(service.state, "log_job", fail)
+        with pytest.raises(RuntimeError, match="generation failed"):
+            service.create_video(request)
+    assert storage.downloaded_keys == new[:3]
+
+    started = Barrier(2)
+
+    def make_concurrent_request():
+        started.wait(timeout=5)
+        return service.create_video(request)
+
+    service.state = StateStore(service.settings.state_dir)
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        requests = [executor.submit(make_concurrent_request) for _ in range(2)]
+        for pending in requests:
+            pending.result(timeout=10)
+    assert storage.downloaded_keys[3:] == [*new, *old[:2]]
+
+    service.state = StateStore(service.settings.state_dir)
+    service.create_video(request)
+    assert storage.downloaded_keys[-3:] == old
+
+    assert sampled_batches == [(old, 2), ([*old, *new], 3)]
+
+
 def test_type_5_requires_three_images_in_its_own_prefix():
     root = Path(__file__).resolve().parents[1] / "data" / "_test_tmp" / f"service-{uuid4().hex}"
     root.mkdir(parents=True)
@@ -2060,7 +2150,7 @@ def test_type_5_deduplicates_identical_r2_copies_by_etag():
         service.state = StateStore(settings.state_dir)
         service.r2_storage = storage
 
-        media = service._download_type_5_images_from_r2(root / "job")
+        media = service._download_type_5_images_from_r2(root / "job").media
 
         assert len(media) == 3
         assert "tipo4/imagenstipo4/a (1).jpg" not in storage.downloaded_keys

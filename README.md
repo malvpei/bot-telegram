@@ -161,7 +161,7 @@ Todas las variables viven en `.env`. Las interesantes:
 | `ACCOUNT_PICK_ATTEMPTS` | 0 | objetivo inicial heredado; el selector puede seguir probando más cuentas para evitar falsos "sin imágenes" |
 | `R2_TYPE_4_IMAGE_PREFIX` | `4` | carpeta R2 de la imagen limpia que acompaña al Tipo 4 - Consejos |
 | `R2_GOGRADUATE_IMAGE_PREFIX` | `c` | carpeta R2 de la imagen limpia que acompaña a `/g`, dentro de `R2_BUCKET` |
-| `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 de la que el Tipo 5 toma tres imágenes al azar |
+| `R2_TYPE_5_IMAGE_PREFIX` | `tipo4/imagenstipo4` | carpeta R2 de las tres fotos del Tipo 5 y su lote prioritario |
 | `R2_CARTOOLS_IMAGE_PREFIX` | `cartools` | carpeta dentro de `R2_BUCKET` recorrida por la cola cíclica de imágenes limpias de `/createp` Tools |
 | `R2_PARKEZ_ADVICE_IMAGE_PREFIX` | misma carpeta que Tools | carpeta de la imagen adicional de `/createp` Consejos; tiene su propia cola aunque use los mismos archivos |
 | `R2_PARKEZ_APPS_IMAGE_PREFIX` | `apps` | carpeta de los cinco fondos de `/createp` Apps iPhone dentro de `R2_BUCKET` (`videos/apps/`); requiere cinco fotos de contenido distinto |
@@ -248,10 +248,9 @@ tras una generación correcta. Como segunda
 imagen, una foto limpia del prefijo R2 configurado por
 `R2_TYPE_4_IMAGE_PREFIX` (`4` por defecto). Las fotos R2 recorren una cola
 cíclica propia y solo avanzan cuando la entrega se genera correctamente.
-Las subidas más recientes salen primero, incluso si ya había una cola guardada:
-se reordenan las fotos pendientes por fecha de subida, de más reciente a más
-antigua. Después siguen las anteriores pendientes, sin repetir las ya usadas
-hasta completar el ciclo.
+Para priorizar un lote, sube las fotos a `4/priority/`. Las fotos nuevas
+salen primero y la cola retoma la siguiente foto que tenía pendiente. Las
+fotos del lote pasan a formar parte de las vueltas siguientes del catálogo.
 **Historia IA · Desde una foto** vuelve a estar disponible en `/create`, también
 sin cuentas de Instagram. Al elegir español o inglés, toma la siguiente foto
 del banco R2 y genera seis escenas ilustradas; la foto original cierra el
@@ -436,16 +435,20 @@ la [DGT](https://www.dgt.es/nuestros-servicios/permisos-de-conducir/tus-puntos-y
 Esta sexta imagen recorre todos los objetos una vez antes de reiniciar el ciclo,
 sin eliminarlos del bucket y solo avanza cuando el carrusel termina de renderizar.
 Cuando R2 incorpora imágenes que no estaban en el estado guardado, Tools mueve
-todo ese bloque nuevo al principio. Después de consumirlo, la cola reinicia una
-vuelta completa con el catálogo entero.
+todo ese bloque nuevo al principio. Después de consumirlo, la cola retoma la
+primera imagen que quedaba pendiente. La subcarpeta `cartools/priority/`
+identifica un lote para Tools cuando ParkEz Consejos usa el mismo prefijo.
 Las posiciones de las tres colas persisten en
 `DATA_DIR/state/cartools_background_queue.json` y
 `DATA_DIR/state/cartools_image_queue.json` y
 `DATA_DIR/state/cartools_social_copy_queue.json`, incluso tras reinicios o
 redeploys.
 
-El **Tipo 5** elige tres imágenes diferentes al azar del prefijo R2
-`tipo4/imagenstipo4` y añade como cuarta imagen el cierre fijo de Dropradar. Las
+El **Tipo 5** usa tres imágenes diferentes del prefijo R2 `tipo4/imagenstipo4`
+y añade como cuarta imagen el cierre fijo de Dropradar. Los archivos de la
+subcarpeta `priority/` salen primero, una vez cada uno. Si el lote deja huecos
+en un carrusel, se completan con fotos del catálogo. Tras agotar el lote,
+el bot vuelve a elegir las tres imágenes al azar de todo el prefijo. Las
 cuatro se entregan limpias, sin texto ni iconos, mientras el bot manda por
 separado el hook «Top negocios para jubilar a tus padres 🫡» y dos comparaciones
 rotativas entre Trading (2/10 ❌), Clipping (4/10 ❌), Amazon FBA (3/10 ❌),
@@ -458,8 +461,8 @@ y solo avanza tras generar las imágenes correctamente.
 Cada vídeo recibe un único título y una única descripción con hashtags, en
 mensajes distintos, adaptados a los negocios elegidos y al idioma, rotando entre
 doce parejas. Esta rotación de copy se guarda en
-`DATA_DIR/state/type5_social_queue.json`; la selección de imágenes R2 es
-aleatoria y no usa una cola persistente.
+`DATA_DIR/state/type5_social_queue.json`. El consumo de fotos prioritarias se
+guarda en `DATA_DIR/state/type5_priority_images.json` al terminar la generación.
 
 Flujo recomendado: ejecuta **/download_pool** para poblar un lote de fotos aptas
 en `data/state/media_pool.json`. El comando revisa cuentas una por una, descarga

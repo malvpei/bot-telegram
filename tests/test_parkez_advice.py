@@ -306,6 +306,27 @@ def test_parkez_prefix_can_include_bucket_and_have_its_own_folder(tmp_path):
     assert selection.queue_id == "videos:park-advice:etag:custom:100"
 
 
+@pytest.mark.parametrize("advice_prefix", ["", "videos/cartools"])
+def test_parkez_advice_excludes_tools_priority_at_the_shared_prefix(tmp_path, advice_prefix):
+    service = _service(tmp_path)
+    service.settings = replace(
+        service.settings, r2_cartools_image_prefix="cartools",
+        r2_parkez_advice_image_prefix=advice_prefix,
+    )
+    now = datetime.now(timezone.utc)
+    service.r2_storage.objects.extend([
+        R2Object("videos/cartools/priority/qualified.png", 100, "qualified", now),
+        R2Object("cartools/priority/tools.png", 100, "tools", now),
+    ])
+
+    selection = service._download_next_parkez_advice_image_from_r2(tmp_path / "advice")
+
+    assert selection.media.source_id == "r2-parkez-advice:cartools/a.png"
+    assert len(selection.queue_ids) == 2
+    expected_prefixes = ["videos/cartools/", "cartools/"] if advice_prefix else ["cartools/"]
+    assert service.r2_storage.listed_prefixes == expected_prefixes
+
+
 @pytest.mark.parametrize("background", PARKEZ_ADVICE_BACKGROUNDS)
 @pytest.mark.parametrize("app_name", PARKEZ_ADVICE_ICON_FILES)
 def test_any_missing_app_icon_fails_instead_of_using_a_generic_icon(tmp_path, background, app_name):
