@@ -88,6 +88,7 @@ from app.selector import ImageSelector, TYPE_2_TIP3_FIXED_IMAGE_NAME
 from app.state import StateStore
 from app.story_images import StoryCarouselImageGenerator
 from app.texts import ScriptGenerator
+from app.type_4_image_exclusions import TYPE_4_EXCLUDED_R2_IMAGE_IDS
 from app.type_5 import TYPE_5_BUSINESS_PAIRS, type_5_slide_texts, type_5_social_copies
 
 
@@ -1247,7 +1248,13 @@ class VideoCreationService:
         images_by_identity = self._r2_images_by_identity(
             listed_images, priority_prefix if video_type == VideoType.ADVICE else None,
         )
-        if video_type != VideoType.ADVICE:
+        if video_type == VideoType.ADVICE:
+            images_by_identity = {
+                identity: image
+                for identity, image in images_by_identity.items()
+                if identity not in TYPE_4_EXCLUDED_R2_IMAGE_IDS
+            }
+        else:
             images_by_identity = {
                 f"{self.settings.r2_bucket}:{prefix}:{identity}": image
                 for identity, image in images_by_identity.items()

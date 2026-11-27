@@ -13,6 +13,7 @@ from uuid import uuid4
 from PIL import Image, ImageChops
 import pytest
 
+from app import service as service_module
 from app.advice_cards import ADVICE_ROTATION_CYCLE_LENGTH, AdviceBackground
 from app.car_tools import CAR_TOOLS_HOOK
 from app.car_tools_social import (
@@ -811,6 +812,33 @@ def test_type_4_r2_image_queue_uses_exact_prefix_dedup_and_bucket_fallback(
 
     assert second.media.source_id == "r2-type4:4/b.jpg"
     assert storage.downloaded_keys == ["4/a.jpg", "4/b.jpg"]
+
+
+def test_type_4_exclusions_skip_saved_and_new_photos(tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        service_module, "TYPE_4_EXCLUDED_R2_IMAGE_IDS",
+        frozenset({"etag:excluded:100"}),
+    )
+    storage = Type4AdviceR2Storage([
+        R2Object("4/a-excluded.jpg", 100, "excluded"),
+        R2Object("4/b-pending.jpg", 110, "pending"),
+        R2Object("4/priority/excluded-copy.jpg", 100, "excluded"),
+        R2Object("4/priority/new.jpg", 120, "new"),
+    ])
+    settings = replace(get_settings(), state_dir=tmp_path / "state", r2_type_4_image_prefix="4")
+    service = VideoCreationService.__new__(VideoCreationService)
+    service.settings = settings
+    service.state = StateStore(settings.state_dir)
+    service.r2_storage = storage
+    saved_ids = ["etag:excluded:100", "etag:pending:110"]
+    service.state.peek_next_type_4_image_id(saved_ids)
+
+    first = service._download_next_type_4_image_from_r2(tmp_path / "first")
+    assert service.state.remember_type_4_image_choice(first.queue_id, list(first.queue_ids))
+    service._download_next_type_4_image_from_r2(tmp_path / "second")
+
+    assert "etag:excluded:100" not in first.queue_ids
+    assert storage.downloaded_keys == ["4/priority/new.jpg", "4/b-pending.jpg"]
 
 
 @pytest.mark.parametrize(
